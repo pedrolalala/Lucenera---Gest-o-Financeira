@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bem-vindo ao Finova</title>
+        <title>Bem-vindo à Lucenera</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #374151; background-color: #f9fafb; margin: 0; padding: 0; }
           .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb; }
@@ -43,11 +43,11 @@ Deno.serve(async (req) => {
       <body>
         <div class="container">
           <div class="header">
-            <div class="logo"><span>S</span> Finova</div>
+            <div class="logo"><span>L</span> Lucenera</div>
           </div>
           <div class="content">
             <div class="greeting">Olá, ${name || 'Usuário'}!</div>
-            <p class="intro">Bem-vindo ao Finova! Estamos muito felizes em tê-lo conosco. Para ajudar você a começar, preparamos um guia rápido sobre as principais funcionalidades.</p>
+            <p class="intro">Bem-vindo à Lucenera! Estamos muito felizes em tê-lo conosco. Para ajudar você a começar, preparamos um guia rápido sobre as principais funcionalidades.</p>
             
             <div class="section">
               <div class="section-title">📊 Dashboard e KPIs</div>
@@ -77,8 +77,8 @@ Deno.serve(async (req) => {
             <p>Se tiver dúvidas, acesse a página de <strong>Ajuda</strong> no aplicativo ou responda a este email.</p>
           </div>
           <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Finova. Todos os direitos reservados.</p>
-            <p>Você está recebendo este email porque se cadastrou na plataforma Finova.</p>
+            <p>&copy; ${new Date().getFullYear()} Lucenera. Todos os direitos reservados.</p>
+            <p>Você está recebendo este email porque se cadastrou na plataforma Lucenera.</p>
           </div>
         </div>
       </body>
@@ -92,9 +92,9 @@ Deno.serve(async (req) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: 'suporte@produto.blog',
+        from: 'suporte@lucenera.com',
         to: [email],
-        subject: 'Bem-vindo ao Planejador Financeiro',
+        subject: 'Bem-vindo à Lucenera',
         html: htmlContent,
       }),
     })

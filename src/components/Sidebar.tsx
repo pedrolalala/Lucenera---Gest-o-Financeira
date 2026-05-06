@@ -93,10 +93,10 @@ export function Sidebar() {
       {/* Brand */}
       <div className="flex items-center gap-3 mb-10 px-2">
         <div className="w-8 h-8 bg-black text-white rounded-lg flex items-center justify-center font-bold text-xl font-display">
-          S
+          L
         </div>
         <span className="text-2xl font-bold text-gray-900 tracking-tight">
-          Finova
+          Lucenera
         </span>
       </div>
 
