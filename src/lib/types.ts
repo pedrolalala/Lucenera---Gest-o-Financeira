@@ -30,6 +30,7 @@ export interface Transacao {
   tipo_id: TipoTransacao
   forma_pagamento_id: FormaPagamento
   observacoes?: string
+  responsavel?: string
 }
 
 export interface User {

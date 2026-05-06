@@ -13,6 +13,7 @@ const mapToTransacao = (row: any): Transacao => ({
   tipo_id: row.type as TipoTransacao,
   forma_pagamento_id: row.payment_method as FormaPagamento,
   observacoes: row.notes,
+  responsavel: row.responsavel,
 })
 
 // Helper to map Transacao to DB row
@@ -25,6 +26,7 @@ const mapToRow = (transaction: Omit<Transacao, 'id'>, userId: string) => ({
   type: transaction.tipo_id,
   payment_method: transaction.forma_pagamento_id,
   notes: transaction.observacoes,
+  responsavel: transaction.responsavel,
 })
 
 export const transactionService = {
@@ -73,6 +75,10 @@ export const transactionService = {
 
       if (filters.paymentMethod !== 'all') {
         query = query.eq('payment_method', filters.paymentMethod)
+      }
+
+      if (filters.responsavel && filters.responsavel !== 'all') {
+        query = query.eq('responsavel', filters.responsavel)
       }
 
       if (filters.dateRange?.from) {
@@ -126,6 +132,8 @@ export const transactionService = {
       updates.payment_method = transaction.forma_pagamento_id
     if (transaction.observacoes !== undefined)
       updates.notes = transaction.observacoes
+    if (transaction.responsavel !== undefined)
+      updates.responsavel = transaction.responsavel
 
     const { data, error } = await supabase
       .from('transactions')

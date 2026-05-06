@@ -28,6 +28,7 @@ export interface FilterState {
   type: string
   category: string
   paymentMethod: string
+  responsavel: string
   dateRange: DateRange | undefined
 }
 
@@ -48,6 +49,7 @@ export function TransactionFilters({
       type: 'all',
       category: 'all',
       paymentMethod: 'all',
+      responsavel: 'all',
       dateRange: undefined,
     })
   }
@@ -57,6 +59,7 @@ export function TransactionFilters({
     filters.type !== 'all' ||
     filters.category !== 'all' ||
     filters.paymentMethod !== 'all' ||
+    filters.responsavel !== 'all' ||
     filters.dateRange !== undefined
 
   return (
@@ -173,6 +176,32 @@ export function TransactionFilters({
             {Object.values(FormaPagamento).map((method) => (
               <SelectItem key={method} value={method}>
                 {method}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Responsável Filter */}
+        <Select
+          value={filters.responsavel || 'all'}
+          onValueChange={(val) =>
+            setFilters((prev) => ({ ...prev, responsavel: val }))
+          }
+        >
+          <SelectTrigger className="w-[160px] bg-white h-9 text-xs">
+            <SelectValue placeholder="Responsável" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            {[
+              'Thais Gomes Pegrucci Favaron',
+              'Thairine Cristina da Silva',
+              'Marina Pousa Barbara Gregorio',
+              'Teresinha do Amaral Figueiredo',
+              'Vinicius Bortolin Costa',
+            ].map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
               </SelectItem>
             ))}
           </SelectContent>

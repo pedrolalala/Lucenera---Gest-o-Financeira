@@ -66,6 +66,7 @@ export function TransactionsTable({ data, onEdit }: TransactionsTableProps) {
             <TableHead>Tipo</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead>Forma de Pagamento</TableHead>
+            <TableHead>Responsável</TableHead>
             <TableHead className="w-[100px] text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
@@ -111,6 +112,9 @@ export function TransactionsTable({ data, onEdit }: TransactionsTableProps) {
               </TableCell>
               <TableCell className="text-gray-500 text-sm">
                 {transaction.forma_pagamento_id}
+              </TableCell>
+              <TableCell className="text-gray-500 text-sm">
+                {transaction.responsavel || '-'}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-2">

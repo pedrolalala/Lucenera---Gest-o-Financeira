@@ -43,6 +43,14 @@ import { Transacao, TipoTransacao, FormaPagamento } from '@/lib/types'
 import useTransactionStore from '@/stores/useTransactionStore'
 import { toast } from 'sonner'
 
+const RESPONSAVEIS = [
+  'Thais Gomes Pegrucci Favaron',
+  'Thairine Cristina da Silva',
+  'Marina Pousa Barbara Gregorio',
+  'Teresinha do Amaral Figueiredo',
+  'Vinicius Bortolin Costa',
+]
+
 const formSchema = z.object({
   data: z.date({
     required_error: 'Data é obrigatória',
@@ -63,6 +71,7 @@ const formSchema = z.object({
     required_error: 'Por favor selecione uma forma de pagamento.',
   }),
   observacoes: z.string().optional(),
+  responsavel: z.string().optional(),
 })
 
 interface TransactionFormProps {
@@ -103,12 +112,14 @@ export function TransactionForm({
         tipo_id: transactionToEdit.tipo_id,
         forma_pagamento_id: transactionToEdit.forma_pagamento_id,
         observacoes: transactionToEdit.observacoes || '',
+        responsavel: transactionToEdit.responsavel || '',
       })
     } else {
       form.reset({
         descricao: '',
         valor: 0,
         observacoes: '',
+        responsavel: '',
         categoria_id: '',
         tipo_id: TipoTransacao.Despesa,
         forma_pagamento_id: FormaPagamento.CartaoCredito,
@@ -282,34 +293,68 @@ export function TransactionForm({
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="forma_pagamento_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Forma de Pagamento</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    value={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o método" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.values(FormaPagamento).map((method) => (
-                        <SelectItem key={method} value={method}>
-                          {method}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="forma_pagamento_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Forma de Pagamento</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o método" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.values(FormaPagamento).map((method) => (
+                          <SelectItem key={method} value={method}>
+                            {method}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="responsavel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Responsável</FormLabel>
+                    <Select
+                      onValueChange={(val) =>
+                        field.onChange(val === 'none' ? '' : val)
+                      }
+                      defaultValue={field.value || undefined}
+                      value={field.value || undefined}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sem responsável" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhum</SelectItem>
+                        {RESPONSAVEIS.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
