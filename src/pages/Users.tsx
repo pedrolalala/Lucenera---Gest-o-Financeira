@@ -31,7 +31,7 @@ export default function Users() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        if (role === 'admin') {
+        if (role === 'admin' || role === 'gerente') {
           const data = await userService.getAllUsers()
           setUsers(data)
         }
@@ -59,7 +59,7 @@ export default function Users() {
     }
   }
 
-  if (role !== 'admin') {
+  if (role !== 'admin' && role !== 'gerente') {
     return <AccessDenied />
   }
 
@@ -122,9 +122,12 @@ export default function Users() {
                       className={
                         user.role === 'admin'
                           ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : user.role === 'colaborador'
+                          : user.role === 'gerente'
                             ? 'bg-blue-50 text-blue-700 border-blue-200'
-                            : 'bg-gray-50 text-gray-700 border-gray-200'
+                            : user.role === 'operador' ||
+                                user.role === 'funcionario'
+                              ? 'bg-green-50 text-green-700 border-green-200'
+                              : 'bg-gray-50 text-gray-700 border-gray-200'
                       }
                     >
                       {user.role}
@@ -144,10 +147,12 @@ export default function Users() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="admin">Administrador</SelectItem>
-                          <SelectItem value="colaborador">
-                            Colaborador
+                          <SelectItem value="gerente">Gerente</SelectItem>
+                          <SelectItem value="operador">Operador</SelectItem>
+                          <SelectItem value="funcionario">
+                            Funcionário
                           </SelectItem>
-                          <SelectItem value="visitante">Visitante</SelectItem>
+                          <SelectItem value="viewer">Visualizador</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

@@ -17,7 +17,7 @@ export const ProtectedRoute = () => {
     return <Navigate to="/login" replace />
   }
 
-  if (role === 'visitante') {
+  if (role === 'visitante' || role === 'viewer') {
     return <AccessDenied />
   }
 

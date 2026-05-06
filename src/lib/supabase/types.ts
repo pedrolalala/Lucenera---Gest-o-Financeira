@@ -287,13 +287,6 @@ export type Database = {
             foreignKeyName: 'conta_pagar_projeto_id_fkey'
             columns: ['projeto_id']
             isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'conta_pagar_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
             referencedRelation: 'vw_financeiro_projetos'
             referencedColumns: ['id']
           },
@@ -464,13 +457,6 @@ export type Database = {
             columns: ['projeto_id']
             isOneToOne: false
             referencedRelation: 'projetos'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'conta_receber_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
             referencedColumns: ['id']
           },
           {
@@ -938,13 +924,6 @@ export type Database = {
             foreignKeyName: 'entregas_projeto_id_fkey'
             columns: ['projeto_id']
             isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'entregas_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
             referencedRelation: 'vw_financeiro_projetos'
             referencedColumns: ['id']
           },
@@ -982,13 +961,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: 'separacoes'
             referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'entregas_separacao_id_fkey'
-            columns: ['separacao_id']
-            isOneToOne: false
-            referencedRelation: 'vw_projetos_pipeline'
-            referencedColumns: ['separacao_id']
           },
           {
             foreignKeyName: 'entregas_separacao_id_fkey'
@@ -1537,6 +1509,30 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          created_at: string | null
+          full_name: string | null
+          id: string
+          role: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          full_name?: string | null
+          id: string
+          role?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          role?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       projeto_itens: {
         Row: {
           created_at: string
@@ -1611,13 +1607,6 @@ export type Database = {
             columns: ['projeto_id']
             isOneToOne: false
             referencedRelation: 'projetos'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'projeto_itens_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
             referencedColumns: ['id']
           },
           {
@@ -1731,13 +1720,6 @@ export type Database = {
             columns: ['projeto_id']
             isOneToOne: false
             referencedRelation: 'projetos'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'projeto_parcelas_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
             referencedColumns: ['id']
           },
           {
@@ -1926,13 +1908,6 @@ export type Database = {
             foreignKeyName: 'projeto_produtos_projeto_id_fkey'
             columns: ['projeto_id']
             isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'projeto_produtos_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
             referencedRelation: 'vw_financeiro_projetos'
             referencedColumns: ['id']
           },
@@ -2022,13 +1997,6 @@ export type Database = {
             foreignKeyName: 'projeto_sinal_projeto_id_fkey'
             columns: ['projeto_id']
             isOneToOne: true
-            referencedRelation: 'vw_dashboard_crm_fechamento'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'projeto_sinal_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: true
             referencedRelation: 'vw_financeiro_projetos'
             referencedColumns: ['id']
           },
@@ -2071,18 +2039,17 @@ export type Database = {
       }
       projetos: {
         Row: {
+          area_do_projeto: Json | null
           arquiteto_id: string | null
           arquivado: boolean | null
-          caminho: string | null
           cidade: string | null
+          client_id: string | null
           cliente_id: string | null
           codigo: string
           created_at: string | null
           created_by: string | null
           data_entrada: string | null
-          data_vencimento: string | null
           estado: string | null
-          forma_pagamento: Database['public']['Enums']['pagamento_forma'] | null
           historico: Json
           id: string
           nivel_estrategico: Database['public']['Enums']['projeto_nivel'] | null
@@ -2091,26 +2058,20 @@ export type Database = {
           responsavel_nome: string | null
           responsavel_obra_id: string | null
           status: Database['public']['Enums']['projeto_status'] | null
-          tipo_item: string | null
-          total_parcelas: number | null
           updated_at: string
-          valor_total: number | null
         }
         Insert: {
+          area_do_projeto?: Json | null
           arquiteto_id?: string | null
           arquivado?: boolean | null
-          caminho?: string | null
           cidade?: string | null
+          client_id?: string | null
           cliente_id?: string | null
           codigo: string
           created_at?: string | null
           created_by?: string | null
           data_entrada?: string | null
-          data_vencimento?: string | null
           estado?: string | null
-          forma_pagamento?:
-            | Database['public']['Enums']['pagamento_forma']
-            | null
           historico?: Json
           id?: string
           nivel_estrategico?:
@@ -2121,26 +2082,20 @@ export type Database = {
           responsavel_nome?: string | null
           responsavel_obra_id?: string | null
           status?: Database['public']['Enums']['projeto_status'] | null
-          tipo_item?: string | null
-          total_parcelas?: number | null
           updated_at?: string
-          valor_total?: number | null
         }
         Update: {
+          area_do_projeto?: Json | null
           arquiteto_id?: string | null
           arquivado?: boolean | null
-          caminho?: string | null
           cidade?: string | null
+          client_id?: string | null
           cliente_id?: string | null
           codigo?: string
           created_at?: string | null
           created_by?: string | null
           data_entrada?: string | null
-          data_vencimento?: string | null
           estado?: string | null
-          forma_pagamento?:
-            | Database['public']['Enums']['pagamento_forma']
-            | null
           historico?: Json
           id?: string
           nivel_estrategico?:
@@ -2151,15 +2106,19 @@ export type Database = {
           responsavel_nome?: string | null
           responsavel_obra_id?: string | null
           status?: Database['public']['Enums']['projeto_status'] | null
-          tipo_item?: string | null
-          total_parcelas?: number | null
           updated_at?: string
-          valor_total?: number | null
         }
         Relationships: [
           {
             foreignKeyName: 'projetos_arquiteto_id_fkey'
             columns: ['arquiteto_id']
+            isOneToOne: false
+            referencedRelation: 'contatos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'projetos_client_id_fkey'
+            columns: ['client_id']
             isOneToOne: false
             referencedRelation: 'contatos'
             referencedColumns: ['id']
@@ -2258,13 +2217,6 @@ export type Database = {
             foreignKeyName: 'separacao_arquivos_separacao_id_fkey'
             columns: ['separacao_id']
             isOneToOne: false
-            referencedRelation: 'vw_projetos_pipeline'
-            referencedColumns: ['separacao_id']
-          },
-          {
-            foreignKeyName: 'separacao_arquivos_separacao_id_fkey'
-            columns: ['separacao_id']
-            isOneToOne: false
             referencedRelation: 'vw_separacoes_agenda'
             referencedColumns: ['separacao_id']
           },
@@ -2358,13 +2310,6 @@ export type Database = {
             foreignKeyName: 'separacao_itens_separacao_id_fkey'
             columns: ['separacao_id']
             isOneToOne: false
-            referencedRelation: 'vw_projetos_pipeline'
-            referencedColumns: ['separacao_id']
-          },
-          {
-            foreignKeyName: 'separacao_itens_separacao_id_fkey'
-            columns: ['separacao_id']
-            isOneToOne: false
             referencedRelation: 'vw_separacoes_agenda'
             referencedColumns: ['separacao_id']
           },
@@ -2452,13 +2397,6 @@ export type Database = {
             columns: ['projeto_id']
             isOneToOne: false
             referencedRelation: 'projetos'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'separacoes_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
             referencedColumns: ['id']
           },
           {
@@ -2583,13 +2521,6 @@ export type Database = {
             columns: ['projeto_id']
             isOneToOne: false
             referencedRelation: 'projetos'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'solicitacoes_compra_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
             referencedColumns: ['id']
           },
           {
@@ -3229,13 +3160,6 @@ export type Database = {
             foreignKeyName: 'transacoes_projeto_id_fkey'
             columns: ['projeto_id']
             isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'transacoes_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
             referencedRelation: 'vw_financeiro_projetos'
             referencedColumns: ['id']
           },
@@ -3268,6 +3192,48 @@ export type Database = {
             referencedColumns: ['projeto_id']
           },
         ]
+      }
+      transactions: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string | null
+          date: string
+          description: string
+          id: string
+          notes: string | null
+          payment_method: string
+          type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string | null
+          date: string
+          description: string
+          id?: string
+          notes?: string | null
+          payment_method: string
+          type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string | null
+          date?: string
+          description?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       usuarios: {
         Row: {
@@ -3381,13 +3347,6 @@ export type Database = {
             columns: ['projeto_id']
             isOneToOne: false
             referencedRelation: 'projetos'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'vendas_projeto_id_fkey'
-            columns: ['projeto_id']
-            isOneToOne: false
-            referencedRelation: 'vw_dashboard_crm_fechamento'
             referencedColumns: ['id']
           },
           {
@@ -3599,20 +3558,13 @@ export type Database = {
       }
       vw_dashboard_crm_fechamento: {
         Row: {
-          ano_fechamento: string | null
-          arquiteto_nome: string | null
-          cidade: string | null
-          codigo: string | null
-          data_entrada: string | null
-          data_vencimento: string | null
-          engenheiro_nome: string | null
-          estado: string | null
-          id: string | null
-          mes_fechamento: string | null
-          nivel_estrategico: Database['public']['Enums']['projeto_nivel'] | null
-          nome: string | null
-          responsavel_nome: string | null
-          status: Database['public']['Enums']['projeto_status'] | null
+          mes: string | null
+          projetos_comerciais: number | null
+          projetos_corporativos: number | null
+          projetos_paisagismo: number | null
+          projetos_residenciais: number | null
+          total_clientes: number | null
+          total_projetos: number | null
           valor_total: number | null
         }
         Relationships: []
@@ -3688,18 +3640,28 @@ export type Database = {
       }
       vw_financeiro_projetos: {
         Row: {
-          arquiteto_nome: string | null
+          client_id: string | null
           cliente_nome: string | null
           codigo: string | null
-          despesas: number | null
           id: string | null
           nome: string | null
-          receitas: number | null
+          parcelas_pagas: number | null
+          parcelas_pendentes: number | null
           status: Database['public']['Enums']['projeto_status'] | null
-          valor_parcelas: number | null
+          total_parcelas: number | null
+          valor_pendente: number | null
+          valor_recebido: number | null
           valor_total: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'projetos_client_id_fkey'
+            columns: ['client_id']
+            isOneToOne: false
+            referencedRelation: 'contatos'
+            referencedColumns: ['id']
+          },
+        ]
       }
       vw_fluxo_caixa_projetado: {
         Row: {
@@ -3727,45 +3689,32 @@ export type Database = {
       }
       vw_projetos_pipeline: {
         Row: {
-          arquiteto: string | null
-          arquivado: boolean | null
-          cidade: string | null
-          cliente: string | null
+          client_id: string | null
+          cliente_nome: string | null
           codigo: string | null
-          created_at: string | null
           data_entrada: string | null
-          data_entrega: string | null
-          estado: string | null
-          forma_pagamento: Database['public']['Enums']['pagamento_forma'] | null
           id: string | null
-          itens_validados: number | null
-          nivel_estrategico: Database['public']['Enums']['projeto_nivel'] | null
           nome: string | null
-          reagendamentos: number | null
-          responsavel_nome: string | null
-          saldo_a_receber: number | null
-          separacao_id: string | null
-          separacao_status:
-            | Database['public']['Enums']['separacao_status']
-            | null
-          sinal_data: string | null
-          sinal_status: Database['public']['Enums']['sinal_status'] | null
-          sinal_valor: number | null
           status: Database['public']['Enums']['projeto_status'] | null
-          total_itens: number | null
-          total_parcelas: number | null
-          updated_at: string | null
-          valor_itens: number | null
+          tipo_projeto: string | null
           valor_total: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'projetos_client_id_fkey'
+            columns: ['client_id']
+            isOneToOne: false
+            referencedRelation: 'contatos'
+            referencedColumns: ['id']
+          },
+        ]
       }
       vw_projetos_por_status: {
         Row: {
-          ativos: number | null
           status: Database['public']['Enums']['projeto_status'] | null
-          total: number | null
-          valor_total_sum: number | null
+          total_clientes: number | null
+          total_projetos: number | null
+          valor_total: number | null
         }
         Relationships: []
       }
@@ -3929,18 +3878,17 @@ export type Database = {
       get_dashboard_crm_by_closing: {
         Args: { data_final: string; data_inicial: string }
         Returns: {
+          area_do_projeto: Json | null
           arquiteto_id: string | null
           arquivado: boolean | null
-          caminho: string | null
           cidade: string | null
+          client_id: string | null
           cliente_id: string | null
           codigo: string
           created_at: string | null
           created_by: string | null
           data_entrada: string | null
-          data_vencimento: string | null
           estado: string | null
-          forma_pagamento: Database['public']['Enums']['pagamento_forma'] | null
           historico: Json
           id: string
           nivel_estrategico: Database['public']['Enums']['projeto_nivel'] | null
@@ -3949,10 +3897,7 @@ export type Database = {
           responsavel_nome: string | null
           responsavel_obra_id: string | null
           status: Database['public']['Enums']['projeto_status'] | null
-          tipo_item: string | null
-          total_parcelas: number | null
           updated_at: string
-          valor_total: number | null
         }[]
         SetofOptions: {
           from: '*'
@@ -3961,11 +3906,15 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_dashboard_kpi: { Args: { p_date_now: string }; Returns: Json }
       get_dashboard_stats: { Args: never; Returns: Json }
       get_faltas_injustificadas: {
         Args: { p_fim: string; p_funcionario_id: string; p_inicio: string }
         Returns: number
       }
+      get_latest_transaction_id: { Args: never; Returns: string }
+      get_user_role: { Args: never; Returns: string }
+      is_admin: { Args: never; Returns: boolean }
       limpar_staging_processados: { Args: never; Returns: number }
       stats_datacenter: { Args: never; Returns: Json }
     }
@@ -4022,6 +3971,11 @@ export type Database = {
         | 'Atrasado'
         | 'Cancelado'
       tipo_operacao: 'CR' | 'CP'
+      tipo_projeto:
+        | 'Residential'
+        | 'Corporativo'
+        | 'Exposição Comercial'
+        | 'Paisagismo'
       transacao_tipo: 'receita' | 'despesa' | 'transferencia'
       usuario_role: 'admin' | 'gerente' | 'operador' | 'funcionario' | 'viewer'
     }
@@ -4208,6 +4162,12 @@ export const Constants = {
         'Cancelado',
       ],
       tipo_operacao: ['CR', 'CP'],
+      tipo_projeto: [
+        'Residential',
+        'Corporativo',
+        'Exposição Comercial',
+        'Paisagismo',
+      ],
       transacao_tipo: ['receita', 'despesa', 'transferencia'],
       usuario_role: ['admin', 'gerente', 'operador', 'funcionario', 'viewer'],
     },
@@ -4538,6 +4498,12 @@ export const Constants = {
 //   custo_total: numeric (nullable, default: 0)
 //   percentual_lucro: numeric (nullable, default: 0)
 //   valor_venda: numeric (nullable, default: 0)
+// Table: profiles
+//   id: uuid (not null)
+//   full_name: text (nullable)
+//   created_at: timestamp with time zone (nullable, default: now())
+//   updated_at: timestamp with time zone (nullable, default: now())
+//   role: text (not null, default: 'visitante'::text)
 // Table: projeto_itens
 //   id: uuid (not null, default: gen_random_uuid())
 //   projeto_id: uuid (not null)
@@ -4615,25 +4581,21 @@ export const Constants = {
 //   nome: text (not null)
 //   nivel_estrategico: projeto_nivel (nullable)
 //   status: projeto_status (nullable, default: 'Estudo Inicial'::projeto_status)
-//   tipo_item: character varying (nullable)
 //   cidade: character varying (nullable)
 //   estado: character varying (nullable)
-//   caminho: text (nullable)
 //   data_entrada: date (nullable)
 //   arquivado: boolean (nullable, default: false)
 //   cliente_id: uuid (nullable)
 //   arquiteto_id: uuid (nullable)
 //   responsavel_id: uuid (nullable)
-//   valor_total: numeric (nullable, default: 0)
 //   created_at: timestamp with time zone (nullable, default: now())
 //   historico: jsonb (not null, default: '[]'::jsonb)
 //   responsavel_nome: text (nullable)
 //   created_by: uuid (nullable)
-//   forma_pagamento: pagamento_forma (nullable)
-//   total_parcelas: integer (nullable)
-//   data_vencimento: date (nullable)
 //   responsavel_obra_id: uuid (nullable)
 //   updated_at: timestamp with time zone (not null, default: now())
+//   client_id: uuid (nullable)
+//   area_do_projeto: jsonb (nullable)
 // Table: projetos_fechados
 //   id: uuid (not null, default: gen_random_uuid())
 //   cod: text (nullable)
@@ -4859,6 +4821,18 @@ export const Constants = {
 //   created_by: uuid (nullable)
 //   created_at: timestamp with time zone (not null, default: now())
 //   categoria_id: uuid (nullable)
+// Table: transactions
+//   id: uuid (not null, default: gen_random_uuid())
+//   user_id: uuid (not null)
+//   date: date (not null)
+//   description: text (not null)
+//   category: text (not null)
+//   type: text (not null)
+//   amount: numeric (not null)
+//   payment_method: text (not null)
+//   notes: text (nullable)
+//   created_at: timestamp with time zone (nullable, default: now())
+//   updated_at: timestamp with time zone (nullable, default: now())
 // Table: usuarios
 //   id: uuid (not null)
 //   email: text (not null)
@@ -4934,21 +4908,14 @@ export const Constants = {
 //   status: lancamento_status (nullable)
 //   conta: text (nullable)
 // Table: vw_dashboard_crm_fechamento
-//   id: uuid (nullable)
-//   codigo: character varying (nullable)
-//   nome: text (nullable)
+//   mes: timestamp with time zone (nullable)
+//   total_projetos: bigint (nullable)
+//   total_clientes: bigint (nullable)
 //   valor_total: numeric (nullable)
-//   status: projeto_status (nullable)
-//   data_entrada: date (nullable)
-//   responsavel_nome: text (nullable)
-//   arquiteto_nome: text (nullable)
-//   engenheiro_nome: text (nullable)
-//   cidade: character varying (nullable)
-//   estado: character varying (nullable)
-//   nivel_estrategico: projeto_nivel (nullable)
-//   data_vencimento: date (nullable)
-//   ano_fechamento: text (nullable)
-//   mes_fechamento: text (nullable)
+//   projetos_residenciais: bigint (nullable)
+//   projetos_corporativos: bigint (nullable)
+//   projetos_comerciais: bigint (nullable)
+//   projetos_paisagismo: bigint (nullable)
 // Table: vw_estoque_liquido
 //   produto_id: uuid (nullable)
 //   produto: text (nullable)
@@ -4987,12 +4954,14 @@ export const Constants = {
 //   codigo: character varying (nullable)
 //   nome: text (nullable)
 //   status: projeto_status (nullable)
-//   valor_total: numeric (nullable)
-//   valor_parcelas: numeric (nullable)
-//   receitas: numeric (nullable)
-//   despesas: numeric (nullable)
+//   client_id: uuid (nullable)
 //   cliente_nome: text (nullable)
-//   arquiteto_nome: text (nullable)
+//   valor_total: numeric (nullable)
+//   valor_recebido: numeric (nullable)
+//   valor_pendente: numeric (nullable)
+//   total_parcelas: bigint (nullable)
+//   parcelas_pagas: bigint (nullable)
+//   parcelas_pendentes: bigint (nullable)
 // Table: vw_fluxo_caixa_projetado
 //   mes: timestamp with time zone (nullable)
 //   a_receber: numeric (nullable)
@@ -5014,35 +4983,16 @@ export const Constants = {
 //   codigo: character varying (nullable)
 //   nome: text (nullable)
 //   status: projeto_status (nullable)
-//   nivel_estrategico: projeto_nivel (nullable)
 //   data_entrada: date (nullable)
-//   arquivado: boolean (nullable)
-//   cidade: character varying (nullable)
-//   estado: character varying (nullable)
-//   cliente: text (nullable)
-//   arquiteto: text (nullable)
-//   responsavel_nome: text (nullable)
+//   tipo_projeto: text (nullable)
+//   client_id: uuid (nullable)
+//   cliente_nome: text (nullable)
 //   valor_total: numeric (nullable)
-//   total_parcelas: integer (nullable)
-//   forma_pagamento: pagamento_forma (nullable)
-//   sinal_valor: numeric (nullable)
-//   sinal_status: sinal_status (nullable)
-//   sinal_data: date (nullable)
-//   total_itens: bigint (nullable)
-//   itens_validados: bigint (nullable)
-//   valor_itens: numeric (nullable)
-//   saldo_a_receber: numeric (nullable)
-//   separacao_id: uuid (nullable)
-//   separacao_status: separacao_status (nullable)
-//   data_entrega: date (nullable)
-//   reagendamentos: integer (nullable)
-//   created_at: timestamp with time zone (nullable)
-//   updated_at: timestamp with time zone (nullable)
 // Table: vw_projetos_por_status
 //   status: projeto_status (nullable)
-//   total: bigint (nullable)
-//   valor_total_sum: numeric (nullable)
-//   ativos: bigint (nullable)
+//   total_projetos: bigint (nullable)
+//   total_clientes: bigint (nullable)
+//   valor_total: numeric (nullable)
 // Table: vw_projetos_resumo
 //   id: uuid (nullable)
 //   codigo: character varying (nullable)
@@ -5239,6 +5189,10 @@ export const Constants = {
 //   FOREIGN KEY produtos_marca_id_fkey: FOREIGN KEY (marca_id) REFERENCES marcas(id) ON DELETE SET NULL
 //   PRIMARY KEY produtos_pkey: PRIMARY KEY (id)
 //   UNIQUE produtos_sku_key: UNIQUE (sku)
+// Table: profiles
+//   FOREIGN KEY profiles_id_fkey: FOREIGN KEY (id) REFERENCES auth.users(id)
+//   PRIMARY KEY profiles_pkey: PRIMARY KEY (id)
+//   CHECK profiles_role_check: CHECK ((role = ANY (ARRAY['admin'::text, 'colaborador'::text, 'visitante'::text])))
 // Table: projeto_itens
 //   CHECK projeto_itens_desconto_check: CHECK (((desconto >= (0)::numeric) AND (desconto <= (100)::numeric)))
 //   PRIMARY KEY projeto_itens_pkey: PRIMARY KEY (id)
@@ -5270,15 +5224,17 @@ export const Constants = {
 //   FOREIGN KEY projeto_sinal_transacao_id_fkey: FOREIGN KEY (transacao_id) REFERENCES transacoes(id) ON DELETE SET NULL
 //   CHECK projeto_sinal_valor_check: CHECK ((valor > (0)::numeric))
 // Table: projetos
+//   CHECK check_area_projeto_estrutura: CHECK (((area_do_projeto IS NULL) OR (jsonb_typeof(area_do_projeto) = 'object'::text)))
+//   CHECK check_tipo_projeto_valido: CHECK (((area_do_projeto IS NULL) OR ((area_do_projeto ->> 'tipo'::text) IS NULL) OR ((area_do_projeto ->> 'tipo'::text) = ANY (ARRAY['Residential'::text, 'Corporativo'::text, 'Exposição Comercial'::text, 'Paisagismo'::text]))))
 //   CHECK chk_historico_is_array: CHECK ((jsonb_typeof(historico) = 'array'::text))
 //   FOREIGN KEY projetos_arquiteto_id_fkey: FOREIGN KEY (arquiteto_id) REFERENCES contatos(id)
+//   FOREIGN KEY projetos_client_id_fkey: FOREIGN KEY (client_id) REFERENCES contatos(id) ON DELETE SET NULL
 //   FOREIGN KEY projetos_cliente_id_fkey: FOREIGN KEY (cliente_id) REFERENCES contatos(id)
 //   UNIQUE projetos_codigo_key: UNIQUE (codigo)
 //   FOREIGN KEY projetos_created_by_fkey: FOREIGN KEY (created_by) REFERENCES usuarios(id) ON DELETE SET NULL
 //   PRIMARY KEY projetos_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY projetos_responsavel_id_fkey: FOREIGN KEY (responsavel_id) REFERENCES usuarios(id)
 //   FOREIGN KEY projetos_responsavel_obra_id_fkey: FOREIGN KEY (responsavel_obra_id) REFERENCES contatos(id) ON DELETE SET NULL
-//   CHECK projetos_total_parcelas_check: CHECK ((total_parcelas > 0))
 // Table: projetos_fechados
 //   PRIMARY KEY projetos_fechados_pkey: PRIMARY KEY (id)
 // Table: separacao_arquivos
@@ -5313,6 +5269,9 @@ export const Constants = {
 //   FOREIGN KEY transacoes_parcela_id_fkey: FOREIGN KEY (parcela_id) REFERENCES projeto_parcelas(id) ON DELETE SET NULL
 //   PRIMARY KEY transacoes_pkey: PRIMARY KEY (id)
 //   FOREIGN KEY transacoes_projeto_id_fkey: FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE SET NULL
+// Table: transactions
+//   PRIMARY KEY transactions_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY transactions_user_id_fkey: FOREIGN KEY (user_id) REFERENCES auth.users(id)
 // Table: usuarios
 //   UNIQUE usuarios_email_key: UNIQUE (email)
 //   FOREIGN KEY usuarios_id_fkey: FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
@@ -5484,6 +5443,21 @@ export const Constants = {
 //     USING: true
 //   Policy "prod_update" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM usuarios u   WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = ANY (ARRAY['admin'::usuario_role, 'gerente'::usuario_role])))))
+// Table: profiles
+//   Policy "Admins can update all profiles" (UPDATE, PERMISSIVE) roles={public}
+//     USING: is_admin()
+//   Policy "Admins can view all profiles" (SELECT, PERMISSIVE) roles={public}
+//     USING: is_admin()
+//   Policy "Users can insert their own profile" (INSERT, PERMISSIVE) roles={public}
+//     WITH CHECK: (auth.uid() = id)
+//   Policy "Users can update own profile" (UPDATE, PERMISSIVE) roles={public}
+//     USING: (auth.uid() = id)
+//   Policy "Users can update their own profile" (UPDATE, PERMISSIVE) roles={public}
+//     USING: (auth.uid() = id)
+//   Policy "Users can view own profile" (SELECT, PERMISSIVE) roles={public}
+//     USING: (auth.uid() = id)
+//   Policy "Users can view their own profile" (SELECT, PERMISSIVE) roles={public}
+//     USING: (auth.uid() = id)
 // Table: projeto_itens
 //   Policy "pi_delete_admin" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM usuarios u   WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = ANY (ARRAY['admin'::usuario_role, 'gerente'::usuario_role])))))
@@ -5599,6 +5573,27 @@ export const Constants = {
 //     USING: (EXISTS ( SELECT 1    FROM usuarios u   WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = ANY (ARRAY['admin'::usuario_role, 'gerente'::usuario_role, 'operador'::usuario_role])))))
 //   Policy "trans_update_admin" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM usuarios u   WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = 'admin'::usuario_role))))
+// Table: transactions
+//   Policy "Admins and users can insert transactions" (INSERT, PERMISSIVE) roles={public}
+//     WITH CHECK: (is_admin() OR (auth.uid() = user_id))
+//   Policy "Admins can delete all transactions" (DELETE, PERMISSIVE) roles={public}
+//     USING: is_admin()
+//   Policy "Admins can update all transactions" (UPDATE, PERMISSIVE) roles={public}
+//     USING: is_admin()
+//   Policy "Admins can view all transactions" (SELECT, PERMISSIVE) roles={public}
+//     USING: is_admin()
+//   Policy "Collaborators can view latest transaction" (SELECT, PERMISSIVE) roles={public}
+//     USING: ((get_user_role() = 'colaborador'::text) AND (id = get_latest_transaction_id()))
+//   Policy "Standard users can view own transactions" (SELECT, PERMISSIVE) roles={public}
+//     USING: ((COALESCE(get_user_role(), 'visitante'::text) <> ALL (ARRAY['admin'::text, 'colaborador'::text])) AND (user_id = auth.uid()))
+//   Policy "Users can delete own transactions" (DELETE, PERMISSIVE) roles={public}
+//     USING: (auth.uid() = user_id)
+//   Policy "Users can delete their own transactions" (DELETE, PERMISSIVE) roles={public}
+//     USING: (auth.uid() = user_id)
+//   Policy "Users can update own transactions" (UPDATE, PERMISSIVE) roles={public}
+//     USING: (auth.uid() = user_id)
+//   Policy "Users can update their own transactions" (UPDATE, PERMISSIVE) roles={public}
+//     USING: (auth.uid() = user_id)
 // Table: usuarios
 //   Policy "usuarios_delete_admin" (DELETE, PERMISSIVE) roles={authenticated}
 //     USING: (EXISTS ( SELECT 1    FROM usuarios u   WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = 'admin'::usuario_role))))
@@ -5757,6 +5752,66 @@ export const Constants = {
 //   );
 //   $function$
 //
+// FUNCTION get_dashboard_kpi(date)
+//   CREATE OR REPLACE FUNCTION public.get_dashboard_kpi(p_date_now date)
+//    RETURNS json
+//    LANGUAGE plpgsql
+//   AS $function$
+//   DECLARE
+//     v_total_balance NUMERIC;
+//     v_month_income NUMERIC;
+//     v_month_expense NUMERIC;
+//     v_last_month_income NUMERIC;
+//     v_last_month_expense NUMERIC;
+//     v_start_month DATE;
+//     v_end_month DATE;
+//     v_start_last_month DATE;
+//     v_end_last_month DATE;
+//   BEGIN
+//     v_start_month := date_trunc('month', p_date_now);
+//     v_end_month := (date_trunc('month', p_date_now) + interval '1 month' - interval '1 day')::date;
+//     v_start_last_month := date_trunc('month', p_date_now - interval '1 month');
+//     v_end_last_month := (date_trunc('month', p_date_now) - interval '1 day')::date;
+//
+//     -- Calculate Total Balance (All time based on visibility)
+//     SELECT COALESCE(SUM(CASE WHEN type = 'Receita' THEN amount ELSE -amount END), 0)
+//     INTO v_total_balance
+//     FROM public.transactions;
+//
+//     -- Calculate Month Income
+//     SELECT COALESCE(SUM(amount), 0)
+//     INTO v_month_income
+//     FROM public.transactions
+//     WHERE type = 'Receita' AND date >= v_start_month AND date <= v_end_month;
+//
+//     -- Calculate Month Expense
+//     SELECT COALESCE(SUM(amount), 0)
+//     INTO v_month_expense
+//     FROM public.transactions
+//     WHERE type = 'Despesa' AND date >= v_start_month AND date <= v_end_month;
+//
+//     -- Calculate Last Month Income
+//     SELECT COALESCE(SUM(amount), 0)
+//     INTO v_last_month_income
+//     FROM public.transactions
+//     WHERE type = 'Receita' AND date >= v_start_last_month AND date <= v_end_last_month;
+//
+//     -- Calculate Last Month Expense
+//     SELECT COALESCE(SUM(amount), 0)
+//     INTO v_last_month_expense
+//     FROM public.transactions
+//     WHERE type = 'Despesa' AND date >= v_start_last_month AND date <= v_end_last_month;
+//
+//     RETURN json_build_object(
+//       'totalBalance', v_total_balance,
+//       'monthIncome', v_month_income,
+//       'monthExpense', v_month_expense,
+//       'lastMonthIncome', v_last_month_income,
+//       'lastMonthExpense', v_last_month_expense
+//     );
+//   END;
+//   $function$
+//
 // FUNCTION get_dashboard_stats()
 //   CREATE OR REPLACE FUNCTION public.get_dashboard_stats()
 //    RETURNS json
@@ -5833,6 +5888,31 @@ export const Constants = {
 //   END;
 //   $function$
 //
+// FUNCTION get_latest_transaction_id()
+//   CREATE OR REPLACE FUNCTION public.get_latest_transaction_id()
+//    RETURNS uuid
+//    LANGUAGE plpgsql
+//    SECURITY DEFINER
+//    SET search_path TO 'public'
+//   AS $function$
+//   BEGIN
+//     -- Deterministic sort order matching the service layer
+//     RETURN (SELECT id FROM public.transactions ORDER BY created_at DESC, id DESC LIMIT 1);
+//   END;
+//   $function$
+//
+// FUNCTION get_user_role()
+//   CREATE OR REPLACE FUNCTION public.get_user_role()
+//    RETURNS text
+//    LANGUAGE plpgsql
+//    SECURITY DEFINER
+//    SET search_path TO 'public'
+//   AS $function$
+//   BEGIN
+//     RETURN (SELECT role FROM public.profiles WHERE id = auth.uid());
+//   END;
+//   $function$
+//
 // FUNCTION handle_new_auth_user()
 //   CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
 //    RETURNS trigger
@@ -5850,6 +5930,38 @@ export const Constants = {
 //     )
 //     ON CONFLICT (id) DO NOTHING;
 //     RETURN NEW;
+//   END;
+//   $function$
+//
+// FUNCTION handle_new_user()
+//   CREATE OR REPLACE FUNCTION public.handle_new_user()
+//    RETURNS trigger
+//    LANGUAGE plpgsql
+//    SECURITY DEFINER
+//   AS $function$
+//   BEGIN
+//     INSERT INTO public.profiles (id, full_name, role)
+//     VALUES (
+//       new.id,
+//       new.raw_user_meta_data->>'full_name',
+//       'visitante'
+//     )
+//     ON CONFLICT (id) DO NOTHING;
+//     RETURN new;
+//   END;
+//   $function$
+//
+// FUNCTION is_admin()
+//   CREATE OR REPLACE FUNCTION public.is_admin()
+//    RETURNS boolean
+//    LANGUAGE plpgsql
+//    SECURITY DEFINER
+//   AS $function$
+//   BEGIN
+//     RETURN EXISTS (
+//       SELECT 1 FROM public.profiles
+//       WHERE id = auth.uid() AND role = 'admin'
+//     );
 //   END;
 //   $function$
 //
@@ -6497,8 +6609,10 @@ export const Constants = {
 //   CREATE INDEX idx_sinal_transacao ON public.projeto_sinal USING btree (transacao_id)
 //   CREATE UNIQUE INDEX projeto_sinal_projeto_id_key ON public.projeto_sinal USING btree (projeto_id)
 // Table: projetos
+//   CREATE INDEX idx_projetos_area_do_projeto_gin ON public.projetos USING gin (area_do_projeto)
 //   CREATE INDEX idx_projetos_arquiteto ON public.projetos USING btree (arquiteto_id)
 //   CREATE INDEX idx_projetos_arquivado ON public.projetos USING btree (arquivado)
+//   CREATE INDEX idx_projetos_client_id ON public.projetos USING btree (client_id)
 //   CREATE INDEX idx_projetos_cliente_id ON public.projetos USING btree (cliente_id)
 //   CREATE INDEX idx_projetos_codigo ON public.projetos USING btree (codigo)
 //   CREATE INDEX idx_projetos_created_by ON public.projetos USING btree (created_by)
@@ -6508,6 +6622,7 @@ export const Constants = {
 //   CREATE INDEX idx_projetos_resp_obra ON public.projetos USING btree (responsavel_obra_id)
 //   CREATE INDEX idx_projetos_responsavel ON public.projetos USING btree (responsavel_id)
 //   CREATE INDEX idx_projetos_status ON public.projetos USING btree (status)
+//   CREATE INDEX idx_projetos_tipo_projeto ON public.projetos USING btree (((area_do_projeto ->> 'tipo'::text)))
 //   CREATE UNIQUE INDEX projetos_codigo_key ON public.projetos USING btree (codigo)
 // Table: separacao_arquivos
 //   CREATE INDEX idx_sep_arq_separacao ON public.separacao_arquivos USING btree (separacao_id)
@@ -6550,6 +6665,8 @@ export const Constants = {
 //   CREATE INDEX idx_trans_parcela ON public.transacoes USING btree (parcela_id)
 //   CREATE INDEX idx_trans_projeto ON public.transacoes USING btree (projeto_id)
 //   CREATE INDEX idx_trans_tipo ON public.transacoes USING btree (tipo)
+// Table: transactions
+//   CREATE INDEX transactions_created_at_idx ON public.transactions USING btree (created_at DESC)
 // Table: usuarios
 //   CREATE INDEX idx_usuarios_email ON public.usuarios USING btree (email)
 //   CREATE INDEX idx_usuarios_role ON public.usuarios USING btree (role)

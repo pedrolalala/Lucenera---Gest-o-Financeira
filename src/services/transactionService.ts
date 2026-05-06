@@ -38,12 +38,16 @@ export const transactionService = {
     let query = supabase.from('transactions').select('*')
 
     // Apply filters based on Role and FilterState
-    if (role === 'visitante') {
+    if (role === 'visitante' || role === 'viewer') {
       // Visitor should not see anything (RLS handles this too, but explicit return saves a call)
       return []
     }
 
-    if (role === 'colaborador') {
+    if (
+      role === 'colaborador' ||
+      role === 'operador' ||
+      role === 'funcionario'
+    ) {
       // Collaborator restricted view: Single most recent transaction.
       // RLS enforces this, but we explicitly order and limit to match application logic expectations.
       // We add ID sort to ensure deterministic behavior matching the RLS policy.
@@ -53,7 +57,7 @@ export const transactionService = {
         .limit(1)
     }
 
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'gerente') {
       // Admin sees all, applies filters
       if (filters.search) {
         query = query.ilike('description', `%${filters.search}%`)

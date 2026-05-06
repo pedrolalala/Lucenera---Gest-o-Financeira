@@ -77,7 +77,14 @@ export interface PaymentMethodDistribution {
   color: string
 }
 
-export type Role = 'admin' | 'colaborador' | 'visitante'
+export type Role =
+  | 'admin'
+  | 'gerente'
+  | 'operador'
+  | 'funcionario'
+  | 'viewer'
+  | 'colaborador'
+  | 'visitante'
 
 export interface UserProfile {
   id: string

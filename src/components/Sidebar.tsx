@@ -72,8 +72,15 @@ export function Sidebar() {
     switch (role) {
       case 'admin':
         return 'Administrador'
+      case 'gerente':
+        return 'Gerente'
+      case 'operador':
+        return 'Operador'
+      case 'funcionario':
+        return 'Funcionário'
       case 'colaborador':
         return 'Colaborador'
+      case 'viewer':
       case 'visitante':
         return 'Visitante'
       default:
@@ -112,7 +119,7 @@ export function Sidebar() {
               to="/payments"
               isActive={pathname === '/payments'}
             />
-            {role === 'admin' && (
+            {(role === 'admin' || role === 'gerente') && (
               <SidebarItem
                 icon={Users}
                 label="Gerenciar Usuários"
@@ -146,7 +153,7 @@ export function Sidebar() {
 
       {/* Role Indicator & Logout */}
       <div className="mt-auto space-y-2">
-        {role && role !== 'visitante' && (
+        {role && role !== 'visitante' && role !== 'viewer' && (
           <div className="px-4 py-2 bg-gray-100 rounded-lg text-center">
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1">
               Acesso Atual

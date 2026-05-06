@@ -44,19 +44,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const fetchRole = async (userId: string): Promise<Role> => {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('usuarios')
         .select('role')
         .eq('id', userId)
         .single()
 
       if (error || !data) {
-        console.warn('Error fetching role, defaulting to visitante:', error)
-        return 'visitante'
+        console.warn('Error fetching role, defaulting to viewer:', error)
+        return 'viewer'
       }
-      return (data.role as Role) || 'visitante'
+      return (data.role as Role) || 'viewer'
     } catch (error) {
       console.error('Exception fetching role:', error)
-      return 'visitante'
+      return 'viewer'
     }
   }
 
@@ -148,6 +148,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       options: {
         data: {
           full_name: fullName,
+          nome: fullName,
+          name: fullName,
         },
       },
     })
