@@ -62,7 +62,9 @@ const Payments = () => {
     <div className="flex flex-col gap-6 animate-fade-in pb-10">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Transações</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Informações da conta
+          </h1>
           <p className="text-gray-500">
             Gerencie seus registros financeiros e histórico.
           </p>

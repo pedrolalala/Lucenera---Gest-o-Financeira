@@ -3203,6 +3203,7 @@ export type Database = {
           id: string
           notes: string | null
           payment_method: string
+          responsavel: string | null
           type: string
           updated_at: string | null
           user_id: string
@@ -3216,6 +3217,7 @@ export type Database = {
           id?: string
           notes?: string | null
           payment_method: string
+          responsavel?: string | null
           type: string
           updated_at?: string | null
           user_id: string
@@ -3229,6 +3231,7 @@ export type Database = {
           id?: string
           notes?: string | null
           payment_method?: string
+          responsavel?: string | null
           type?: string
           updated_at?: string | null
           user_id?: string
@@ -4833,6 +4836,7 @@ export const Constants = {
 //   notes: text (nullable)
 //   created_at: timestamp with time zone (nullable, default: now())
 //   updated_at: timestamp with time zone (nullable, default: now())
+//   responsavel: text (nullable)
 // Table: usuarios
 //   id: uuid (not null)
 //   email: text (not null)
