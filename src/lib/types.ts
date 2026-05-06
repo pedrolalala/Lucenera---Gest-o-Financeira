@@ -31,6 +31,18 @@ export interface Transacao {
   forma_pagamento_id: FormaPagamento
   observacoes?: string
   responsavel?: string
+  operacao?: string
+  tipo_situacao?: string
+  tipo_data?: string
+  data_inicio?: Date | null
+  data_final?: Date | null
+  venda?: string
+  fatura?: string
+  duplicata?: string
+  boleto?: string
+  pessoa?: string
+  codigo?: string
+  cliente?: string
 }
 
 export interface User {

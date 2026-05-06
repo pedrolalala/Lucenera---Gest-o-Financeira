@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CalendarIcon, Loader2 } from 'lucide-react'
+import { CalendarIcon, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -72,6 +72,18 @@ const formSchema = z.object({
   }),
   observacoes: z.string().optional(),
   responsavel: z.string().optional(),
+  operacao: z.string().optional(),
+  tipo_situacao: z.string().optional(),
+  tipo_data: z.string().optional(),
+  data_inicio: z.date().optional().nullable(),
+  data_final: z.date().optional().nullable(),
+  venda: z.string().optional(),
+  fatura: z.string().optional(),
+  duplicata: z.string().optional(),
+  boleto: z.string().optional(),
+  pessoa: z.string().optional(),
+  codigo: z.string().optional(),
+  cliente: z.string().optional(),
 })
 
 interface TransactionFormProps {
@@ -88,6 +100,7 @@ export function TransactionForm({
   const { categories, addTransaction, updateTransaction } =
     useTransactionStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -99,6 +112,18 @@ export function TransactionForm({
       tipo_id: TipoTransacao.Despesa,
       forma_pagamento_id: FormaPagamento.CartaoCredito,
       data: new Date(),
+      operacao: '',
+      tipo_situacao: '',
+      tipo_data: '',
+      data_inicio: null,
+      data_final: null,
+      venda: '',
+      fatura: '',
+      duplicata: '',
+      boleto: '',
+      pessoa: '',
+      codigo: '',
+      cliente: '',
     },
   })
 
@@ -113,6 +138,18 @@ export function TransactionForm({
         forma_pagamento_id: transactionToEdit.forma_pagamento_id,
         observacoes: transactionToEdit.observacoes || '',
         responsavel: transactionToEdit.responsavel || '',
+        operacao: transactionToEdit.operacao || '',
+        tipo_situacao: transactionToEdit.tipo_situacao || '',
+        tipo_data: transactionToEdit.tipo_data || '',
+        data_inicio: transactionToEdit.data_inicio || null,
+        data_final: transactionToEdit.data_final || null,
+        venda: transactionToEdit.venda || '',
+        fatura: transactionToEdit.fatura || '',
+        duplicata: transactionToEdit.duplicata || '',
+        boleto: transactionToEdit.boleto || '',
+        pessoa: transactionToEdit.pessoa || '',
+        codigo: transactionToEdit.codigo || '',
+        cliente: transactionToEdit.cliente || '',
       })
     } else {
       form.reset({
@@ -124,6 +161,18 @@ export function TransactionForm({
         tipo_id: TipoTransacao.Despesa,
         forma_pagamento_id: FormaPagamento.CartaoCredito,
         data: new Date(),
+        operacao: '',
+        tipo_situacao: '',
+        tipo_data: '',
+        data_inicio: null,
+        data_final: null,
+        venda: '',
+        fatura: '',
+        duplicata: '',
+        boleto: '',
+        pessoa: '',
+        codigo: '',
+        cliente: '',
       })
     }
   }, [transactionToEdit, form, open])
@@ -149,7 +198,7 @@ export function TransactionForm({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto sm:max-w-md w-full">
+      <SheetContent className="overflow-y-auto sm:max-w-xl w-full">
         <SheetHeader className="mb-6">
           <SheetTitle>
             {transactionToEdit ? 'Editar Transação' : 'Nova Transação'}
@@ -161,7 +210,10 @@ export function TransactionForm({
           </SheetDescription>
         </SheetHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-6 pb-20"
+          >
             <FormField
               control={form.control}
               name="tipo_id"
@@ -221,9 +273,6 @@ export function TransactionForm({
                         mode="single"
                         selected={field.value}
                         onSelect={field.onChange}
-                        disabled={(date) =>
-                          date > new Date() || date < new Date('1900-01-01')
-                        }
                         initialFocus
                         locale={ptBR}
                       />
@@ -356,6 +405,248 @@ export function TransactionForm({
               />
             </div>
 
+            <div className="pt-4 border-t">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="text-sm font-medium flex items-center text-gray-700 hover:text-gray-900"
+              >
+                {showAdvanced ? (
+                  <>
+                    <ChevronUp className="w-4 h-4 mr-1" /> Esconder Detalhes
+                    Adicionais do Sistema
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4 mr-1" /> Mostrar Detalhes
+                    Adicionais do Sistema
+                  </>
+                )}
+              </button>
+
+              {showAdvanced && (
+                <div className="grid grid-cols-2 gap-4 mt-4 animate-in slide-in-from-top-2">
+                  <FormField
+                    control={form.control}
+                    name="operacao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Operação</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ex: CR / CP" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="tipo_situacao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de Situação</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ex: Aberto, Baixado" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="tipo_data"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo Data</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Ex: Emissão, Vencimento"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="codigo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Código</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Código do sistema" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="data_inicio"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data Início</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={'outline'}
+                                className={cn(
+                                  'w-full pl-3 text-left font-normal',
+                                  !field.value && 'text-muted-foreground',
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, 'dd/MM/yyyy', {
+                                    locale: ptBR,
+                                  })
+                                ) : (
+                                  <span>Selecione...</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value || undefined}
+                              onSelect={field.onChange}
+                              initialFocus
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="data_final"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data Final</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={'outline'}
+                                className={cn(
+                                  'w-full pl-3 text-left font-normal',
+                                  !field.value && 'text-muted-foreground',
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, 'dd/MM/yyyy', {
+                                    locale: ptBR,
+                                  })
+                                ) : (
+                                  <span>Selecione...</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value || undefined}
+                              onSelect={field.onChange}
+                              initialFocus
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="venda"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Venda</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nº da Venda" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="fatura"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Fatura</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nº da Fatura" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="duplicata"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Duplicata</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nº da Duplicata" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="boleto"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Boleto</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nosso Número/Boleto" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="cliente"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Cliente</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nome do Cliente" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="pessoa"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Pessoa</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Fornecedor / Pessoa" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+            </div>
+
             <FormField
               control={form.control}
               name="observacoes"
@@ -374,7 +665,7 @@ export function TransactionForm({
               )}
             />
 
-            <SheetFooter>
+            <SheetFooter className="mt-6 pt-4 border-t">
               <Button
                 type="submit"
                 className="w-full sm:w-auto"

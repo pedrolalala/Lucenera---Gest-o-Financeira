@@ -14,6 +14,18 @@ const mapToTransacao = (row: any): Transacao => ({
   forma_pagamento_id: row.payment_method as FormaPagamento,
   observacoes: row.notes,
   responsavel: row.responsavel,
+  operacao: row.operacao,
+  tipo_situacao: row.tipo_situacao,
+  tipo_data: row.tipo_data,
+  data_inicio: row.data_inicio ? new Date(row.data_inicio) : null,
+  data_final: row.data_final ? new Date(row.data_final) : null,
+  venda: row.venda,
+  fatura: row.fatura,
+  duplicata: row.duplicata,
+  boleto: row.boleto,
+  pessoa: row.pessoa,
+  codigo: row.codigo,
+  cliente: row.cliente,
 })
 
 // Helper to map Transacao to DB row
@@ -27,6 +39,22 @@ const mapToRow = (transaction: Omit<Transacao, 'id'>, userId: string) => ({
   payment_method: transaction.forma_pagamento_id,
   notes: transaction.observacoes,
   responsavel: transaction.responsavel,
+  operacao: transaction.operacao,
+  tipo_situacao: transaction.tipo_situacao,
+  tipo_data: transaction.tipo_data,
+  data_inicio: transaction.data_inicio
+    ? format(transaction.data_inicio, 'yyyy-MM-dd')
+    : null,
+  data_final: transaction.data_final
+    ? format(transaction.data_final, 'yyyy-MM-dd')
+    : null,
+  venda: transaction.venda,
+  fatura: transaction.fatura,
+  duplicata: transaction.duplicata,
+  boleto: transaction.boleto,
+  pessoa: transaction.pessoa,
+  codigo: transaction.codigo,
+  cliente: transaction.cliente,
 })
 
 export const transactionService = {
@@ -134,6 +162,28 @@ export const transactionService = {
       updates.notes = transaction.observacoes
     if (transaction.responsavel !== undefined)
       updates.responsavel = transaction.responsavel
+    if (transaction.operacao !== undefined)
+      updates.operacao = transaction.operacao
+    if (transaction.tipo_situacao !== undefined)
+      updates.tipo_situacao = transaction.tipo_situacao
+    if (transaction.tipo_data !== undefined)
+      updates.tipo_data = transaction.tipo_data
+    if (transaction.data_inicio !== undefined)
+      updates.data_inicio = transaction.data_inicio
+        ? format(transaction.data_inicio, 'yyyy-MM-dd')
+        : null
+    if (transaction.data_final !== undefined)
+      updates.data_final = transaction.data_final
+        ? format(transaction.data_final, 'yyyy-MM-dd')
+        : null
+    if (transaction.venda !== undefined) updates.venda = transaction.venda
+    if (transaction.fatura !== undefined) updates.fatura = transaction.fatura
+    if (transaction.duplicata !== undefined)
+      updates.duplicata = transaction.duplicata
+    if (transaction.boleto !== undefined) updates.boleto = transaction.boleto
+    if (transaction.pessoa !== undefined) updates.pessoa = transaction.pessoa
+    if (transaction.codigo !== undefined) updates.codigo = transaction.codigo
+    if (transaction.cliente !== undefined) updates.cliente = transaction.cliente
 
     const { data, error } = await supabase
       .from('transactions')
