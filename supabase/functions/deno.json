@@ -1,10 +1,10 @@
 {
   "_versions": {
-    "salvar-projeto": 15,
-    "update-project": 6,
-    "sync-fechamentos-automatica": 6,
-    "chat-consulta": 3,
-    "chat-agent": 1,
-    "welcome-email": 2
+    "salvar-projeto": 16,
+    "update-project": 7,
+    "sync-fechamentos-automatica": 7,
+    "chat-consulta": 4,
+    "chat-agent": 2,
+    "welcome-email": 3
   }
 }
