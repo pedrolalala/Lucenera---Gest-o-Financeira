@@ -4,32 +4,37 @@ import { Transacao, TipoTransacao, FormaPagamento, Role } from '@/lib/types'
 import { format } from 'date-fns'
 
 // Helper to map DB row to Transacao type
-const mapToTransacao = (row: any): Transacao => ({
-  id: row.id,
-  data: new Date(row.date),
-  descricao: row.description,
-  valor: Number(row.amount),
-  categoria_id: row.category,
-  tipo_id: row.type as TipoTransacao,
-  forma_pagamento_id: row.payment_method as FormaPagamento,
-  observacoes: row.notes,
-  responsavel: row.responsavel,
-  operacao: row.operacao,
-  tipo_situacao: row.tipo_situacao,
-  tipo_data: row.tipo_data,
-  data_inicio: row.data_inicio ? new Date(row.data_inicio) : null,
-  data_final: row.data_final ? new Date(row.data_final) : null,
-  venda: row.venda,
-  fatura: row.fatura,
-  duplicata: row.duplicata,
-  boleto: row.boleto,
-  pessoa: row.pessoa,
-  codigo: row.codigo,
-  cliente: row.cliente,
-})
+const mapToTransacao = (row: any): Transacao =>
+  ({
+    id: row.id,
+    data: new Date(row.date),
+    descricao: row.description,
+    valor: Number(row.amount),
+    categoria_id: row.category,
+    tipo_id: row.type as TipoTransacao,
+    forma_pagamento_id: row.payment_method as FormaPagamento,
+    observacoes: row.notes,
+    responsavel: row.responsavel,
+    operacao: row.operacao,
+    tipo_situacao: row.tipo_situacao,
+    tipo_data: row.tipo_data,
+    data_inicio: row.data_inicio ? new Date(row.data_inicio) : null,
+    data_final: row.data_final ? new Date(row.data_final) : null,
+    venda: row.venda,
+    fatura: row.fatura,
+    duplicata: row.duplicata,
+    boleto: row.boleto,
+    pessoa: row.pessoa,
+    codigo: row.codigo,
+    cliente: row.cliente,
+    empresa_id: row.empresa_id,
+  }) as Transacao
 
 // Helper to map Transacao to DB row
-const mapToRow = (transaction: Omit<Transacao, 'id'>, userId: string) => ({
+const mapToRow = (
+  transaction: Omit<Transacao, 'id'> & { empresa_id?: string },
+  userId: string,
+) => ({
   user_id: userId,
   date: format(transaction.data, 'yyyy-MM-dd'),
   description: transaction.descricao,
@@ -55,6 +60,7 @@ const mapToRow = (transaction: Omit<Transacao, 'id'>, userId: string) => ({
   pessoa: transaction.pessoa,
   codigo: transaction.codigo,
   cliente: transaction.cliente,
+  empresa_id: transaction.empresa_id,
 })
 
 export const transactionService = {
@@ -184,6 +190,8 @@ export const transactionService = {
     if (transaction.pessoa !== undefined) updates.pessoa = transaction.pessoa
     if (transaction.codigo !== undefined) updates.codigo = transaction.codigo
     if (transaction.cliente !== undefined) updates.cliente = transaction.cliente
+    if ((transaction as any).empresa_id !== undefined)
+      updates.empresa_id = (transaction as any).empresa_id
 
     const { data, error } = await supabase
       .from('transactions')

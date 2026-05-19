@@ -1,0 +1,143 @@
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { format } from 'date-fns'
+import { Edit, Trash2 } from 'lucide-react'
+import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
+
+interface BudgetsTableProps {
+  data: Budget[]
+  onEdit: (budget: Budget) => void
+}
+
+export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
+  const { deleteBudget } = useBudgetStore()
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value || 0)
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center border rounded-xl bg-white shadow-sm">
+        <p className="text-gray-500 mb-2">Nenhum orçamento encontrado.</p>
+        <p className="text-sm text-gray-400">
+          Ajuste os filtros ou crie um novo orçamento.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-gray-50/50 hover:bg-gray-50/50">
+            <TableHead className="w-[120px]">Emissão</TableHead>
+            <TableHead>Empresa</TableHead>
+            <TableHead>Cliente</TableHead>
+            <TableHead>Arquiteto</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Valor Total</TableHead>
+            <TableHead className="w-[100px] text-right">Ações</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.map((budget) => (
+            <TableRow key={budget.id}>
+              <TableCell className="font-medium text-gray-600">
+                {budget.data_emissao
+                  ? format(new Date(budget.data_emissao), 'dd/MM/yyyy')
+                  : '-'}
+              </TableCell>
+              <TableCell className="font-semibold text-gray-900">
+                {budget.empresa?.nome || '-'}
+              </TableCell>
+              <TableCell className="text-gray-700">
+                {budget.cliente?.nome || '-'}
+              </TableCell>
+              <TableCell className="text-gray-500 text-sm">
+                {budget.arquiteto?.nome || '-'}
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className="bg-gray-50">
+                  {budget.status || 'Rascunho'}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right font-bold text-gray-900">
+                {formatCurrency(budget.valor_total)}
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                    onClick={() => onEdit(budget)}
+                  >
+                    <Edit className="h-4 w-4" />
+                    <span className="sr-only">Editar</span>
+                  </Button>
+
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Excluir</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Tem certeza absoluta?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta ação não pode ser desfeita. Isso excluirá
+                          permanentemente o orçamento e seus itens.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-red-600 hover:bg-red-700"
+                          onClick={() => deleteBudget(budget.id)}
+                        >
+                          Excluir
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}

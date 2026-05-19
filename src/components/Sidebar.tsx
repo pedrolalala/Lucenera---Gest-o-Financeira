@@ -6,6 +6,7 @@ import {
   Settings,
   LogOut,
   Users,
+  Briefcase,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -118,6 +119,12 @@ export function Sidebar() {
               label="Transações"
               to="/payments"
               isActive={pathname === '/payments'}
+            />
+            <SidebarItem
+              icon={Briefcase}
+              label="Orçamentos"
+              to="/budgets"
+              isActive={pathname === '/budgets'}
             />
             {(role === 'admin' || role === 'gerente') && (
               <SidebarItem

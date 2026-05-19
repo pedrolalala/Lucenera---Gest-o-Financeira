@@ -4,9 +4,16 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CalendarIcon, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  CalendarIcon,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  Building2,
+} from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -52,6 +59,11 @@ const RESPONSAVEIS = [
 ]
 
 const formSchema = z.object({
+  empresa_id: z
+    .string({
+      required_error: 'Por favor selecione uma empresa.',
+    })
+    .min(1, 'Empresa é obrigatória'),
   data: z.date({
     required_error: 'Data é obrigatória',
   }),
@@ -101,6 +113,16 @@ export function TransactionForm({
     useTransactionStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [empresas, setEmpresas] = useState<{ id: string; nome: string }[]>([])
+
+  useEffect(() => {
+    supabase
+      .from('empresas')
+      .select('id, nome')
+      .then(({ data }) => {
+        if (data) setEmpresas(data)
+      })
+  }, [])
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -130,6 +152,7 @@ export function TransactionForm({
   useEffect(() => {
     if (transactionToEdit) {
       form.reset({
+        empresa_id: (transactionToEdit as any).empresa_id || '',
         data: transactionToEdit.data,
         descricao: transactionToEdit.descricao,
         valor: transactionToEdit.valor,
@@ -153,6 +176,7 @@ export function TransactionForm({
       })
     } else {
       form.reset({
+        empresa_id: '',
         descricao: '',
         valor: 0,
         observacoes: '',
@@ -214,6 +238,35 @@ export function TransactionForm({
             onSubmit={form.handleSubmit(onSubmit)}
             className="space-y-6 pb-20"
           >
+            <FormField
+              control={form.control}
+              name="empresa_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Empresa</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                    value={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a empresa" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {empresas.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="tipo_id"
