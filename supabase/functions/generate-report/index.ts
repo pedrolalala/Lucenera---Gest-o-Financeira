@@ -21,7 +21,12 @@ async function toPDF(data: any[], title: string) {
   const { height } = page.getSize()
   let y = height - 50
 
-  page.drawText(`Relatorio: ${title.toUpperCase()}`, { x: 40, y, size: 16, font })
+  page.drawText(`Relatorio: ${title.toUpperCase()}`, {
+    x: 40,
+    y,
+    size: 16,
+    font,
+  })
   y -= 30
 
   if (!data || !data.length) {
@@ -30,7 +35,13 @@ async function toPDF(data: any[], title: string) {
   }
 
   const headers = Object.keys(data[0])
-  page.drawText(headers.join(' | '), { x: 40, y, size: 9, font, color: rgb(0.3, 0.3, 0.3) })
+  page.drawText(headers.join(' | '), {
+    x: 40,
+    y,
+    size: 9,
+    font,
+    color: rgb(0.3, 0.3, 0.3),
+  })
   y -= 20
 
   for (const row of data) {
@@ -49,7 +60,8 @@ async function toPDF(data: any[], title: string) {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS')
+    return new Response('ok', { headers: corsHeaders })
 
   try {
     const { reportType, format, filters } = await req.json()
@@ -73,7 +85,9 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single()
     if (profile?.role !== 'admin' && profile?.role !== 'gerente') {
-      throw new Error('Acesso negado. Apenas administradores e gerentes podem gerar relatórios.')
+      throw new Error(
+        'Acesso negado. Apenas administradores e gerentes podem gerar relatórios.',
+      )
     }
 
     let query: any
@@ -82,11 +96,16 @@ Deno.serve(async (req: Request) => {
     if (reportType === 'ferias') {
       query = supabase
         .from('ferias')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
-      if (filters.startDate) query = query.gte('data_inicio', filters.startDate.split('T')[0])
-      if (filters.endDate) query = query.lte('data_fim', filters.endDate.split('T')[0])
+      if (filters.startDate)
+        query = query.gte('data_inicio', filters.startDate.split('T')[0])
+      if (filters.endDate)
+        query = query.lte('data_fim', filters.endDate.split('T')[0])
 
       const { data } = await query
       flatData = (data || []).map((d: any) => ({
@@ -100,8 +119,11 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'folha') {
       query = supabase
         .from('folha_pagamento')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
       if (filters.month) query = query.eq('mes', filters.month)
       if (filters.year) query = query.eq('ano', filters.year)
@@ -118,10 +140,14 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'avaliacoes') {
       query = supabase
         .from('avaliacoes')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
-      if (filters.startDate) query = query.gte('data_avaliacao', filters.startDate)
+      if (filters.startDate)
+        query = query.gte('data_avaliacao', filters.startDate)
       if (filters.endDate) query = query.lte('data_avaliacao', filters.endDate)
 
       const { data } = await query
@@ -137,12 +163,19 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'ponto') {
       query = supabase
         .from('controle_ponto')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
       if (filters.month && filters.year) {
-        const start = new Date(filters.year, filters.month - 1, 1).toISOString().split('T')[0]
-        const end = new Date(filters.year, filters.month, 0).toISOString().split('T')[0]
+        const start = new Date(filters.year, filters.month - 1, 1)
+          .toISOString()
+          .split('T')[0]
+        const end = new Date(filters.year, filters.month, 0)
+          .toISOString()
+          .split('T')[0]
         query = query.gte('data', start).lte('data', end)
       }
 
@@ -160,7 +193,9 @@ Deno.serve(async (req: Request) => {
 
     if (format === 'csv') {
       const csvStr = toCSV(flatData)
-      return new Response(csvStr, { headers: { ...corsHeaders, 'Content-Type': 'text/csv' } })
+      return new Response(csvStr, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/csv' },
+      })
     } else {
       const pdfBytes = await toPDF(flatData, reportType)
       return new Response(pdfBytes, {

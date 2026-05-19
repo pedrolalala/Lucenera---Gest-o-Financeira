@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -96,10 +96,6 @@ export default function Users() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9 border border-gray-200">
-                        <AvatarImage
-                          src={`https://img.usecurling.com/ppl/thumbnail?gender=male&seed=${user.id}`}
-                          alt={user.full_name || 'User'}
-                        />
                         <AvatarFallback>
                           {(user.full_name || 'U')
                             .substring(0, 2)
