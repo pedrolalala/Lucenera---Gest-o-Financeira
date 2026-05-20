@@ -32,27 +32,36 @@ export function KPICard({ data }: KPICardProps) {
 
   return (
     <Card className="rounded-3xl border-none shadow-sm hover:scale-[1.02] transition-transform duration-300 h-full">
-      <CardContent className="p-6 flex justify-between items-center h-full">
-        <div className="flex flex-col justify-between h-full gap-4 w-full">
-          <h3 className="text-sm font-medium text-gray-500 truncate">
+      <CardContent className="p-6 flex justify-between items-center h-full overflow-hidden">
+        <div className="flex flex-col justify-between h-full gap-4 flex-1 min-w-0 pr-4">
+          <h3
+            className="text-sm font-medium text-gray-500 truncate"
+            title={data.label}
+          >
             {data.label}
           </h3>
 
-          <div className="flex flex-col">
-            <span className="text-2xl font-bold text-gray-900">
+          <div className="flex flex-col min-w-0">
+            <span
+              className="text-2xl font-bold text-gray-900 truncate"
+              title={String(formatValue(data.value))}
+            >
               {formatValue(data.value)}
             </span>
             {data.subValue && (
-              <span className="text-xs text-gray-400 font-medium">
+              <span
+                className="text-xs text-gray-400 font-medium truncate"
+                title={String(data.subValue)}
+              >
                 {data.subValue}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <div
               className={cn(
-                'text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1',
+                'text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0',
                 isNeutral
                   ? 'bg-gray-100 text-gray-600'
                   : isPositive
@@ -61,21 +70,24 @@ export function KPICard({ data }: KPICardProps) {
               )}
             >
               {isNeutral ? (
-                <Minus className="w-3 h-3" />
+                <Minus className="w-3 h-3 shrink-0" />
               ) : isPositive ? (
-                <TrendingUp className="w-3 h-3" />
+                <TrendingUp className="w-3 h-3 shrink-0" />
               ) : (
-                <TrendingDown className="w-3 h-3" />
+                <TrendingDown className="w-3 h-3 shrink-0" />
               )}
-              {Math.abs(data.trend)}%
+              <span className="truncate">{Math.abs(data.trend)}%</span>
             </div>
-            <span className="text-xs text-gray-400 truncate">
+            <span
+              className="text-xs text-gray-400 truncate"
+              title={data.trendLabel}
+            >
               {data.trendLabel}
             </span>
           </div>
         </div>
 
-        <div className="h-full flex items-end ml-4">
+        <div className="h-full flex items-end ml-4 shrink-0">
           {/* Simple progress ring or bar could go here, but omitted for cleaner real-time UI */}
           <div className="h-16 w-1.5 rounded-full bg-gray-100 relative overflow-hidden">
             <div
