@@ -20,9 +20,11 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { format } from 'date-fns'
-import { Edit, Trash2, Printer } from 'lucide-react'
+import { Edit, Trash2, Printer, Loader2 } from 'lucide-react'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { supabase } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 interface BudgetsTableProps {
   data: Budget[]
@@ -31,6 +33,76 @@ interface BudgetsTableProps {
 
 export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
   const { deleteBudget } = useBudgetStore()
+  const [printingId, setPrintingId] = useState<string | null>(null)
+
+  const handleDownloadPdf = async (budget: Budget) => {
+    try {
+      setPrintingId(budget.id)
+
+      let logoBase64 = null
+      try {
+        const res = await fetch('/lucenera-vertical-87b48.png')
+        if (res.ok) {
+          const blob = await res.blob()
+          logoBase64 = await new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.readAsDataURL(blob)
+          })
+        }
+      } catch (e) {
+        console.warn('Não foi possível carregar a logo', e)
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession()
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-report`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionData.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            reportType: 'orcamento',
+            format: 'pdf',
+            filters: { id: budget.id, logoBase64 },
+          }),
+        },
+      )
+
+      if (!response.ok) {
+        let errorMessage = 'Erro ao gerar o PDF.'
+        try {
+          const errData = await response.json()
+          errorMessage = errData.error || errorMessage
+        } catch {
+          // ignore
+        }
+        throw new Error(errorMessage)
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Orcamento_${budget.numero || budget.id.split('-')[0].toUpperCase()}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+
+      toast.success('Orçamento baixado com sucesso!')
+    } catch (error: any) {
+      console.error(error)
+      toast.error('Falha ao gerar o PDF', {
+        description: error.message,
+      })
+    } finally {
+      setPrintingId(null)
+    }
+  }
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -97,17 +169,21 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-1">
-                  <Link to={`/budgets/print/${budget.id}`} target="_blank">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                      title="Imprimir Orçamento"
-                    >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    title="Baixar PDF do Orçamento"
+                    onClick={() => handleDownloadPdf(budget)}
+                    disabled={printingId === budget.id}
+                  >
+                    {printingId === budget.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
                       <Printer className="h-4 w-4" />
-                      <span className="sr-only">Imprimir</span>
-                    </Button>
-                  </Link>
+                    )}
+                    <span className="sr-only">Download PDF</span>
+                  </Button>
 
                   <Button
                     variant="ghost"
