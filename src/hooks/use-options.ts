@@ -12,7 +12,7 @@ export function useOptions() {
   useEffect(() => {
     async function load() {
       try {
-        const [empRes, cliRes, arqRes, usuRes, prodRes] = await Promise.all([
+        const [empRes, cliRes, arqRes, funcRes, prodRes] = await Promise.all([
           supabase.from('empresas').select('id, nome').order('nome'),
           supabase
             .from('contatos')
@@ -24,7 +24,10 @@ export function useOptions() {
             .select('id, nome')
             .eq('tipo', 'arquiteto')
             .order('nome'),
-          supabase.from('usuarios').select('id, nome').order('nome'),
+          supabase
+            .from('funcionarios')
+            .select('id, nome')
+            .eq('status', 'Ativo'),
           supabase
             .from('produtos')
             .select('id, nome, preco_venda')
@@ -34,7 +37,25 @@ export function useOptions() {
         if (empRes.data) setEmpresas(empRes.data)
         if (cliRes.data) setClientes(cliRes.data)
         if (arqRes.data) setArquitetos(arqRes.data)
-        if (usuRes.data) setVendedores(usuRes.data)
+        if (funcRes.data) {
+          const priorityNames = [
+            'Marina Pousa Barbara Gregorio',
+            'Thairine Cristina da Silva',
+            'Thais Gomes Pegrucci Favaron',
+            'Teresinha do Amaral Figueiredo',
+          ]
+          const sorted = [...funcRes.data].sort((a, b) => {
+            const indexA = priorityNames.indexOf(a.nome)
+            const indexB = priorityNames.indexOf(b.nome)
+
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB
+            if (indexA !== -1) return -1
+            if (indexB !== -1) return 1
+
+            return a.nome.localeCompare(b.nome)
+          })
+          setVendedores(sorted)
+        }
         if (prodRes.data) setProdutos(prodRes.data)
       } catch (error) {
         console.error('Error loading options', error)
