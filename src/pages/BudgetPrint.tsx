@@ -44,7 +44,6 @@ export default function BudgetPrint() {
 
         const budgetData = data as unknown as Budget
 
-        // Fetch vendedor name if available
         let vNome = ''
         if (budgetData.vendedor_id) {
           const { data: vData } = await supabase
@@ -57,7 +56,6 @@ export default function BudgetPrint() {
         setVendedorNome(vNome)
         setBudget(budgetData)
 
-        // Wait a bit for rendering, then trigger print
         setTimeout(() => {
           window.print()
         }, 1000)
@@ -92,27 +90,24 @@ export default function BudgetPrint() {
       currency: 'BRL',
     }).format(val || 0)
 
-  // Subtotal (without discounts)
   const subtotal = (budget.itens || []).reduce((acc, item) => {
     return acc + Number(item.quantidade) * Number(item.preco_unitario)
   }, 0)
 
-  // Total discounts
   const totalDiscounts = (budget.itens || []).reduce((acc, item) => {
     const gross = Number(item.quantidade) * Number(item.preco_unitario)
-    const discountAmount = gross * (Number(item.desconto || 0) / 100)
+    const descInt = Math.round(Number(item.desconto || 0))
+    const discountAmount = gross * (descInt / 100)
     return acc + discountAmount
   }, 0)
 
   const finalTotal =
     subtotal - totalDiscounts - (Number(budget.desconto_global) || 0)
 
-  // Grouping items visually by custom_id
   const sortedItems = [...(budget.itens || [])].sort((a, b) => {
     const idA = a.custom_id || ''
     const idB = b.custom_id || ''
     if (idA === idB) {
-      // Parents first (if no item_pai_id), then accessories
       if (!a.item_pai_id && b.item_pai_id) return -1
       if (a.item_pai_id && !b.item_pai_id) return 1
       return 0
@@ -120,8 +115,10 @@ export default function BudgetPrint() {
     return idA.localeCompare(idB)
   })
 
-  // Date formatting
   const printDate = format(new Date(), 'dd/MM/yyyy HH:mm')
+
+  const emitDate = budget.data_emissao ? new Date(budget.data_emissao) : null
+  const isValidEmitDate = emitDate && !isNaN(emitDate.getTime())
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 print:bg-white print:p-0 font-sans text-[12px] text-gray-900">
@@ -159,7 +156,6 @@ export default function BudgetPrint() {
           </div>
 
           <div className="flex flex-col items-end gap-2 text-[10px] w-64">
-            {/* Page number is simulated, ideally rely on print margins, but putting 1 de 1 as fallback */}
             <div className="text-right w-full font-semibold">1 de 1</div>
 
             <div className="w-full mt-4 border-b border-black text-center pb-1">
@@ -182,8 +178,10 @@ export default function BudgetPrint() {
               {budget.cliente?.nome || 'CLIENTE NÃO INFORMADO'}
             </div>
             <div className="text-[11px] text-gray-600">
-              CEP: {budget.cliente?.cep || '-'} / TEL:{' '}
-              {budget.cliente?.telefone || budget.cliente?.celular || '-'}
+              CEP: {(budget.cliente as any)?.cep || '-'} / TEL:{' '}
+              {(budget.cliente as any)?.telefone ||
+                (budget.cliente as any)?.celular ||
+                '-'}
             </div>
           </div>
           <div className="text-right">
@@ -191,9 +189,9 @@ export default function BudgetPrint() {
             <div className="text-[20px] font-bold text-gray-800">
               #{budget.numero || budget.id.split('-')[0].toUpperCase()}
             </div>
-            {budget.data_emissao && (
+            {isValidEmitDate && (
               <div className="text-[11px] text-gray-500 mt-1">
-                Data: {format(new Date(budget.data_emissao), 'dd/MM/yyyy')}
+                Data: {format(emitDate!, 'dd/MM/yyyy')}
               </div>
             )}
           </div>
@@ -237,11 +235,10 @@ export default function BudgetPrint() {
             <tbody className="text-[11px]">
               {sortedItems.map((item, idx) => {
                 const isAccessory = !!item.item_pai_id
-
                 const gross =
                   Number(item.quantidade) * Number(item.preco_unitario)
-                const finalVal = gross * (1 - Number(item.desconto || 0) / 100)
                 const descInt = Math.round(Number(item.desconto || 0))
+                const finalVal = gross * (1 - descInt / 100)
 
                 return (
                   <tr
@@ -273,7 +270,7 @@ export default function BudgetPrint() {
                         )}
                         <span>
                           {item.produto?.nome ||
-                            item.descricao ||
+                            (item as any).descricao ||
                             'Produto sem nome'}
                         </span>
                       </div>
@@ -384,7 +381,6 @@ export default function BudgetPrint() {
         </div>
       </div>
 
-      {/* Floating print button for non-print mode */}
       <div className="fixed bottom-8 right-8 hide-on-print">
         <button
           onClick={() => window.print()}

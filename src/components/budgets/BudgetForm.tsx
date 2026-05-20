@@ -163,7 +163,7 @@ export function BudgetForm({
   const valorTotal = watchItens.reduce((acc, item) => {
     const q = Number(item.quantidade) || 0
     const p = Number(item.preco_unitario) || 0
-    const d = Number(item.desconto) || 0 // %
+    const d = Math.round(Number(item.desconto) || 0) // %
     return acc + q * p * (1 - d / 100)
   }, 0)
 
@@ -612,6 +612,11 @@ export function BudgetForm({
                                   step="1"
                                   className="h-9"
                                   {...f}
+                                  onChange={(e) =>
+                                    f.onChange(
+                                      Math.round(Number(e.target.value) || 0),
+                                    )
+                                  }
                                 />
                               </FormControl>
                               <FormMessage />

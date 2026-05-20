@@ -68,7 +68,8 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
           {data.map((budget) => (
             <TableRow key={budget.id}>
               <TableCell className="font-medium text-gray-600">
-                {budget.data_emissao
+                {budget.data_emissao &&
+                !isNaN(new Date(budget.data_emissao).getTime())
                   ? format(new Date(budget.data_emissao), 'dd/MM/yyyy')
                   : '-'}
               </TableCell>

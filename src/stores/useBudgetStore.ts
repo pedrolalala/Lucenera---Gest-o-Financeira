@@ -116,9 +116,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   addBudget: async (budget, items) => {
     const finalBudget = { ...budget }
     if (!finalBudget.numero) {
-      finalBudget.numero = Math.floor(Math.random() * 1000000)
-        .toString()
-        .padStart(6, '0')
+      delete (finalBudget as any).numero
     }
 
     const { data, error } = await supabase

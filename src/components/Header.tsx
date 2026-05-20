@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
+import { Link } from 'react-router-dom'
 
 export function Header() {
   const { user } = useAuth()
@@ -10,14 +11,24 @@ export function Header() {
   const userInitials = userName.substring(0, 2).toUpperCase()
 
   return (
-    <header className="sticky top-0 z-30 w-full bg-[#F8F9FB]/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
-      <div className="flex-1 max-w-md">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <Input
-            placeholder="Buscar..."
-            className="pl-10 bg-white border-transparent shadow-sm rounded-full h-11 focus-visible:ring-1 focus-visible:ring-gray-200"
+    <header className="sticky top-0 z-30 w-full bg-[#F8F9FB]/80 backdrop-blur-md px-6 py-4 flex items-center justify-between border-b border-gray-100">
+      <div className="flex items-center gap-4 flex-1">
+        <Link to="/" className="md:hidden flex items-center gap-2 mr-2">
+          <img
+            src="/logo.png"
+            alt="Lucenera"
+            className="h-7 w-auto object-contain"
           />
+        </Link>
+
+        <div className="flex-1 max-w-md hidden sm:block">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Input
+              placeholder="Buscar..."
+              className="pl-10 bg-white border-transparent shadow-sm rounded-full h-11 focus-visible:ring-1 focus-visible:ring-gray-200"
+            />
+          </div>
         </div>
       </div>
 
