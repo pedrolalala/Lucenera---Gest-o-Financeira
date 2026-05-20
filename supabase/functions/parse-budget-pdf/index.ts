@@ -2,8 +2,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS')
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
     const { pdfBase64 } = await req.json()
@@ -58,8 +57,8 @@ Se uma informação não existir, retorne null ou string vazia.`
             },
           ],
           generationConfig: {
-            responseMimeType: 'application/json',
-          },
+            responseMimeType: "application/json"
+          }
         }),
       },
     )
@@ -71,15 +70,12 @@ Se uma informação não existir, retorne null ou string vazia.`
 
     const data = await response.json()
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-
+    
     if (!text) throw new Error('No text returned from Gemini')
 
     let cleanText = text.trim()
     if (cleanText.startsWith('```json')) {
-      cleanText = cleanText
-        .replace(/^```json/, '')
-        .replace(/```$/, '')
-        .trim()
+      cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '').trim()
     } else if (cleanText.startsWith('```')) {
       cleanText = cleanText.replace(/^```/, '').replace(/```$/, '').trim()
     }
@@ -89,8 +85,9 @@ Se uma informação não existir, retorne null ou string vazia.`
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
+
   } catch (err: any) {
-    console.error('PDF Parsing error:', err)
+    console.error("PDF Parsing error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
