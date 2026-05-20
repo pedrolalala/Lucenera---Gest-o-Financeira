@@ -294,107 +294,147 @@ export default function BudgetFormPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (file.type !== 'application/pdf') {
+      toast.error('O arquivo selecionado não é um PDF válido.')
+      e.target.value = ''
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      // Limite de 10MB
+      toast.error('O arquivo PDF é muito grande (máximo 10MB).')
+      e.target.value = ''
+      return
+    }
+
     setIsImporting(true)
+
+    const readPdfBase64 = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.readAsDataURL(file)
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = () =>
+          reject(new Error('Erro ao ler o arquivo selecionado.'))
+      })
+    }
+
     try {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = async () => {
-        const base64 = reader.result as string
-        const { data, error } = await supabase.functions.invoke(
-          'parse-budget-pdf',
-          {
-            body: { pdfBase64: base64 },
-          },
-        )
+      const base64 = await readPdfBase64(file)
 
-        if (error) throw error
+      const { data, error } = await supabase.functions.invoke(
+        'parse-budget-pdf',
+        {
+          body: { pdfBase64: base64 },
+        },
+      )
 
-        const parsed = data
-
-        let empresaId = form.getValues('empresa_id')
-        if (parsed.empresa_nome) {
-          const found = empresas.find(
-            (emp) =>
-              emp.nome
-                .toLowerCase()
-                .includes(parsed.empresa_nome.toLowerCase()) ||
-              parsed.empresa_nome
-                .toLowerCase()
-                .includes(emp.nome.toLowerCase()),
-          )
-          if (found) empresaId = found.id
+      if (error) {
+        let errMsg = 'Erro ao processar PDF'
+        if (error instanceof Error) {
+          errMsg = error.message
         }
-
-        let clienteId = form.getValues('cliente_id')
-        if (parsed.cliente_nome) {
-          const found = clientes.find((c) =>
-            c.nome.toLowerCase().includes(parsed.cliente_nome.toLowerCase()),
-          )
-          if (found) clienteId = found.id
-        }
-
-        let arquitetoId = form.getValues('arquiteto_id')
-        if (parsed.arquiteto_nome) {
-          const found = arquitetos.find((a) =>
-            a.nome.toLowerCase().includes(parsed.arquiteto_nome.toLowerCase()),
-          )
-          if (found) arquitetoId = found.id
-        }
-
-        let vendedorId = form.getValues('vendedor_id')
-        if (parsed.vendedor_nome) {
-          const found = sortedVendedores.find((v) =>
-            v.nome.toLowerCase().includes(parsed.vendedor_nome.toLowerCase()),
-          )
-          if (found) vendedorId = found.id
-        }
-
-        const validFormas = ['pix', 'cartao', 'boleto', 'dinheiro']
-        let formaPgto = parsed.forma_pagamento?.toLowerCase() || ''
-        if (formaPgto.includes('transferencia')) formaPgto = 'pix'
-        else if (!validFormas.includes(formaPgto)) formaPgto = ''
-
-        form.reset({
-          ...form.getValues(),
-          empresa_id: empresaId,
-          cliente_id: clienteId,
-          arquiteto_id: arquitetoId || 'none',
-          vendedor_id: vendedorId || 'none',
-          status: parsed.status || 'Rascunho',
-          desconto_global: parsed.desconto_global || 0,
-          forma_pagamento: formaPgto,
-          observacoes: parsed.observacoes || '',
-        })
-
-        if (parsed.itens && Array.isArray(parsed.itens)) {
-          const newItens = parsed.itens.map((i: any) => {
-            let produtoId = ''
-            if (i.custom_id || i.descricao) {
-              const found = produtos.find(
-                (p) =>
-                  (i.custom_id && p.sku === i.custom_id) ||
-                  (i.descricao &&
-                    p.nome.toLowerCase().includes(i.descricao.toLowerCase())),
-              )
-              if (found) produtoId = found.id
-            }
-            return {
-              custom_id: i.custom_id || '',
-              produto_id: produtoId,
-              quantidade: i.quantidade || 1,
-              preco_unitario: i.preco_unitario || 0,
-              desconto: i.desconto || 0,
-            }
-          })
-          if (newItens.length > 0) {
-            replace(newItens)
+        try {
+          if (
+            (error as any).context &&
+            typeof (error as any).context.json === 'function'
+          ) {
+            const errData = await (error as any).context.json()
+            if (errData?.error) errMsg = errData.error
           }
+        } catch (e) {
+          // fallback
         }
-
-        toast.success('PDF importado com sucesso. Revise os dados preenchidos.')
+        throw new Error(errMsg)
       }
-    } catch (err) {
-      toast.error('Erro ao importar PDF')
+
+      if (!data || data.error) {
+        throw new Error(data?.error || 'Retorno inválido do servidor')
+      }
+
+      const parsed = data
+
+      let empresaId = form.getValues('empresa_id')
+      if (parsed.empresa_nome) {
+        const found = empresas.find(
+          (emp) =>
+            emp.nome
+              .toLowerCase()
+              .includes(parsed.empresa_nome.toLowerCase()) ||
+            parsed.empresa_nome.toLowerCase().includes(emp.nome.toLowerCase()),
+        )
+        if (found) empresaId = found.id
+      }
+
+      let clienteId = form.getValues('cliente_id')
+      if (parsed.cliente_nome) {
+        const found = clientes.find((c) =>
+          c.nome.toLowerCase().includes(parsed.cliente_nome.toLowerCase()),
+        )
+        if (found) clienteId = found.id
+      }
+
+      let arquitetoId = form.getValues('arquiteto_id')
+      if (parsed.arquiteto_nome) {
+        const found = arquitetos.find((a) =>
+          a.nome.toLowerCase().includes(parsed.arquiteto_nome.toLowerCase()),
+        )
+        if (found) arquitetoId = found.id
+      }
+
+      let vendedorId = form.getValues('vendedor_id')
+      if (parsed.vendedor_nome) {
+        const found = sortedVendedores.find((v) =>
+          v.nome.toLowerCase().includes(parsed.vendedor_nome.toLowerCase()),
+        )
+        if (found) vendedorId = found.id
+      }
+
+      const validFormas = ['pix', 'cartao', 'boleto', 'dinheiro']
+      let formaPgto = parsed.forma_pagamento?.toLowerCase() || ''
+      if (formaPgto.includes('transferencia')) formaPgto = 'pix'
+      else if (!validFormas.includes(formaPgto)) formaPgto = ''
+
+      form.reset({
+        ...form.getValues(),
+        empresa_id: empresaId,
+        cliente_id: clienteId,
+        arquiteto_id: arquitetoId || 'none',
+        vendedor_id: vendedorId || 'none',
+        status: parsed.status || 'Rascunho',
+        desconto_global: parsed.desconto_global || 0,
+        forma_pagamento: formaPgto,
+        observacoes: parsed.observacoes || '',
+      })
+
+      if (parsed.itens && Array.isArray(parsed.itens)) {
+        const newItens = parsed.itens.map((i: any) => {
+          let produtoId = ''
+          if (i.custom_id || i.descricao) {
+            const found = produtos.find(
+              (p) =>
+                (i.custom_id && p.sku === i.custom_id) ||
+                (i.descricao &&
+                  p.nome.toLowerCase().includes(i.descricao.toLowerCase())),
+            )
+            if (found) produtoId = found.id
+          }
+          return {
+            custom_id: i.custom_id || '',
+            produto_id: produtoId,
+            quantidade: i.quantidade || 1,
+            preco_unitario: i.preco_unitario || 0,
+            desconto: i.desconto || 0,
+          }
+        })
+        if (newItens.length > 0) {
+          replace(newItens)
+        }
+      }
+
+      toast.success('PDF importado com sucesso. Revise os dados preenchidos.')
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao importar PDF')
     } finally {
       setIsImporting(false)
       e.target.value = ''
