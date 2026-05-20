@@ -46,9 +46,38 @@ export function useOptions() {
           })
 
           const uniqueVendedores = Array.from(uniqueMap.values())
-          const sorted = uniqueVendedores.sort((a, b) =>
-            a.nome.localeCompare(b.nome),
-          )
+
+          const priority1 = [
+            'marina pousa barbara gregorio',
+            'thairine cristina da silva',
+            'thais gomes pegrucci favaron',
+          ]
+          const priority2 = ['teresinha do amaral figueiredo']
+
+          const normalize = (name: string) =>
+            name.trim().toLowerCase().replace(/\s+/g, ' ')
+
+          const sorted = uniqueVendedores.sort((a, b) => {
+            const nomeA = normalize(a.nome)
+            const nomeB = normalize(b.nome)
+
+            const getPriority = (nome: string) => {
+              const p1Index = priority1.indexOf(nome)
+              if (p1Index !== -1) return p1Index
+              const p2Index = priority2.indexOf(nome)
+              if (p2Index !== -1) return priority1.length + p2Index
+              return priority1.length + priority2.length
+            }
+
+            const prioA = getPriority(nomeA)
+            const prioB = getPriority(nomeB)
+
+            if (prioA !== prioB) {
+              return prioA - prioB
+            }
+
+            return a.nome.localeCompare(b.nome)
+          })
 
           setVendedores(sorted)
         }
