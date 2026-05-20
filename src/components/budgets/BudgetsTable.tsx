@@ -25,6 +25,7 @@ import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import logoImg from '@/assets/lucenera-vertical-527dd.png'
 
 interface BudgetsTableProps {
   data: Budget[]
@@ -41,7 +42,7 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
 
       let logoBase64 = null
       try {
-        const res = await fetch('/lucenera-vertical-87b48.png')
+        const res = await fetch(logoImg)
         if (res.ok) {
           const blob = await res.blob()
           logoBase64 = await new Promise((resolve) => {

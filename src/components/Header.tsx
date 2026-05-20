@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { Link } from 'react-router-dom'
-import logoImg from '@/assets/lucenera-vertical-87b48.png'
+import logoImg from '@/assets/lucenera-vertical-527dd.png'
 
 export function Header() {
   const { user } = useAuth()
@@ -14,7 +14,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-30 w-full bg-[#F8F9FB]/80 backdrop-blur-md px-6 py-4 flex items-center justify-between border-b border-gray-100">
       <div className="flex items-center gap-4 flex-1">
-        <Link to="/" className="md:hidden flex items-center gap-2 mr-2">
+        <Link to="/" className="flex items-center gap-2 mr-4">
           <img
             src={logoImg}
             alt="Lucenera"
@@ -22,7 +22,7 @@ export function Header() {
           />
         </Link>
 
-        <div className="flex-1 max-w-md hidden sm:block">
+        <div className="flex-1 max-w-md hidden md:block">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
             <Input
