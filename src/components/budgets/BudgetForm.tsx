@@ -57,10 +57,10 @@ const formSchema = z.object({
   data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
   desconto_global: z.coerce
     .number()
-    .int('Deve ser um valor inteiro')
-    .min(0)
+    .min(0, 'O desconto não pode ser negativo')
+    .max(100, 'O desconto não pode ser maior que 100%')
     .default(0),
-  condicoes_pagamento: z.string().optional().nullable(),
+  forma_pagamento: z.string().optional().nullable(),
   observacoes: z.string().optional().nullable(),
   validade: z.date().optional().nullable(),
   itens: z
@@ -117,7 +117,7 @@ export function BudgetForm({
       status: 'Rascunho',
       data_emissao: new Date(),
       desconto_global: 0,
-      condicoes_pagamento: '',
+      forma_pagamento: '',
       observacoes: '',
       validade: null,
       itens: [],
@@ -138,7 +138,7 @@ export function BudgetForm({
         vendedor_id: budgetToEdit.vendedor_id || 'none',
         status: budgetToEdit.status || 'Rascunho',
         desconto_global: budgetToEdit.desconto_global || 0,
-        condicoes_pagamento: budgetToEdit.condicoes_pagamento || '',
+        forma_pagamento: budgetToEdit.forma_pagamento || '',
         observacoes: budgetToEdit.observacoes || '',
         data_emissao: budgetToEdit.data_emissao
           ? new Date(budgetToEdit.data_emissao)
@@ -164,7 +164,7 @@ export function BudgetForm({
         status: 'Rascunho',
         data_emissao: new Date(),
         desconto_global: 0,
-        condicoes_pagamento: '',
+        forma_pagamento: '',
         observacoes: '',
         validade: null,
         itens: [],
@@ -173,12 +173,14 @@ export function BudgetForm({
   }, [budgetToEdit, form, open])
 
   const watchItens = form.watch('itens')
-  const valorTotal = watchItens.reduce((acc, item) => {
+  const descontoGlobalPerc = form.watch('desconto_global') || 0
+  const valorSubtotal = watchItens.reduce((acc, item) => {
     const q = Number(item.quantidade) || 0
     const p = Number(item.preco_unitario) || 0
     const d = Math.round(Number(item.desconto) || 0) // %
     return acc + q * p * (1 - d / 100)
   }, 0)
+  const valorTotal = valorSubtotal * (1 - descontoGlobalPerc / 100)
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
@@ -192,7 +194,8 @@ export function BudgetForm({
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
         status: values.status,
         desconto_global: values.desconto_global,
-        condicoes_pagamento: values.condicoes_pagamento,
+        forma_pagamento: values.forma_pagamento || null,
+        condicoes_pagamento: null,
         observacoes: values.observacoes,
         data_emissao: values.data_emissao.toISOString(),
         validade: values.validade
@@ -704,20 +707,6 @@ export function BudgetForm({
                     )
                   })}
                 </div>
-
-                <div className="mt-4 flex justify-end">
-                  <div className="bg-gray-100 text-gray-900 pl-4 pr-4 py-2 rounded-lg border border-gray-200 flex items-center max-w-full overflow-hidden">
-                    <span className="text-sm font-medium mr-2 shrink-0">
-                      Valor Total:
-                    </span>
-                    <span className="text-lg font-bold truncate">
-                      {new Intl.NumberFormat('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      }).format(valorTotal)}
-                    </span>
-                  </div>
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 pt-4">
@@ -726,20 +715,25 @@ export function BudgetForm({
                   name="desconto_global"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Desconto Global (R$)</FormLabel>
+                      <FormLabel>Desconto Global (%)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="1"
-                          placeholder="Ex: 150"
-                          {...field}
-                          value={field.value || ''}
-                          onChange={(e) =>
-                            field.onChange(
-                              Math.round(Number(e.target.value) || 0),
-                            )
-                          }
-                        />
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            placeholder="Ex: 10"
+                            {...field}
+                            value={field.value === 0 ? '' : field.value}
+                            onChange={(e) =>
+                              field.onChange(Number(e.target.value) || 0)
+                            }
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                            %
+                          </span>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -748,21 +742,54 @@ export function BudgetForm({
 
                 <FormField
                   control={form.control}
-                  name="condicoes_pagamento"
+                  name="forma_pagamento"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Condições de Pagamento</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Ex: Dinheiro, PIX, 3x no Cartão"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
+                      <FormLabel>Forma de Pagamento</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value || undefined}
+                        value={field.value || undefined}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                          <SelectItem value="pix">Pix</SelectItem>
+                          <SelectItem value="cartao">Cartão</SelectItem>
+                          <SelectItem value="boleto">Boleto</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <div className="bg-gray-100 text-gray-900 pl-4 pr-4 py-2 rounded-lg border border-gray-200 flex flex-col max-w-full overflow-hidden">
+                  <div className="flex justify-between items-center text-sm mb-1 text-gray-500">
+                    <span className="font-medium mr-8">Subtotal:</span>
+                    <span className="font-semibold">
+                      {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                      }).format(valorSubtotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-lg text-primary">
+                    <span className="font-medium mr-8">Total:</span>
+                    <span className="font-bold">
+                      {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                      }).format(valorTotal)}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <SheetFooter className="mt-6 pt-4 border-t">

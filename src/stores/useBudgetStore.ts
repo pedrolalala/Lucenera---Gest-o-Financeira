@@ -29,6 +29,7 @@ export interface Budget {
   data_emissao: string
   validade: string | null
   condicoes_pagamento: string | null
+  forma_pagamento: string | null
   desconto_global: number | null
   observacoes: string | null
   valor_total: number
