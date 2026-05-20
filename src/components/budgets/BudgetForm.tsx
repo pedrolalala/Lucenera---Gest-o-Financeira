@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useOptions } from '@/hooks/use-options'
@@ -216,6 +217,15 @@ export function BudgetForm({
   const handleProductChange = async (index: number, val: string) => {
     form.setValue(`itens.${index}.produto_id`, val, { shouldValidate: true })
 
+    if (!val) {
+      form.setValue(`itens.${index}.preco_unitario`, 0, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      })
+      return
+    }
+
     // Fetch product from DB to ensure real-time pricing
     const { data: prod } = await supabase
       .from('produtos')
@@ -333,24 +343,20 @@ export function BudgetForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cliente</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      value={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {clientes.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        options={clientes.map((c) => ({
+                          value: c.id,
+                          label: c.nome,
+                          searchTerms: [c.nome_empresa].filter(Boolean),
+                        }))}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Selecione um cliente..."
+                        searchPlaceholder="Buscar cliente..."
+                        emptyText="Nenhum cliente encontrado."
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -363,25 +369,22 @@ export function BudgetForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Arquiteto / Profissional</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Nenhum" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {arquitetos.map((a) => (
-                            <SelectItem key={a.id} value={a.id}>
-                              {a.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          options={[
+                            { value: 'none', label: 'Nenhum' },
+                            ...arquitetos.map((a) => ({
+                              value: a.id,
+                              label: a.nome,
+                            })),
+                          ]}
+                          value={field.value || 'none'}
+                          onChange={field.onChange}
+                          placeholder="Nenhum"
+                          searchPlaceholder="Buscar arquiteto..."
+                          emptyText="Nenhum arquiteto encontrado."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -393,25 +396,22 @@ export function BudgetForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Vendedor</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Nenhum" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="none">Nenhum</SelectItem>
-                          {vendedores.map((v) => (
-                            <SelectItem key={v.id} value={v.id}>
-                              {v.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          options={[
+                            { value: 'none', label: 'Nenhum' },
+                            ...vendedores.map((v) => ({
+                              value: v.id,
+                              label: v.nome,
+                            })),
+                          ]}
+                          value={field.value || 'none'}
+                          onChange={field.onChange}
+                          placeholder="Nenhum"
+                          searchPlaceholder="Buscar vendedor..."
+                          emptyText="Nenhum vendedor encontrado."
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -570,25 +570,29 @@ export function BudgetForm({
                                 <FormLabel className="text-xs">
                                   Produto
                                 </FormLabel>
-                                <Select
-                                  onValueChange={(val) =>
-                                    handleProductChange(index, val)
-                                  }
-                                  value={f.value}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger className="h-9">
-                                      <SelectValue placeholder="Selecione..." />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    {produtos.map((p) => (
-                                      <SelectItem key={p.id} value={p.id}>
-                                        {p.nome}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <FormControl>
+                                  <SearchableSelect
+                                    className="h-9"
+                                    options={produtos.map((p) => ({
+                                      value: p.id,
+                                      label: p.nome,
+                                      searchTerms: [
+                                        p.sku,
+                                        p.referencia,
+                                        p.codigo_legado
+                                          ? String(p.codigo_legado)
+                                          : '',
+                                      ].filter(Boolean),
+                                    }))}
+                                    value={f.value}
+                                    onChange={(val) =>
+                                      handleProductChange(index, val)
+                                    }
+                                    placeholder="Selecione..."
+                                    searchPlaceholder="Buscar produto, sku, ref..."
+                                    emptyText="Nenhum produto encontrado."
+                                  />
+                                </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}

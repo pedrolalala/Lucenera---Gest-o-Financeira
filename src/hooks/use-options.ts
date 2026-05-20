@@ -16,7 +16,7 @@ export function useOptions() {
           supabase.from('empresas').select('id, nome').order('nome'),
           supabase
             .from('contatos')
-            .select('id, nome')
+            .select('id, nome, nome_empresa')
             .eq('tipo', 'cliente')
             .order('nome'),
           supabase
@@ -30,7 +30,7 @@ export function useOptions() {
             .eq('status', 'Ativo'),
           supabase
             .from('produtos')
-            .select('id, nome, preco_venda')
+            .select('id, nome, preco_venda, sku, referencia, codigo_legado')
             .order('nome'),
         ])
 
