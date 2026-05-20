@@ -68,7 +68,10 @@ const formSchema = z.object({
       z.object({
         custom_id: z.string().optional(),
         produto_id: z.string().min(1, 'Selecione um produto'),
-        quantidade: z.coerce.number().min(0.01, 'Quantidade inválida'),
+        quantidade: z.coerce
+          .number()
+          .int('Deve ser um valor inteiro')
+          .min(1, 'Quantidade inválida'),
         preco_unitario: z.coerce.number().min(0, 'Preço inválido'),
         desconto: z.coerce
           .number()
@@ -147,7 +150,7 @@ export function BudgetForm({
           budgetToEdit.itens?.map((i) => ({
             custom_id: i.custom_id || '',
             produto_id: i.produto_id,
-            quantidade: i.quantidade,
+            quantidade: Math.max(1, Math.floor(Number(i.quantidade) || 1)),
             preco_unitario: i.preco_unitario,
             desconto: i.desconto || 0,
           })) || [],
@@ -608,9 +611,15 @@ export function BudgetForm({
                                 <FormControl>
                                   <Input
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     className="h-9"
                                     {...f}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      f.onChange(
+                                        val ? Math.floor(Number(val)) : '',
+                                      )
+                                    }}
                                   />
                                 </FormControl>
                                 <FormMessage />
