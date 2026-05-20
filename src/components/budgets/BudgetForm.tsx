@@ -41,6 +41,7 @@ import {
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useOptions } from '@/hooks/use-options'
+import { supabase } from '@/lib/supabase/client'
 
 const formSchema = z.object({
   empresa_id: z
@@ -212,11 +213,33 @@ export function BudgetForm({
     }
   }
 
-  const handleProductChange = (index: number, val: string) => {
-    form.setValue(`itens.${index}.produto_id`, val)
-    const prod = produtos.find((p) => p.id === val)
-    if (prod && prod.preco_venda) {
-      form.setValue(`itens.${index}.preco_unitario`, Number(prod.preco_venda))
+  const handleProductChange = async (index: number, val: string) => {
+    form.setValue(`itens.${index}.produto_id`, val, { shouldValidate: true })
+
+    // Fetch product from DB to ensure real-time pricing
+    const { data: prod } = await supabase
+      .from('produtos')
+      .select('preco_venda')
+      .eq('id', val)
+      .single()
+
+    if (
+      prod &&
+      prod.preco_venda !== null &&
+      prod.preco_venda !== undefined &&
+      Number(prod.preco_venda) > 0
+    ) {
+      form.setValue(`itens.${index}.preco_unitario`, Number(prod.preco_venda), {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      })
+    } else {
+      form.setValue(`itens.${index}.preco_unitario`, 0, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      })
     }
   }
 
@@ -507,145 +530,166 @@ export function BudgetForm({
                 )}
 
                 <div className="space-y-4">
-                  {fields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="grid grid-cols-12 gap-3 items-end bg-gray-50 p-3 rounded-lg border"
-                    >
-                      <div className="col-span-12 sm:col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.custom_id`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">
-                                ID (L01)
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  className="h-9"
-                                  placeholder="Ex: L01"
-                                  {...f}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-12 sm:col-span-3">
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.produto_id`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Produto</FormLabel>
-                              <Select
-                                onValueChange={(val) =>
-                                  handleProductChange(index, val)
-                                }
-                                value={f.value}
-                              >
+                  {fields.map((field, index) => {
+                    const itemValues = watchItens[index] || {}
+                    const q = Number(itemValues.quantidade) || 0
+                    const p = Number(itemValues.preco_unitario) || 0
+                    const d = Math.round(Number(itemValues.desconto) || 0)
+                    const itemSubtotal = q * p * (1 - d / 100)
+
+                    return (
+                      <div
+                        key={field.id}
+                        className="grid grid-cols-12 gap-3 items-end bg-gray-50 p-3 rounded-lg border"
+                      >
+                        <div className="col-span-6 sm:col-span-1">
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.custom_id`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">ID</FormLabel>
                                 <FormControl>
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="Selecione..." />
-                                  </SelectTrigger>
+                                  <Input
+                                    className="h-9"
+                                    placeholder="L01"
+                                    {...f}
+                                  />
                                 </FormControl>
-                                <SelectContent>
-                                  {produtos.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                      {p.nome}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-4 sm:col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.quantidade`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Qtd</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  className="h-9"
-                                  {...f}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-4 sm:col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.preco_unitario`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">
-                                Preço (R$)
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  className="h-9"
-                                  {...f}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-3 sm:col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.desconto`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">
-                                Desc. (%)
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="1"
-                                  className="h-9"
-                                  {...f}
-                                  onChange={(e) =>
-                                    f.onChange(
-                                      Math.round(Number(e.target.value) || 0),
-                                    )
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <div className="col-span-6 sm:col-span-3">
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.produto_id`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">
+                                  Produto
+                                </FormLabel>
+                                <Select
+                                  onValueChange={(val) =>
+                                    handleProductChange(index, val)
                                   }
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                                  value={f.value}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger className="h-9">
+                                      <SelectValue placeholder="Selecione..." />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {produtos.map((p) => (
+                                      <SelectItem key={p.id} value={p.id}>
+                                        {p.nome}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <div className="col-span-4 sm:col-span-2">
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.quantidade`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Qtd</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    className="h-9"
+                                    {...f}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <div className="col-span-4 sm:col-span-2">
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.preco_unitario`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">
+                                  Preço (R$)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    className="h-9"
+                                    {...f}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <div className="col-span-3 sm:col-span-1">
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.desconto`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">
+                                  Desc. (%)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    step="1"
+                                    className="h-9"
+                                    {...f}
+                                    onChange={(e) =>
+                                      f.onChange(
+                                        Math.round(Number(e.target.value) || 0),
+                                      )
+                                    }
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <div className="col-span-8 sm:col-span-2 pb-2">
+                          <div className="flex flex-col justify-end h-full">
+                            <span className="text-xs font-medium text-gray-500 mb-1">
+                              Subtotal
+                            </span>
+                            <span className="text-sm font-semibold truncate">
+                              {new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              }).format(itemSubtotal)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="col-span-1 sm:col-span-1 flex justify-center pb-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => remove(index)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="col-span-1 sm:col-span-1 flex justify-center pb-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => remove(index)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 <div className="mt-4 flex justify-end">
