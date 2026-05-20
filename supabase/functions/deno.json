@@ -1,14 +1,8 @@
 {
   "_versions": {
-    "salvar-projeto": 17,
-    "update-project": 8,
-    "sync-fechamentos-automatica": 8,
-    "chat-consulta": 5,
-    "chat-agent": 2,
-    "welcome-email": 3,
-    "generate-report": 13,
-    "sync-sharepoint": 1,
-    "sync-teams": 1,
-    "enviar-confirmacao-email": 1
+    "salvar-projeto": 15,
+    "update-project": 6,
+    "sync-fechamentos-automatica": 6,
+    "chat-consulta": 3
   }
 }
