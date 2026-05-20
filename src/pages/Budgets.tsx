@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { BudgetForm } from '@/components/budgets/BudgetForm'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
@@ -27,9 +27,8 @@ const STATUS_OPTIONS = [
 export default function Budgets() {
   const { budgets, fetchBudgets, loading, initialized } = useBudgetStore()
   const { role } = useAuth()
+  const navigate = useNavigate()
 
-  const [isFormOpen, setIsFormOpen] = useState(false)
-  const [editingBudget, setEditingBudget] = useState<Budget | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
 
@@ -41,13 +40,11 @@ export default function Budgets() {
   }, [searchTerm, statusFilter, fetchBudgets])
 
   const handleCreate = () => {
-    setEditingBudget(null)
-    setIsFormOpen(true)
+    navigate('/budgets/new')
   }
 
   const handleEdit = (budget: Budget) => {
-    setEditingBudget(budget)
-    setIsFormOpen(true)
+    navigate(`/budgets/${budget.id}`)
   }
 
   if (role === 'visitante') {
@@ -109,12 +106,6 @@ export default function Budgets() {
       ) : (
         <BudgetsTable data={budgets} onEdit={handleEdit} />
       )}
-
-      <BudgetForm
-        open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        budgetToEdit={editingBudget}
-      />
     </div>
   )
 }
