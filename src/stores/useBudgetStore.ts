@@ -7,11 +7,20 @@ export interface BudgetItem {
   quantidade: number
   preco_unitario: number
   desconto: number
-  produto?: { nome: string }
+  custom_id?: string
+  item_pai_id?: string
+  produto?: { 
+    nome: string
+    codigo_produto?: number
+    codigo_legado?: number
+    referencia?: string
+    unidade?: string
+  }
 }
 
 export interface Budget {
   id: string
+  numero: string | null
   empresa_id: string
   cliente_id: string
   arquiteto_id: string | null
@@ -19,6 +28,9 @@ export interface Budget {
   status: string
   data_emissao: string
   validade: string | null
+  condicoes_pagamento: string | null
+  desconto_global: number | null
+  observacoes: string | null
   valor_total: number
   created_at: string
   empresa?: { nome: string }
@@ -66,7 +78,9 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         quantidade,
         preco_unitario,
         desconto,
-        produto:produtos(nome)
+        custom_id,
+        item_pai_id,
+        produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade)
       )
     `)
 
@@ -91,7 +105,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       filtered = filtered.filter(
         (b) =>
           b.cliente?.nome?.toLowerCase().includes(s) ||
-          b.empresa?.nome?.toLowerCase().includes(s),
+          b.empresa?.nome?.toLowerCase().includes(s) ||
+          b.numero?.toLowerCase().includes(s),
       )
     }
 
@@ -107,12 +122,28 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     if (error) throw error
 
     if (items && items.length > 0) {
-      const itemsToInsert = items.map((i) => ({
-        orcamento_id: data.id,
-        produto_id: i.produto_id,
+      // Generate a simple numero if not provided
+      const finalBudget = { ...budget }
+      if (!finalBudget.numero) {
+        finalBudget.numero = Math.floor(Math.random() * 1000000).toString().padStart(6, '0')
+      }
+
+      const { data, error } = await supabase
+        .from('orcamentos')
+        .insert([finalBudget])
+        .select()
+        .single()
+      if (error) throw error
+
+      if (items && items.length > 0) {
+        const itemsToInsert = items.map((i) => ({
+          orcamento_id: data.id,
+          produto_id: i.produto_id || null,
         quantidade: i.quantidade,
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,
+        custom_id: i.custom_id || null,
+        item_pai_id: i.item_pai_id || null,
       }))
       const { error: itemsError } = await supabase
         .from('orcamento_itens')
@@ -135,10 +166,12 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     if (items && items.length > 0) {
       const itemsToInsert = items.map((i) => ({
         orcamento_id: id,
-        produto_id: i.produto_id,
+        produto_id: i.produto_id || null,
         quantidade: i.quantidade,
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,
+        custom_id: i.custom_id || null,
+        item_pai_id: i.item_pai_id || null,
       }))
       const { error: itemsError } = await supabase
         .from('orcamento_itens')

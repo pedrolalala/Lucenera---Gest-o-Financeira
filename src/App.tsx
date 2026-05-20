@@ -12,6 +12,7 @@ import Login from './pages/Login'
 import SignUp from './pages/SignUp'
 import Users from './pages/Users'
 import Budgets from './pages/Budgets'
+import BudgetPrint from './pages/BudgetPrint'
 import { TransactionProvider } from '@/stores/useTransactionStore'
 import { AuthProvider } from '@/hooks/use-auth'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -38,6 +39,7 @@ const App = () => (
                 <Route path="/help" element={<Help />} />
                 <Route path="/users" element={<Users />} />
               </Route>
+              <Route path="/budgets/print/:id" element={<BudgetPrint />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

@@ -53,10 +53,13 @@ const formSchema = z.object({
   vendedor_id: z.string().optional().nullable(),
   status: z.string().default('Rascunho'),
   data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
+  condicoes_pagamento: z.string().optional().nullable(),
+  observacoes: z.string().optional().nullable(),
   validade: z.date().optional().nullable(),
   itens: z
     .array(
       z.object({
+        custom_id: z.string().optional(),
         produto_id: z.string().min(1, 'Selecione um produto'),
         quantidade: z.coerce.number().min(0.01, 'Quantidade inválida'),
         preco_unitario: z.coerce.number().min(0, 'Preço inválido'),
@@ -99,6 +102,8 @@ export function BudgetForm({
       vendedor_id: 'none',
       status: 'Rascunho',
       data_emissao: new Date(),
+      condicoes_pagamento: '',
+      observacoes: '',
       validade: null,
       itens: [],
     },
@@ -117,6 +122,8 @@ export function BudgetForm({
         arquiteto_id: budgetToEdit.arquiteto_id || 'none',
         vendedor_id: budgetToEdit.vendedor_id || 'none',
         status: budgetToEdit.status || 'Rascunho',
+        condicoes_pagamento: budgetToEdit.condicoes_pagamento || '',
+        observacoes: budgetToEdit.observacoes || '',
         data_emissao: budgetToEdit.data_emissao
           ? new Date(budgetToEdit.data_emissao)
           : new Date(),
@@ -125,6 +132,7 @@ export function BudgetForm({
           : null,
         itens:
           budgetToEdit.itens?.map((i) => ({
+            custom_id: i.custom_id || '',
             produto_id: i.produto_id,
             quantidade: i.quantidade,
             preco_unitario: i.preco_unitario,
@@ -139,6 +147,8 @@ export function BudgetForm({
         vendedor_id: 'none',
         status: 'Rascunho',
         data_emissao: new Date(),
+        condicoes_pagamento: '',
+        observacoes: '',
         validade: null,
         itens: [],
       })
@@ -149,8 +159,8 @@ export function BudgetForm({
   const valorTotal = watchItens.reduce((acc, item) => {
     const q = Number(item.quantidade) || 0
     const p = Number(item.preco_unitario) || 0
-    const d = Number(item.desconto) || 0
-    return acc + q * p - d
+    const d = Number(item.desconto) || 0 // %
+    return acc + q * p * (1 - d / 100)
   }, 0)
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -164,6 +174,8 @@ export function BudgetForm({
           values.arquiteto_id === 'none' ? null : values.arquiteto_id,
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
         status: values.status,
+        condicoes_pagamento: values.condicoes_pagamento,
+        observacoes: values.observacoes,
         data_emissao: values.data_emissao.toISOString(),
         validade: values.validade
           ? format(values.validade, 'yyyy-MM-dd')
@@ -463,6 +475,7 @@ export function BudgetForm({
                     size="sm"
                     onClick={() =>
                       append({
+                        custom_id: '',
                         produto_id: '',
                         quantidade: 1,
                         preco_unitario: 0,
@@ -486,7 +499,28 @@ export function BudgetForm({
                       key={field.id}
                       className="grid grid-cols-12 gap-3 items-end bg-gray-50 p-3 rounded-lg border"
                     >
-                      <div className="col-span-12 sm:col-span-5">
+                      <div className="col-span-12 sm:col-span-2">
+                        <FormField
+                          control={form.control}
+                          name={`itens.${index}.custom_id`}
+                          render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">
+                                ID (L01)
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  className="h-9"
+                                  placeholder="Ex: L01"
+                                  {...f}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <div className="col-span-12 sm:col-span-3">
                         <FormField
                           control={form.control}
                           name={`itens.${index}.produto_id`}
@@ -566,7 +600,7 @@ export function BudgetForm({
                           render={({ field: f }) => (
                             <FormItem>
                               <FormLabel className="text-xs">
-                                Desc. (R$)
+                                Desc. (%)
                               </FormLabel>
                               <FormControl>
                                 <Input
@@ -609,6 +643,26 @@ export function BudgetForm({
                     </span>
                   </div>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 pt-4">
+                <FormField
+                  control={form.control}
+                  name="condicoes_pagamento"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Condições de Pagamento</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Ex: Dinheiro, PIX, 3x no Cartão"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               <SheetFooter className="mt-6 pt-4 border-t">

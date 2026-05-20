@@ -20,8 +20,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { format } from 'date-fns'
-import { Edit, Trash2 } from 'lucide-react'
+import { Edit, Trash2, Printer } from 'lucide-react'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
+import { Link } from 'react-router-dom'
 
 interface BudgetsTableProps {
   data: Budget[]
@@ -75,7 +76,12 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
                 {budget.empresa?.nome || '-'}
               </TableCell>
               <TableCell className="text-gray-700">
-                {budget.cliente?.nome || '-'}
+                <div className="flex flex-col">
+                  <span>{budget.cliente?.nome || '-'}</span>
+                  <span className="text-[10px] text-gray-400">
+                    #{budget.numero || budget.id.split('-')[0]}
+                  </span>
+                </div>
               </TableCell>
               <TableCell className="text-gray-500 text-sm">
                 {budget.arquiteto?.nome || '-'}
@@ -89,7 +95,19 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
                 {formatCurrency(budget.valor_total)}
               </TableCell>
               <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex items-center justify-end gap-1">
+                  <Link to={`/budgets/print/${budget.id}`} target="_blank">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                      title="Imprimir Orçamento"
+                    >
+                      <Printer className="h-4 w-4" />
+                      <span className="sr-only">Imprimir</span>
+                    </Button>
+                  </Link>
+
                   <Button
                     variant="ghost"
                     size="icon"
