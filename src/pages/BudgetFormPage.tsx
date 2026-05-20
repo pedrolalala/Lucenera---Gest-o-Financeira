@@ -12,6 +12,7 @@ import {
   Trash2,
   ArrowLeft,
   Save,
+  Upload,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -104,6 +105,7 @@ export default function BudgetFormPage() {
   const isEditing = Boolean(id)
 
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
+  const [isImporting, setIsImporting] = useState(false)
   const {
     empresas,
     clientes,
@@ -136,9 +138,31 @@ export default function BudgetFormPage() {
     },
   })
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: 'itens',
+  })
+
+  const PRIORITY_SELLERS = [
+    'Marina Pousa',
+    'Barbara Gregorio',
+    'Thairine Cristina',
+    'Thais Gomes',
+    'Teresinha do Amaral',
+  ].map((n) => n.toLowerCase())
+
+  const sortedVendedores = [...vendedores].sort((a, b) => {
+    const idxA = PRIORITY_SELLERS.findIndex((n) =>
+      a.nome.toLowerCase().includes(n),
+    )
+    const idxB = PRIORITY_SELLERS.findIndex((n) =>
+      b.nome.toLowerCase().includes(n),
+    )
+
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB
+    if (idxA !== -1) return -1
+    if (idxB !== -1) return 1
+    return a.nome.localeCompare(b.nome)
   })
 
   useEffect(() => {
@@ -263,6 +287,117 @@ export default function BudgetFormPage() {
       toast.error('Falha ao salvar orçamento')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleImportPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsImporting(true)
+    try {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = async () => {
+        const base64 = reader.result as string
+        const { data, error } = await supabase.functions.invoke(
+          'parse-budget-pdf',
+          {
+            body: { pdfBase64: base64 },
+          },
+        )
+
+        if (error) throw error
+
+        const parsed = data
+
+        let empresaId = form.getValues('empresa_id')
+        if (parsed.empresa_nome) {
+          const found = empresas.find(
+            (emp) =>
+              emp.nome
+                .toLowerCase()
+                .includes(parsed.empresa_nome.toLowerCase()) ||
+              parsed.empresa_nome
+                .toLowerCase()
+                .includes(emp.nome.toLowerCase()),
+          )
+          if (found) empresaId = found.id
+        }
+
+        let clienteId = form.getValues('cliente_id')
+        if (parsed.cliente_nome) {
+          const found = clientes.find((c) =>
+            c.nome.toLowerCase().includes(parsed.cliente_nome.toLowerCase()),
+          )
+          if (found) clienteId = found.id
+        }
+
+        let arquitetoId = form.getValues('arquiteto_id')
+        if (parsed.arquiteto_nome) {
+          const found = arquitetos.find((a) =>
+            a.nome.toLowerCase().includes(parsed.arquiteto_nome.toLowerCase()),
+          )
+          if (found) arquitetoId = found.id
+        }
+
+        let vendedorId = form.getValues('vendedor_id')
+        if (parsed.vendedor_nome) {
+          const found = sortedVendedores.find((v) =>
+            v.nome.toLowerCase().includes(parsed.vendedor_nome.toLowerCase()),
+          )
+          if (found) vendedorId = found.id
+        }
+
+        const validFormas = ['pix', 'cartao', 'boleto', 'dinheiro']
+        let formaPgto = parsed.forma_pagamento?.toLowerCase() || ''
+        if (formaPgto.includes('transferencia')) formaPgto = 'pix'
+        else if (!validFormas.includes(formaPgto)) formaPgto = ''
+
+        form.reset({
+          ...form.getValues(),
+          empresa_id: empresaId,
+          cliente_id: clienteId,
+          arquiteto_id: arquitetoId || 'none',
+          vendedor_id: vendedorId || 'none',
+          status: parsed.status || 'Rascunho',
+          desconto_global: parsed.desconto_global || 0,
+          forma_pagamento: formaPgto,
+          observacoes: parsed.observacoes || '',
+        })
+
+        if (parsed.itens && Array.isArray(parsed.itens)) {
+          const newItens = parsed.itens.map((i: any) => {
+            let produtoId = ''
+            if (i.custom_id || i.descricao) {
+              const found = produtos.find(
+                (p) =>
+                  (i.custom_id && p.sku === i.custom_id) ||
+                  (i.descricao &&
+                    p.nome.toLowerCase().includes(i.descricao.toLowerCase())),
+              )
+              if (found) produtoId = found.id
+            }
+            return {
+              custom_id: i.custom_id || '',
+              produto_id: produtoId,
+              quantidade: i.quantidade || 1,
+              preco_unitario: i.preco_unitario || 0,
+              desconto: i.desconto || 0,
+            }
+          })
+          if (newItens.length > 0) {
+            replace(newItens)
+          }
+        }
+
+        toast.success('PDF importado com sucesso. Revise os dados preenchidos.')
+      }
+    } catch (err) {
+      toast.error('Erro ao importar PDF')
+    } finally {
+      setIsImporting(false)
+      e.target.value = ''
     }
   }
 
@@ -479,13 +614,15 @@ export default function BudgetFormPage() {
                         <SearchableSelect
                           options={[
                             { value: 'none', label: 'Nenhum' },
-                            ...vendedores.map((v) => ({
+                            ...sortedVendedores.map((v) => ({
                               value: v.id,
                               label: v.nome,
                             })),
                             ...(field.value &&
                             field.value !== 'none' &&
-                            !vendedores.some((v) => v.id === field.value) &&
+                            !sortedVendedores.some(
+                              (v) => v.id === field.value,
+                            ) &&
                             assignedVendedorNome
                               ? [
                                   {
@@ -941,6 +1078,31 @@ export default function BudgetFormPage() {
               </div>
             </CardContent>
           </Card>
+
+          <div className="flex justify-end mt-6">
+            <div className="relative overflow-hidden rounded-md inline-block">
+              <Input
+                type="file"
+                accept="application/pdf"
+                className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full h-full"
+                onChange={handleImportPdf}
+                disabled={isImporting}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isImporting}
+                className="w-full sm:w-auto"
+              >
+                {isImporting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4 mr-2" />
+                )}
+                Importar PDF
+              </Button>
+            </div>
+          </div>
         </form>
       </Form>
     </div>
