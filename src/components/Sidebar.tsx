@@ -85,9 +85,11 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 h-screen w-[280px] bg-[#F8F9FB] border-r border-gray-100 p-6 flex flex-col z-40 hidden md:flex">
       {/* Brand */}
       <div className="flex items-center gap-3 mb-10 px-2">
-        <div className="w-8 h-8 bg-black text-white rounded-lg flex items-center justify-center font-bold text-xl font-display">
-          L
-        </div>
+        <img
+          src="/logo.png"
+          alt="Lucenera"
+          className="h-8 w-auto object-contain"
+        />
         <span className="text-2xl font-bold text-gray-900 tracking-tight">
           Lucenera
         </span>

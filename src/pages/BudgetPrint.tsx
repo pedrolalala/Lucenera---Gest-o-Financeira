@@ -32,6 +32,7 @@ export default function BudgetPrint() {
               desconto,
               custom_id,
               item_pai_id,
+              descricao,
               produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade)
             )
           `,
@@ -142,16 +143,11 @@ export default function BudgetPrint() {
         {/* HEADER */}
         <div className="flex justify-between items-start border-b border-gray-300 pb-4 mb-6">
           <div className="flex gap-4">
-            {/* Logo placeholder - simulated SVG similar to Luce Nera */}
-            <div className="flex flex-col uppercase font-black text-3xl leading-none tracking-tighter">
-              <span className="flex items-center">
-                <span className="bg-black text-white px-2 rounded-md mr-1 pb-1">
-                  l
-                </span>
-                uce
-              </span>
-              <span className="pl-0">nera</span>
-            </div>
+            <img
+              src="/logo.png"
+              alt="Lucenera"
+              className="h-12 w-auto object-contain"
+            />
 
             <div className="text-[11px] leading-tight mt-1 text-gray-600">
               <p className="font-bold text-gray-900 text-[13px]">Luce Nera</p>
@@ -195,6 +191,11 @@ export default function BudgetPrint() {
             <div className="text-[20px] font-bold text-gray-800">
               #{budget.numero || budget.id.split('-')[0].toUpperCase()}
             </div>
+            {budget.data_emissao && (
+              <div className="text-[11px] text-gray-500 mt-1">
+                Data: {format(new Date(budget.data_emissao), 'dd/MM/yyyy')}
+              </div>
+            )}
           </div>
         </div>
 
@@ -214,8 +215,7 @@ export default function BudgetPrint() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b-2 border-gray-200">
-                <th className="py-2 text-gray-800 font-bold w-12">ID</th>
-                <th className="py-2 text-gray-800 font-bold w-20">Código</th>
+                <th className="py-2 text-gray-800 font-bold w-16">Código</th>
                 <th className="py-2 text-gray-800 font-bold">Descrição</th>
                 <th className="py-2 text-gray-800 font-bold text-center w-12">
                   Qtd.
@@ -224,24 +224,24 @@ export default function BudgetPrint() {
                   Un.
                 </th>
                 <th className="py-2 text-gray-800 font-bold text-right w-24">
-                  Vl. Unit.
+                  Preço Unit.
+                </th>
+                <th className="py-2 text-gray-800 font-bold text-center w-20">
+                  Desc. (%)
                 </th>
                 <th className="py-2 text-gray-800 font-bold text-right w-24">
-                  Vl. Total
+                  Total
                 </th>
               </tr>
             </thead>
             <tbody className="text-[11px]">
               {sortedItems.map((item, idx) => {
-                const prevItem = sortedItems[idx - 1]
-                const isAccessory =
-                  prevItem &&
-                  prevItem.custom_id === item.custom_id &&
-                  item.custom_id
+                const isAccessory = !!item.item_pai_id
 
                 const gross =
                   Number(item.quantidade) * Number(item.preco_unitario)
                 const finalVal = gross * (1 - Number(item.desconto || 0) / 100)
+                const descInt = Math.round(Number(item.desconto || 0))
 
                 return (
                   <tr
@@ -251,21 +251,32 @@ export default function BudgetPrint() {
                     <td className="py-3 text-gray-700 align-top">
                       {isAccessory ? '' : item.custom_id || '-'}
                     </td>
-                    <td className="py-3 text-gray-700 align-top">
-                      {item.produto?.referencia ||
-                        item.produto?.codigo_legado ||
-                        item.produto?.codigo_produto ||
-                        '-'}
-                    </td>
                     <td
-                      className={`py-3 text-gray-800 align-top pr-4 ${isAccessory ? 'pl-4' : ''}`}
+                      className={`py-3 text-gray-800 align-top pr-4 ${isAccessory ? 'pl-8' : ''}`}
                     >
-                      {item.produto?.nome || 'Produto sem nome'}
-                      {item.desconto > 0 && (
-                        <span className="block text-[9px] text-gray-500 mt-0.5">
-                          Desconto aplicado: {item.desconto}%
+                      <div className="flex items-center gap-2">
+                        {isAccessory && (
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-gray-400 shrink-0"
+                          >
+                            <polyline points="9 10 4 15 9 20"></polyline>
+                            <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
+                          </svg>
+                        )}
+                        <span>
+                          {item.produto?.nome ||
+                            item.descricao ||
+                            'Produto sem nome'}
                         </span>
-                      )}
+                      </div>
                     </td>
                     <td className="py-3 text-center align-top">
                       {item.quantidade}
@@ -275,6 +286,9 @@ export default function BudgetPrint() {
                     </td>
                     <td className="py-3 text-right align-top">
                       {formatCurrency(item.preco_unitario)}
+                    </td>
+                    <td className="py-3 text-center align-top text-gray-500">
+                      {descInt > 0 ? `${descInt}%` : '-'}
                     </td>
                     <td className="py-3 text-right font-medium text-gray-900 align-top">
                       {formatCurrency(finalVal)}
