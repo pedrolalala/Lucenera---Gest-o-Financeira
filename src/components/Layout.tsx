@@ -4,7 +4,6 @@ import { Header } from './Header'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Menu } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { ExpandableChat } from '@/components/ui/expandable-chat'
 
 export default function Layout() {
   const isMobile = useIsMobile()
@@ -42,9 +41,6 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
-
-      {/* Admin Chat Interface */}
-      <ExpandableChat />
     </div>
   )
 }
