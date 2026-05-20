@@ -331,9 +331,10 @@ export default function BudgetFormPage() {
 
       if (error) {
         let errMsg = 'Erro ao processar PDF'
-        if (error instanceof Error) {
+        if (error.message) {
           errMsg = error.message
         }
+
         try {
           if (
             (error as any).context &&
@@ -341,10 +342,26 @@ export default function BudgetFormPage() {
           ) {
             const errData = await (error as any).context.json()
             if (errData?.error) errMsg = errData.error
+          } else if (
+            typeof error === 'object' &&
+            error !== null &&
+            'error' in error
+          ) {
+            errMsg = (error as any).error
           }
         } catch (e) {
           // fallback
         }
+
+        if (errMsg.includes('non-2xx status code') && (error as any).context) {
+          try {
+            const errData = await (error as any).context.json()
+            if (errData?.error) errMsg = errData.error
+          } catch {
+            /* intentionally ignored */
+          }
+        }
+
         throw new Error(errMsg)
       }
 
@@ -413,14 +430,21 @@ export default function BudgetFormPage() {
           if (i.custom_id || i.descricao) {
             const found = produtos.find(
               (p) =>
-                (i.custom_id && p.sku === i.custom_id) ||
+                (i.custom_id &&
+                  (p.sku === i.custom_id || p.referencia === i.custom_id)) ||
                 (i.descricao &&
                   p.nome.toLowerCase().includes(i.descricao.toLowerCase())),
             )
             if (found) produtoId = found.id
           }
+
+          let displayCustomId = i.custom_id || ''
+          if (!produtoId && i.descricao && !displayCustomId) {
+            displayCustomId = i.descricao
+          }
+
           return {
-            custom_id: i.custom_id || '',
+            custom_id: displayCustomId,
             produto_id: produtoId,
             quantidade: i.quantidade || 1,
             preco_unitario: i.preco_unitario || 0,
@@ -839,7 +863,7 @@ export default function BudgetFormPage() {
                           render={({ field: f }) => (
                             <FormItem>
                               <FormLabel className="text-xs text-gray-500 font-medium">
-                                Cód. Customizado
+                                Cód. Customizado / Obs
                               </FormLabel>
                               <FormControl>
                                 <Input placeholder="Opcional" {...f} />
