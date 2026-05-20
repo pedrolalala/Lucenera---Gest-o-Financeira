@@ -3,12 +3,9 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Layout from './components/Layout'
-import Settings from './pages/Settings'
-import Help from './pages/Help'
 import NotFound from './pages/NotFound'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
-import Users from './pages/Users'
 import Budgets from './pages/Budgets'
 import BudgetFormPage from './pages/BudgetFormPage'
 import { TransactionProvider } from '@/stores/useTransactionStore'
@@ -46,9 +43,6 @@ const App = () => (
                 <Route path="/budgets" element={<Budgets />} />
                 <Route path="/budgets/new" element={<BudgetFormPage />} />
                 <Route path="/budgets/:id" element={<BudgetFormPage />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/help" element={<Help />} />
-                <Route path="/users" element={<Users />} />
               </Route>
             </Route>
 
