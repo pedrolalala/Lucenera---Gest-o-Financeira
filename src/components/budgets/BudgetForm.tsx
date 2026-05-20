@@ -649,11 +649,11 @@ export function BudgetForm({
                 </div>
 
                 <div className="mt-4 flex justify-end">
-                  <div className="bg-primary/5 text-primary px-4 py-2 rounded-lg border border-primary/20">
-                    <span className="text-sm font-medium mr-2">
+                  <div className="bg-gray-100 text-gray-900 pl-4 pr-4 py-2 rounded-lg border border-gray-200 flex items-center max-w-full overflow-hidden">
+                    <span className="text-sm font-medium mr-2 shrink-0">
                       Valor Total:
                     </span>
-                    <span className="text-lg font-bold">
+                    <span className="text-lg font-bold truncate">
                       {new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
                         currency: 'BRL',
