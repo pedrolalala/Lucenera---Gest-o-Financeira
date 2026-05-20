@@ -17,13 +17,10 @@ Deno.serve(async (req: Request) => {
     const { query } = await req.json()
 
     if (!query) {
-      return new Response(
-        JSON.stringify({ error: 'A pergunta (query) é obrigatória.' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'A pergunta (query) é obrigatória.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -32,9 +29,7 @@ Deno.serve(async (req: Request) => {
 
     if (!authHeader) {
       return new Response(
-        JSON.stringify({
-          error: 'Não autorizado. Faça login para usar o chat.',
-        }),
+        JSON.stringify({ error: 'Não autorizado. Faça login para usar o chat.' }),
         {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -54,9 +49,7 @@ Deno.serve(async (req: Request) => {
 
     if (userError || !user) {
       return new Response(
-        JSON.stringify({
-          error: 'Não foi possível autenticar o usuário no chat.',
-        }),
+        JSON.stringify({ error: 'Não foi possível autenticar o usuário no chat.' }),
         {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -110,17 +103,11 @@ Deno.serve(async (req: Request) => {
     ] = await Promise.all([feriasQuery, faltasQuery])
 
     if (feriasError || faltasError) {
-      console.error(
-        'Erro ao acessar o banco de dados:',
-        feriasError || faltasError,
-      )
-      return new Response(
-        JSON.stringify({ error: 'Erro ao buscar contexto no banco de dados.' }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      console.error('Erro ao acessar o banco de dados:', feriasError || faltasError)
+      return new Response(JSON.stringify({ error: 'Erro ao buscar contexto no banco de dados.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const systemPrompt = `Você atua como o Analista de RH da Lucenera. O sistema agora está sincronizado com os dados reais do Excel e possui automações de elegibilidade.
@@ -167,9 +154,7 @@ ${JSON.stringify(faltasContext)}`
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
     if (!geminiApiKey) {
       return new Response(
-        JSON.stringify({
-          error: 'Chave da API do Gemini não está configurada no servidor.',
-        }),
+        JSON.stringify({ error: 'Chave da API do Gemini não está configurada no servidor.' }),
         {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -187,11 +172,7 @@ ${JSON.stringify(faltasContext)}`
           contents: [
             {
               role: 'user',
-              parts: [
-                {
-                  text: `${systemPrompt}\n\n=== PERGUNTA DO USUÁRIO ===\n${query}`,
-                },
-              ],
+              parts: [{ text: `${systemPrompt}\n\n=== PERGUNTA DO USUÁRIO ===\n${query}` }],
             },
           ],
         }),
@@ -202,9 +183,7 @@ ${JSON.stringify(faltasContext)}`
       const errorData = await response.text()
       console.error('Erro na API do Gemini:', errorData)
       return new Response(
-        JSON.stringify({
-          error: 'Erro ao processar a resposta com a Inteligência Artificial.',
-        }),
+        JSON.stringify({ error: 'Erro ao processar a resposta com a Inteligência Artificial.' }),
         {
           status: 502,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -223,9 +202,7 @@ ${JSON.stringify(faltasContext)}`
   } catch (error: any) {
     console.error('Erro na Edge Function:', error)
     return new Response(
-      JSON.stringify({
-        error: error.message || 'Erro interno no processamento do chat.',
-      }),
+      JSON.stringify({ error: error.message || 'Erro interno no processamento do chat.' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
