@@ -36,23 +36,17 @@ Deno.serve(async (req: Request) => {
     } = body
 
     if (!codigo || String(codigo).trim() === '') {
-      return new Response(
-        JSON.stringify({ error: 'O campo Código é obrigatório.' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'O campo Código é obrigatório.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     if (!nome || String(nome).trim() === '') {
-      return new Response(
-        JSON.stringify({ error: 'O campo Nome é obrigatório.' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'O campo Nome é obrigatório.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const payloadInsercao = {
@@ -85,12 +79,9 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error: any) {
-    return new Response(
-      JSON.stringify({ error: error.message || 'Erro interno no servidor' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    )
+    return new Response(JSON.stringify({ error: error.message || 'Erro interno no servidor' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 })
