@@ -38,22 +38,18 @@ export function useOptions() {
         if (cliRes.data) setClientes(cliRes.data)
         if (arqRes.data) setArquitetos(arqRes.data)
         if (funcRes.data) {
-          const priorityNames = [
-            'Marina Pousa Barbara Gregorio',
-            'Thairine Cristina da Silva',
-            'Thais Gomes Pegrucci Favaron',
-            'Teresinha do Amaral Figueiredo',
-          ]
-          const sorted = [...funcRes.data].sort((a, b) => {
-            const indexA = priorityNames.indexOf(a.nome)
-            const indexB = priorityNames.indexOf(b.nome)
-
-            if (indexA !== -1 && indexB !== -1) return indexA - indexB
-            if (indexA !== -1) return -1
-            if (indexB !== -1) return 1
-
-            return a.nome.localeCompare(b.nome)
+          const uniqueMap = new Map()
+          funcRes.data.forEach((item) => {
+            if (item.nome && !uniqueMap.has(item.nome.trim())) {
+              uniqueMap.set(item.nome.trim(), item)
+            }
           })
+
+          const uniqueVendedores = Array.from(uniqueMap.values())
+          const sorted = uniqueVendedores.sort((a, b) =>
+            a.nome.localeCompare(b.nome),
+          )
+
           setVendedores(sorted)
         }
         if (prodRes.data) setProdutos(prodRes.data)

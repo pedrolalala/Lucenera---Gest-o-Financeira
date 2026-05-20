@@ -115,6 +115,9 @@ export default function BudgetFormPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoadingBudget, setIsLoadingBudget] = useState(isEditing)
   const [budgetToEdit, setBudgetToEdit] = useState<Budget | null>(null)
+  const [assignedVendedorNome, setAssignedVendedorNome] = useState<
+    string | null
+  >(null)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -167,6 +170,15 @@ export default function BudgetFormPage() {
         }
 
         if (budget) {
+          if (budget.vendedor_id) {
+            const { data: vData } = await supabase
+              .from('funcionarios')
+              .select('nome')
+              .eq('id', budget.vendedor_id)
+              .single()
+            if (vData) setAssignedVendedorNome(vData.nome)
+          }
+
           setBudgetToEdit(budget)
           form.reset({
             empresa_id: budget.empresa_id,
@@ -471,6 +483,17 @@ export default function BudgetFormPage() {
                               value: v.id,
                               label: v.nome,
                             })),
+                            ...(field.value &&
+                            field.value !== 'none' &&
+                            !vendedores.some((v) => v.id === field.value) &&
+                            assignedVendedorNome
+                              ? [
+                                  {
+                                    value: field.value,
+                                    label: assignedVendedorNome,
+                                  },
+                                ]
+                              : []),
                           ]}
                           value={field.value || 'none'}
                           onChange={field.onChange}
