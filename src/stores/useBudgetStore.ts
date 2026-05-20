@@ -9,7 +9,7 @@ export interface BudgetItem {
   desconto: number
   custom_id?: string
   item_pai_id?: string
-  produto?: { 
+  produto?: {
     nome: string
     codigo_produto?: number
     codigo_legado?: number
@@ -114,31 +114,24 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   },
 
   addBudget: async (budget, items) => {
+    const finalBudget = { ...budget }
+    if (!finalBudget.numero) {
+      finalBudget.numero = Math.floor(Math.random() * 1000000)
+        .toString()
+        .padStart(6, '0')
+    }
+
     const { data, error } = await supabase
       .from('orcamentos')
-      .insert([budget])
+      .insert([finalBudget])
       .select()
       .single()
     if (error) throw error
 
     if (items && items.length > 0) {
-      // Generate a simple numero if not provided
-      const finalBudget = { ...budget }
-      if (!finalBudget.numero) {
-        finalBudget.numero = Math.floor(Math.random() * 1000000).toString().padStart(6, '0')
-      }
-
-      const { data, error } = await supabase
-        .from('orcamentos')
-        .insert([finalBudget])
-        .select()
-        .single()
-      if (error) throw error
-
-      if (items && items.length > 0) {
-        const itemsToInsert = items.map((i) => ({
-          orcamento_id: data.id,
-          produto_id: i.produto_id || null,
+      const itemsToInsert = items.map((i) => ({
+        orcamento_id: data.id,
+        produto_id: i.produto_id || null,
         quantidade: i.quantidade,
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,
