@@ -53,6 +53,11 @@ const formSchema = z.object({
   vendedor_id: z.string().optional().nullable(),
   status: z.string().default('Rascunho'),
   data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
+  desconto_global: z.coerce
+    .number()
+    .int('Deve ser um valor inteiro')
+    .min(0)
+    .default(0),
   condicoes_pagamento: z.string().optional().nullable(),
   observacoes: z.string().optional().nullable(),
   validade: z.date().optional().nullable(),
@@ -106,6 +111,7 @@ export function BudgetForm({
       vendedor_id: 'none',
       status: 'Rascunho',
       data_emissao: new Date(),
+      desconto_global: 0,
       condicoes_pagamento: '',
       observacoes: '',
       validade: null,
@@ -126,6 +132,7 @@ export function BudgetForm({
         arquiteto_id: budgetToEdit.arquiteto_id || 'none',
         vendedor_id: budgetToEdit.vendedor_id || 'none',
         status: budgetToEdit.status || 'Rascunho',
+        desconto_global: budgetToEdit.desconto_global || 0,
         condicoes_pagamento: budgetToEdit.condicoes_pagamento || '',
         observacoes: budgetToEdit.observacoes || '',
         data_emissao: budgetToEdit.data_emissao
@@ -151,6 +158,7 @@ export function BudgetForm({
         vendedor_id: 'none',
         status: 'Rascunho',
         data_emissao: new Date(),
+        desconto_global: 0,
         condicoes_pagamento: '',
         observacoes: '',
         validade: null,
@@ -178,6 +186,7 @@ export function BudgetForm({
           values.arquiteto_id === 'none' ? null : values.arquiteto_id,
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
         status: values.status,
+        desconto_global: values.desconto_global,
         condicoes_pagamento: values.condicoes_pagamento,
         observacoes: values.observacoes,
         data_emissao: values.data_emissao.toISOString(),
@@ -654,7 +663,32 @@ export function BudgetForm({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 pt-4">
+              <div className="grid grid-cols-2 gap-4 pt-4">
+                <FormField
+                  control={form.control}
+                  name="desconto_global"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Desconto Global (R$)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          placeholder="Ex: 150"
+                          {...field}
+                          value={field.value || ''}
+                          onChange={(e) =>
+                            field.onChange(
+                              Math.round(Number(e.target.value) || 0),
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={form.control}
                   name="condicoes_pagamento"

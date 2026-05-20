@@ -31,6 +31,18 @@ const App = () => (
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<Navigate to="/budgets" replace />} />
+                <Route
+                  path="/home"
+                  element={<Navigate to="/budgets" replace />}
+                />
+                <Route
+                  path="/transactions"
+                  element={<Navigate to="/budgets" replace />}
+                />
+                <Route
+                  path="/transacoes"
+                  element={<Navigate to="/budgets" replace />}
+                />
                 <Route path="/budgets" element={<Budgets />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/help" element={<Help />} />

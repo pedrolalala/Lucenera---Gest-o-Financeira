@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
+import logoImg from '@/assets/lucenera-vertical-87b48.png'
 
 const SidebarItem = ({
   icon: Icon,
@@ -86,13 +87,10 @@ export function Sidebar() {
       {/* Brand */}
       <div className="flex items-center gap-3 mb-10 px-2">
         <img
-          src="/logo.png"
+          src={logoImg}
           alt="Lucenera"
-          className="h-8 w-auto object-contain"
+          className="h-10 w-auto object-contain"
         />
-        <span className="text-2xl font-bold text-gray-900 tracking-tight">
-          Lucenera
-        </span>
       </div>
 
       {/* Menu */}

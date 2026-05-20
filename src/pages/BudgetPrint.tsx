@@ -2,65 +2,30 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
 import { Budget } from '@/stores/useBudgetStore'
-import { Loader2 } from 'lucide-react'
-import { format } from 'date-fns'
+import { Loader2, Download } from 'lucide-react'
+import { toast } from 'sonner'
+import logoImg from '@/assets/lucenera-vertical-87b48.png'
 
 export default function BudgetPrint() {
   const { id } = useParams()
   const [budget, setBudget] = useState<Budget | null>(null)
   const [loading, setLoading] = useState(true)
-  const [vendedorNome, setVendedorNome] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     async function load() {
       if (!id) return
-
       try {
         const { data, error } = await supabase
           .from('orcamentos')
-          .select(
-            `
-            *,
-            empresa:empresas(nome, razao_social, logradouro, numero, bairro, cidade, estado, cep, cnpj),
-            cliente:contatos!orcamentos_cliente_id_fkey(nome, endereco, bairro, cidade, estado, cep, telefone, celular, cpf_cnpj),
-            arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
-            itens:orcamento_itens(
-              id,
-              produto_id,
-              quantidade,
-              preco_unitario,
-              desconto,
-              custom_id,
-              item_pai_id,
-              descricao,
-              produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade)
-            )
-          `,
-          )
+          .select('id, numero')
           .eq('id', id)
           .single()
 
         if (error) throw error
-
-        const budgetData = data as unknown as Budget
-
-        let vNome = ''
-        if (budgetData.vendedor_id) {
-          const { data: vData } = await supabase
-            .from('usuarios')
-            .select('nome')
-            .eq('id', budgetData.vendedor_id)
-            .single()
-          if (vData) vNome = vData.nome
-        }
-        setVendedorNome(vNome)
-        setBudget(budgetData)
-
-        setTimeout(() => {
-          window.print()
-        }, 1000)
+        setBudget(data as any)
       } catch (err) {
-        console.error('Error loading budget for print', err)
+        console.error('Error loading budget', err)
       } finally {
         setLoading(false)
       }
@@ -68,9 +33,60 @@ export default function BudgetPrint() {
     load()
   }, [id])
 
+  const handleExportPDF = async () => {
+    try {
+      setExporting(true)
+      toast.info('Gerando PDF, por favor aguarde...')
+
+      let logoBase64 = ''
+      try {
+        const res = await fetch(logoImg)
+        const blob = await res.blob()
+        logoBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result as string)
+          reader.readAsDataURL(blob)
+        })
+      } catch (err) {
+        console.error('Error fetching logo', err)
+      }
+
+      const { data, error } = await supabase.functions.invoke(
+        'generate-report',
+        {
+          body: {
+            reportType: 'orcamento',
+            format: 'pdf',
+            filters: { id, logoBase64 },
+          },
+        },
+      )
+
+      if (error) throw error
+
+      if (data) {
+        const url = window.URL.createObjectURL(data)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `Orcamento_${budget?.numero || id}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        toast.success('PDF exportado com sucesso!')
+      } else {
+        toast.error('Ocorreu um erro ao gerar o documento.')
+      }
+    } catch (err) {
+      console.error('Error exporting PDF', err)
+      toast.error('Erro ao exportar o PDF')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-50 print:hidden">
+      <div className="flex h-screen w-full items-center justify-center bg-gray-50">
         <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
       </div>
     )
@@ -78,330 +94,40 @@ export default function BudgetPrint() {
 
   if (!budget) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-50 print:hidden">
+      <div className="flex h-screen w-full items-center justify-center bg-gray-50">
         <p className="text-gray-500">Orçamento não encontrado.</p>
       </div>
     )
   }
 
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(val || 0)
-
-  const subtotal = (budget.itens || []).reduce((acc, item) => {
-    return acc + Number(item.quantidade) * Number(item.preco_unitario)
-  }, 0)
-
-  const totalDiscounts = (budget.itens || []).reduce((acc, item) => {
-    const gross = Number(item.quantidade) * Number(item.preco_unitario)
-    const descInt = Math.round(Number(item.desconto || 0))
-    const discountAmount = gross * (descInt / 100)
-    return acc + discountAmount
-  }, 0)
-
-  const finalTotal =
-    subtotal - totalDiscounts - (Number(budget.desconto_global) || 0)
-
-  const sortedItems = [...(budget.itens || [])].sort((a, b) => {
-    const idA = a.custom_id || ''
-    const idB = b.custom_id || ''
-    if (idA === idB) {
-      if (!a.item_pai_id && b.item_pai_id) return -1
-      if (a.item_pai_id && !b.item_pai_id) return 1
-      return 0
-    }
-    return idA.localeCompare(idB)
-  })
-
-  const printDate = format(new Date(), 'dd/MM/yyyy HH:mm')
-
-  const emitDate = budget.data_emissao ? new Date(budget.data_emissao) : null
-  const isValidEmitDate = emitDate && !isNaN(emitDate.getTime())
-
   return (
-    <div className="min-h-screen bg-gray-100 py-8 print:bg-white print:p-0 font-sans text-[12px] text-gray-900">
-      <style
-        dangerouslySetContent={{
-          __html: `
-        @media print {
-          @page { size: A4 portrait; margin: 10mm; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white !important; }
-          .print-container { box-shadow: none !important; margin: 0 !important; max-width: 100% !important; padding: 0 !important; }
-          .hide-on-print { display: none !important; }
-          .page-break { page-break-inside: avoid; }
-        }
-      `,
-        }}
-      />
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-8">
+      <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-xl text-center">
+        <img
+          src={logoImg}
+          alt="Lucenera"
+          className="h-16 w-auto mx-auto mb-6 object-contain"
+        />
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          Exportar Orçamento
+        </h2>
+        <p className="text-gray-500 mb-8">
+          Orçamento #{budget.numero || budget.id.split('-')[0].toUpperCase()}
+        </p>
 
-      <div className="print-container mx-auto max-w-[210mm] bg-white p-[15mm] shadow-lg">
-        {/* HEADER */}
-        <div className="flex justify-between items-start border-b border-gray-300 pb-4 mb-6">
-          <div className="flex gap-4">
-            <img
-              src="/logo.png"
-              alt="Lucenera"
-              className="h-12 w-auto object-contain"
-            />
-
-            <div className="text-[11px] leading-tight mt-1 text-gray-600">
-              <p className="font-bold text-gray-900 text-[13px]">Luce Nera</p>
-              <p>Manoella Zauith Leite Lopes</p>
-              <p>14.025-270 Rua Ayrton Roxo 867</p>
-              <p>Alto Da Boa Vista, Ribeirao Preto/sp</p>
-              <p>(16) 3442 - 3545</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end gap-2 text-[10px] w-64">
-            <div className="text-right w-full font-semibold">1 de 1</div>
-
-            <div className="w-full mt-4 border-b border-black text-center pb-1">
-              Aprovação do Cliente
-            </div>
-            <div className="w-full mt-4 border-b border-black text-center pb-1">
-              Lucenera
-            </div>
-            <div className="w-full text-right text-gray-500 italic mt-1">
-              Data Impressão {printDate}
-            </div>
-          </div>
-        </div>
-
-        {/* ORÇAMENTO INFO */}
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <div className="text-[13px] text-gray-600">Orçamento para</div>
-            <div className="text-[16px] font-bold uppercase mb-1">
-              {budget.cliente?.nome || 'CLIENTE NÃO INFORMADO'}
-            </div>
-            <div className="text-[11px] text-gray-600">
-              CEP: {(budget.cliente as any)?.cep || '-'} / TEL:{' '}
-              {(budget.cliente as any)?.telefone ||
-                (budget.cliente as any)?.celular ||
-                '-'}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-[16px] text-gray-600">Orçamento</div>
-            <div className="text-[20px] font-bold text-gray-800">
-              #{budget.numero || budget.id.split('-')[0].toUpperCase()}
-            </div>
-            {isValidEmitDate && (
-              <div className="text-[11px] text-gray-500 mt-1">
-                Data: {format(emitDate!, 'dd/MM/yyyy')}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-16 mb-8 text-[11px]">
-          <div>
-            <div className="text-gray-500">Vendedor</div>
-            <div className="font-bold">{vendedorNome || '-'}</div>
-          </div>
-          <div>
-            <div className="text-gray-500">Arquiteto Externo</div>
-            <div className="font-bold">{budget.arquiteto?.nome || '-'}</div>
-          </div>
-        </div>
-
-        {/* TABLE */}
-        <div className="mb-8 w-full border-t border-b border-gray-200 py-2 page-break">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b-2 border-gray-200">
-                <th className="py-2 text-gray-800 font-bold w-16">Código</th>
-                <th className="py-2 text-gray-800 font-bold">Descrição</th>
-                <th className="py-2 text-gray-800 font-bold text-center w-12">
-                  Qtd.
-                </th>
-                <th className="py-2 text-gray-800 font-bold text-center w-12">
-                  Un.
-                </th>
-                <th className="py-2 text-gray-800 font-bold text-right w-24">
-                  Preço Unit.
-                </th>
-                <th className="py-2 text-gray-800 font-bold text-center w-20">
-                  Desc. (%)
-                </th>
-                <th className="py-2 text-gray-800 font-bold text-right w-24">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody className="text-[11px]">
-              {sortedItems.map((item, idx) => {
-                const isAccessory = !!item.item_pai_id
-                const gross =
-                  Number(item.quantidade) * Number(item.preco_unitario)
-                const descInt = Math.round(Number(item.desconto || 0))
-                const finalVal = gross * (1 - descInt / 100)
-
-                return (
-                  <tr
-                    key={item.id || idx}
-                    className="border-b border-gray-100 last:border-0"
-                  >
-                    <td className="py-3 text-gray-700 align-top">
-                      {isAccessory ? '' : item.custom_id || '-'}
-                    </td>
-                    <td
-                      className={`py-3 text-gray-800 align-top pr-4 ${isAccessory ? 'pl-8' : ''}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {isAccessory && (
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="text-gray-400 shrink-0"
-                          >
-                            <polyline points="9 10 4 15 9 20"></polyline>
-                            <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
-                          </svg>
-                        )}
-                        <span>
-                          {item.produto?.nome ||
-                            (item as any).descricao ||
-                            'Produto sem nome'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 text-center align-top">
-                      {item.quantidade}
-                    </td>
-                    <td className="py-3 text-center align-top">
-                      {item.produto?.unidade || 'UN'}
-                    </td>
-                    <td className="py-3 text-right align-top">
-                      {formatCurrency(item.preco_unitario)}
-                    </td>
-                    <td className="py-3 text-center align-top text-gray-500">
-                      {descInt > 0 ? `${descInt}%` : '-'}
-                    </td>
-                    <td className="py-3 text-right font-medium text-gray-900 align-top">
-                      {formatCurrency(finalVal)}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* SUMMARY */}
-        <div className="flex justify-end mb-12 page-break">
-          <div className="w-1/2 bg-gray-50 p-4 rounded-md">
-            <div className="flex justify-between py-1 text-gray-600">
-              <span>SubTotal:</span>
-              <span>{formatCurrency(subtotal)}</span>
-            </div>
-            <div className="flex justify-between py-1 text-gray-600">
-              <span>Desconto:</span>
-              <span>
-                {formatCurrency(
-                  totalDiscounts + (Number(budget.desconto_global) || 0),
-                )}
-              </span>
-            </div>
-            <div className="flex justify-between py-2 text-lg font-bold text-gray-900 border-t border-gray-200 mt-2">
-              <span>Valor Total:</span>
-              <span>{formatCurrency(finalTotal)}</span>
-            </div>
-
-            <div className="mt-4 text-right">
-              <span className="text-gray-500 text-[11px] block">
-                Forma de Pagamento
-              </span>
-              <span className="font-bold text-[12px]">
-                {budget.condicoes_pagamento || 'Não informada'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* POLICIES */}
-        <div className="text-[10px] text-gray-700 leading-relaxed mt-10 page-break">
-          <p className="font-bold text-black mb-2 uppercase">
-            OBSERVAÇÕES: POLÍTICA DE TROCA / DEVOLUÇÃO:
-          </p>
-          <ol className="list-decimal pl-4 space-y-1">
-            <li>
-              Este orçamento tem{' '}
-              <span className="font-bold">
-                validade de 10 dias (
-                {format(
-                  new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
-                  'dd/MM/yyyy',
-                )}
-                )
-              </span>
-              .
-            </li>
-            <li>
-              Considera-se inclusas{' '}
-              <span className="font-bold">3 visitas técnicas</span> em obras na
-              cidade de ribeirão Preto, visitas extras serão cobradas a parte.
-            </li>
-            <li>
-              <span className="font-bold">Não estão inclusas</span>: visitas em
-              obras fora da cidade de Ribeirão Preto e em vendas que o projeto
-              não seja realizado pela LuceNera.
-            </li>
-            <li>
-              A LuceNera se reserva ao direto de não aceitar trocas e
-              devoluções, de acordo com o Código de Defesa do Consumidor.
-            </li>
-            <li>
-              Quando a obra for na cidade de{' '}
-              <span className="font-bold">Ribeirão Preto/SP</span> o frete dos
-              produtos será por conta da LuceNera, caso a obra for em{' '}
-              <span className="font-bold">outra cidade</span> o frete fica por
-              conta do cliente.
-            </li>
-            <li>
-              O prazo de entrega padrão dos materiais é de 30 dias, a partir da
-              aprovação das fichas técnicas. Pelos materiais especiais, prazo a
-              consultar.
-            </li>
-          </ol>
-        </div>
-
-        {/* FOOTER */}
-        <div className="mt-16 pt-4 border-t border-gray-200 text-center text-[9px] text-gray-400 pb-2">
-          Connect Systems Enterprise Technologies, Inc. All rights reserved.
-        </div>
-      </div>
-
-      <div className="fixed bottom-8 right-8 hide-on-print">
         <button
-          onClick={() => window.print()}
-          className="bg-black hover:bg-gray-800 text-white rounded-full p-4 shadow-xl flex items-center gap-2 transition-transform hover:scale-105"
+          onClick={handleExportPDF}
+          disabled={exporting}
+          className="w-full bg-black hover:bg-gray-800 text-white rounded-xl p-4 shadow-md flex items-center justify-center gap-3 transition-transform hover:scale-[1.02] disabled:opacity-70 disabled:hover:scale-100"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="6 9 6 2 18 2 18 9"></polyline>
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-            <rect x="6" y="14" width="12" height="8"></rect>
-          </svg>
-          <span className="font-semibold pr-2">Imprimir Orçamento</span>
+          {exporting ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Download className="w-5 h-5" />
+          )}
+          <span className="font-semibold">
+            {exporting ? 'Gerando Documento...' : 'Exportar PDF'}
+          </span>
         </button>
       </div>
     </div>

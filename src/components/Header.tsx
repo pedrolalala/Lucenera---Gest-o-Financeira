@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { Link } from 'react-router-dom'
+import logoImg from '@/assets/lucenera-vertical-87b48.png'
 
 export function Header() {
   const { user } = useAuth()
@@ -15,9 +16,9 @@ export function Header() {
       <div className="flex items-center gap-4 flex-1">
         <Link to="/" className="md:hidden flex items-center gap-2 mr-2">
           <img
-            src="/logo.png"
+            src={logoImg}
             alt="Lucenera"
-            className="h-7 w-auto object-contain"
+            className="h-8 w-auto object-contain"
           />
         </Link>
 
