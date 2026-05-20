@@ -2,11 +2,10 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS')
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    let body
+    let body;
     try {
       body = await req.json()
     } catch (e) {
@@ -15,9 +14,7 @@ Deno.serve(async (req: Request) => {
 
     const { pdfBase64 } = body
     if (!pdfBase64 || typeof pdfBase64 !== 'string') {
-      throw new Error(
-        'O arquivo PDF é obrigatório e deve ser uma string base64.',
-      )
+      throw new Error('O arquivo PDF é obrigatório e deve ser uma string base64.')
     }
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
@@ -73,8 +70,8 @@ Se uma informação não existir, retorne null ou string vazia.`
             },
           ],
           generationConfig: {
-            responseMimeType: 'application/json',
-          },
+            responseMimeType: "application/json"
+          }
         }),
       },
     )
@@ -86,19 +83,14 @@ Se uma informação não existir, retorne null ou string vazia.`
 
     const data = await response.json()
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-
+    
     if (!text) {
-      throw new Error(
-        'Nenhum dado legível retornado pela IA. Verifique se o PDF contém texto legível.',
-      )
+      throw new Error('Nenhum dado legível retornado pela IA. Verifique se o PDF contém texto legível.')
     }
 
     let cleanText = text.trim()
     if (cleanText.startsWith('```json')) {
-      cleanText = cleanText
-        .replace(/^```json/, '')
-        .replace(/```$/, '')
-        .trim()
+      cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '').trim()
     } else if (cleanText.startsWith('```')) {
       cleanText = cleanText.replace(/^```/, '').replace(/```$/, '').trim()
     }
@@ -107,18 +99,17 @@ Se uma informação não existir, retorne null ou string vazia.`
     try {
       parsed = JSON.parse(cleanText)
     } catch (e) {
-      console.error('Failed to parse JSON from Gemini:', cleanText)
-      throw new Error(
-        'Falha ao interpretar os dados extraídos. O formato retornado não é um JSON válido.',
-      )
+      console.error("Failed to parse JSON from Gemini:", cleanText)
+      throw new Error('Falha ao interpretar os dados extraídos. O formato retornado não é um JSON válido.')
     }
 
     return new Response(JSON.stringify(parsed), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
+
   } catch (err: any) {
-    console.error('PDF Parsing error:', err)
+    console.error("PDF Parsing error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
