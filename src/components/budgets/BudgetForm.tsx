@@ -63,7 +63,11 @@ const formSchema = z.object({
         produto_id: z.string().min(1, 'Selecione um produto'),
         quantidade: z.coerce.number().min(0.01, 'Quantidade inválida'),
         preco_unitario: z.coerce.number().min(0, 'Preço inválido'),
-        desconto: z.coerce.number().min(0).default(0),
+        desconto: z.coerce
+          .number()
+          .int('Deve ser um valor inteiro')
+          .min(0)
+          .default(0),
       }),
     )
     .min(1, 'Adicione pelo menos um item'),
@@ -605,7 +609,7 @@ export function BudgetForm({
                               <FormControl>
                                 <Input
                                   type="number"
-                                  step="0.01"
+                                  step="1"
                                   className="h-9"
                                   {...f}
                                 />

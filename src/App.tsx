@@ -1,10 +1,8 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Layout from './components/Layout'
-import Index from './pages/Index'
-import Payments from './pages/Payments'
 import Settings from './pages/Settings'
 import Help from './pages/Help'
 import NotFound from './pages/NotFound'
@@ -32,8 +30,7 @@ const App = () => (
 
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
-                <Route path="/" element={<Index />} />
-                <Route path="/payments" element={<Payments />} />
+                <Route path="/" element={<Navigate to="/budgets" replace />} />
                 <Route path="/budgets" element={<Budgets />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/help" element={<Help />} />

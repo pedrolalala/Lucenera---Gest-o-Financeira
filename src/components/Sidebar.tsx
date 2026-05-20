@@ -1,13 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  Wallet,
-  LifeBuoy,
-  Settings,
-  LogOut,
-  Users,
-  Briefcase,
-} from 'lucide-react'
+import { LifeBuoy, Settings, LogOut, Users, Briefcase } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/hooks/use-auth'
@@ -108,18 +100,6 @@ export function Sidebar() {
             Menu
           </div>
           <div className="space-y-1">
-            <SidebarItem
-              icon={LayoutDashboard}
-              label="Início"
-              to="/"
-              isActive={pathname === '/'}
-            />
-            <SidebarItem
-              icon={Wallet}
-              label="Transações"
-              to="/payments"
-              isActive={pathname === '/payments'}
-            />
             <SidebarItem
               icon={Briefcase}
               label="Orçamentos"
