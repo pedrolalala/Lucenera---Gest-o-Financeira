@@ -3,25 +3,20 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS')
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Não autorizado. Token de acesso ausente.' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Não autorizado. Token de acesso ausente.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -30,60 +25,38 @@ Deno.serve(async (req: Request) => {
       global: { headers: { Authorization: authHeader } },
     })
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser()
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Falha ao autenticar usuário.' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Falha ao autenticar usuário.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    let body
+    let body;
     try {
       body = await req.json()
     } catch (e) {
-      return new Response(
-        JSON.stringify({
-          error: 'Formato de requisição inválido. Esperado JSON.',
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Formato de requisição inválido. Esperado JSON.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
 
     const { pdfBase64 } = body
     if (!pdfBase64 || typeof pdfBase64 !== 'string') {
-      return new Response(
-        JSON.stringify({
-          error: 'O arquivo PDF é obrigatório e deve ser uma string base64.',
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'O arquivo PDF é obrigatório e deve ser uma string base64.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
     if (!geminiApiKey) {
-      return new Response(
-        JSON.stringify({
-          error:
-            'Chave da API do Gemini (GEMINI_API_KEY) não está configurada no servidor. Por favor, adicione este secret no Supabase.',
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Chave da API do Gemini (GEMINI_API_KEY) não está configurada no servidor. Por favor, adicione este secret no Supabase.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
 
     const prompt = `Você é um extrator de dados de orçamento em PDF.
@@ -136,45 +109,33 @@ Se uma informação não existir, retorne null ou string vazia.`
             },
           ],
           generationConfig: {
-            responseMimeType: 'application/json',
-          },
+            responseMimeType: "application/json"
+          }
         }),
       },
     )
 
     if (!response.ok) {
       const err = await response.text()
-      return new Response(
-        JSON.stringify({ error: `Erro na API do Gemini: ${err}` }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: `Erro na API do Gemini: ${err}` }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const data = await response.json()
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-
+    
     if (!text) {
-      return new Response(
-        JSON.stringify({
-          error:
-            'Nenhum dado legível retornado pela IA. Verifique se o PDF contém texto legível.',
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Nenhum dado legível retornado pela IA. Verifique se o PDF contém texto legível.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     let cleanText = text.trim()
     if (cleanText.startsWith('```json')) {
-      cleanText = cleanText
-        .replace(/^```json/, '')
-        .replace(/```$/, '')
-        .trim()
+      cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '').trim()
     } else if (cleanText.startsWith('```')) {
       cleanText = cleanText.replace(/^```/, '').replace(/```$/, '').trim()
     }
@@ -183,31 +144,23 @@ Se uma informação não existir, retorne null ou string vazia.`
     try {
       parsed = JSON.parse(cleanText)
     } catch (e) {
-      console.error('Failed to parse JSON from Gemini:', cleanText)
-      return new Response(
-        JSON.stringify({
-          error:
-            'Falha ao interpretar os dados extraídos. O formato retornado não é um JSON válido.',
-        }),
-        {
-          status: 422,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      console.error("Failed to parse JSON from Gemini:", cleanText)
+      return new Response(JSON.stringify({ error: 'Falha ao interpretar os dados extraídos. O formato retornado não é um JSON válido.' }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     return new Response(JSON.stringify(parsed), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
+
   } catch (err: any) {
-    console.error('PDF Parsing error:', err)
-    return new Response(
-      JSON.stringify({ error: err.message || 'Erro interno no servidor' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    )
+    console.error("PDF Parsing error:", err);
+    return new Response(JSON.stringify({ error: err.message || 'Erro interno no servidor' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 })
