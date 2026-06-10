@@ -58,6 +58,7 @@ interface BudgetState {
     budget: Partial<Budget>,
     items: BudgetItem[],
   ) => Promise<void>
+  updateBudgetStatus: (id: string, status: string) => Promise<void>
   deleteBudget: (id: string) => Promise<void>
 }
 
@@ -174,6 +175,18 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     }
 
     await get().fetchBudgets()
+  },
+
+  updateBudgetStatus: async (id, status) => {
+    const { error } = await supabase
+      .from('orcamentos')
+      .update({ status })
+      .eq('id', id)
+    if (error) throw error
+
+    set((state) => ({
+      budgets: state.budgets.map((b) => (b.id === id ? { ...b, status } : b)),
+    }))
   },
 
   deleteBudget: async (id) => {

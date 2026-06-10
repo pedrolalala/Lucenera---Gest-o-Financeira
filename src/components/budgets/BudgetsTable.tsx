@@ -20,7 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { format } from 'date-fns'
-import { Edit, Trash2, Printer, Loader2 } from 'lucide-react'
+import { Edit, Trash2, Printer, Loader2, CheckCircle } from 'lucide-react'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -33,8 +33,23 @@ interface BudgetsTableProps {
 }
 
 export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
-  const { deleteBudget } = useBudgetStore()
+  const { deleteBudget, updateBudgetStatus } = useBudgetStore()
   const [printingId, setPrintingId] = useState<string | null>(null)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+
+  const handleApprove = async (budget: Budget) => {
+    try {
+      setApprovingId(budget.id)
+      await updateBudgetStatus(budget.id, 'aprovado')
+      toast.success('Orçamento aprovado com sucesso!')
+    } catch (error: any) {
+      toast.error('Erro ao aprovar orçamento', {
+        description: error.message,
+      })
+    } finally {
+      setApprovingId(null)
+    }
+  }
 
   const handleDownloadPdf = async (budget: Budget) => {
     try {
@@ -161,8 +176,21 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
                 {budget.arquiteto?.nome || '-'}
               </TableCell>
               <TableCell>
-                <Badge variant="outline" className="bg-gray-50">
-                  {budget.status || 'Rascunho'}
+                <Badge
+                  variant="outline"
+                  className={
+                    budget.status === 'aprovado'
+                      ? 'bg-green-50 text-green-700 border-green-200'
+                      : budget.status === 'aguardando_aprovacao'
+                        ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                        : 'bg-gray-50'
+                  }
+                >
+                  {budget.status === 'aguardando_aprovacao'
+                    ? 'Aguardando Aprovação'
+                    : budget.status === 'aprovado'
+                      ? 'Aprovado'
+                      : budget.status || 'Rascunho'}
                 </Badge>
               </TableCell>
               <TableCell className="text-right font-bold text-gray-900">
@@ -170,6 +198,24 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-1">
+                  {budget.status === 'aguardando_aprovacao' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                      title="Aprovar"
+                      onClick={() => handleApprove(budget)}
+                      disabled={approvingId === budget.id}
+                    >
+                      {approvingId === budget.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4" />
+                      )}
+                      <span className="sr-only">Aprovar</span>
+                    </Button>
+                  )}
+
                   <Button
                     variant="ghost"
                     size="icon"
