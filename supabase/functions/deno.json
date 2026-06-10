@@ -6,10 +6,11 @@
     "chat-consulta": 6,
     "chat-agent": 3,
     "welcome-email": 4,
-    "generate-report": 15,
+    "generate-report": 23,
     "sync-sharepoint": 2,
     "sync-teams": 2,
     "enviar-confirmacao-email": 2,
-    "parse-budget-pdf": 4
+    "parse-budget-pdf": 6,
+    "process-budget-pdf": 4
   }
 }

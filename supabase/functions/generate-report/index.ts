@@ -72,18 +72,35 @@ Deno.serve(async (req: Request) => {
   try {
     const { reportType, format, filters } = await req.json()
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) throw new Error('Acesso não autorizado.')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Acesso não autorizado.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const supabaseAdminKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: authHeader } },
     })
 
+    const supabaseAdmin = createClient(supabaseUrl, supabaseAdminKey)
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    if (!user) throw new Error('Usuário não autenticado.')
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: 'Usuário não autenticado.' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
 
     const { data: profile } = await supabase
       .from('usuarios')
@@ -96,46 +113,110 @@ Deno.serve(async (req: Request) => {
       profile?.role !== 'admin' &&
       profile?.role !== 'gerente'
     ) {
-      throw new Error(
-        'Acesso negado. Apenas administradores e gerentes podem gerar relatórios.',
+      return new Response(
+        JSON.stringify({
+          error:
+            'Acesso negado. Apenas administradores e gerentes podem gerar relatórios.',
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
       )
     }
 
     if (reportType === 'orcamento') {
       const { id, logoBase64 } = filters || {}
 
-      if (!id) throw new Error('ID do orçamento não fornecido.')
+      if (!id) {
+        return new Response(
+          JSON.stringify({ error: 'ID do orçamento não fornecido.' }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
+      }
 
-      const { data: budget, error: budgetError } = await supabase
+      let budget: any = null
+
+      const { data: orcData } = await supabaseAdmin
         .from('orcamentos')
         .select(
           `
           *,
-          empresa:empresas(nome, razao_social, logradouro, numero, bairro, cidade, estado, cep, cnpj),
-          cliente:contatos!orcamentos_cliente_id_fkey(nome, endereco, bairro, cidade, estado, cep, telefone, celular, cpf_cnpj),
-          arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
+          cliente:contatos!orcamentos_cliente_id_fkey(nome, email, telefone, cpf_cnpj),
+          empresa:empresas!orcamentos_empresa_id_fkey(nome, razao_social, logradouro, numero, bairro, cidade, estado, cep, cnpj),
+          vendedor:funcionarios!orcamentos_vendedor_id_fkey(nome),
           itens:orcamento_itens(
-            id, produto_id, quantidade, preco_unitario, desconto, custom_id, item_pai_id, descricao,
-            produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade)
+            id, produto_id, quantidade, preco_unitario, desconto, descricao, custom_id,
+            produto:produtos(nome, referencia, sku, codigo_produto)
           )
         `,
         )
         .eq('id', id)
-        .single()
+        .maybeSingle()
 
-      if (budgetError || !budget) throw new Error('Orçamento não encontrado.')
+      if (orcData) {
+        budget = orcData
+      } else {
+        const { data: ubiquaData } = await supabaseAdmin
+          .from('orcamentos_revenda_ubiqua')
+          .select(
+            `
+            *,
+            cliente:informacoes_cliente_ubiqua!orcamentos_revenda_ubiqua_cliente_id_fkey(nome, email, telefone, cpf_cnpj),
+            itens:itens_orcamento_ubiqua(
+              id, produto_id, quantidade, valor_unitario, valor_total, desconto_item, referencia_snapshot, descricao_snapshot, observacao_item, ordem
+            )
+          `,
+          )
+          .eq('id', id)
+          .maybeSingle()
+
+        if (ubiquaData) {
+          budget = ubiquaData
+          const { data: empUbiqua } = await supabaseAdmin
+            .from('empresa_ubiqua')
+            .select('*')
+            .limit(1)
+            .maybeSingle()
+          budget.empresa = empUbiqua || {}
+          budget.numero = ubiquaData.numero_orcamento
+          budget.desconto_global = ubiquaData.valor_desconto
+          budget.itens = (ubiquaData.itens || []).map((i: any) => ({
+            id: i.id,
+            produto_id: i.produto_id,
+            quantidade: i.quantidade,
+            preco_unitario: i.valor_unitario,
+            desconto: i.desconto_item,
+            descricao: i.descricao_snapshot,
+            custom_id: i.referencia_snapshot,
+          }))
+        }
+      }
+
+      if (!budget) {
+        return new Response(
+          JSON.stringify({ error: 'Orçamento não encontrado.' }),
+          {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
+      }
 
       const pdfDoc = await PDFDocument.create()
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
       let page = pdfDoc.addPage()
       const { width, height } = page.getSize()
-      let y = height - 50
 
-      let logoBottomY = height - 40
+      let logoBottomY = height - 20
       let headerTextX = 40
       const maxLogoWidth = 140
-      const maxLogoHeight = 80
+      const maxLogoHeight = 40 // compact logo
+      let textY = height - 20
 
       if (logoBase64) {
         try {
@@ -156,7 +237,6 @@ Deno.serve(async (req: Request) => {
             image = await pdfDoc.embedPng(imageBytes)
           }
 
-          // Container relative centering: logo is centered inside a 140px wide box on the left.
           const scale = Math.min(
             maxLogoWidth / image.width,
             maxLogoHeight / image.height,
@@ -164,9 +244,8 @@ Deno.serve(async (req: Request) => {
           const imgWidth = image.width * scale
           const imgHeight = image.height * scale
 
-          const containerX = 40
-          const logoX = containerX + (maxLogoWidth - imgWidth) / 2
-          const logoY = height - 40 - imgHeight
+          const logoX = 40
+          const logoY = height - 20 - imgHeight // tighter top margin
 
           page.drawImage(image, {
             x: logoX,
@@ -175,96 +254,103 @@ Deno.serve(async (req: Request) => {
             height: imgHeight,
           })
 
-          headerTextX = containerX + maxLogoWidth + 20 // Place text to the right of the logo container
-          logoBottomY = height - 40 // Text top aligns with logo container top
+          logoBottomY = logoY
+          textY = logoBottomY - 10 // minimize vertical space between logo and company text
         } catch (e) {
           console.error('Error embedding logo:', e)
         }
       }
 
-      // Header Text using Empresa Data
       const empresa = budget.empresa || {}
-      const empresaNomeLogo = 'Luce Nera'
-      const empresaNomeAssinatura = 'Lucenera'
+      const empresaNomeLogo =
+        empresa.nome_fantasia || empresa.nome || 'Luce Nera'
+      const empresaNomeAssinatura =
+        empresa.nome_fantasia || empresa.nome || 'Lucenera'
       const empresaRazao = empresa.razao_social || 'Manoella Zauith Leite Lopes'
       const empresaEnd = `${empresa.cep || '14.025-270'} ${empresa.logradouro || 'Rua Ayrton Roxo'} ${empresa.numero || '867'}`
       const empresaCidade = `${empresa.bairro || 'Alto Da Boa Vista'}, ${empresa.cidade || 'Ribeirao Preto'}/${empresa.estado || 'SP'}`
 
-      let textY = logoBottomY - 14
       page.drawText(empresaNomeLogo, {
         x: headerTextX,
         y: textY,
-        size: 14,
+        size: 10,
         font: boldFont,
       })
       page.drawText(empresaRazao, {
         x: headerTextX,
-        y: textY - 15,
-        size: 9,
+        y: textY - 10,
+        size: 8,
         font,
       })
       page.drawText(empresaEnd, {
         x: headerTextX,
-        y: textY - 27,
-        size: 9,
+        y: textY - 20,
+        size: 8,
         font,
       })
       page.drawText(empresaCidade, {
         x: headerTextX,
-        y: textY - 39,
-        size: 9,
+        y: textY - 30,
+        size: 8,
         font,
       })
       page.drawText('(16) 3442 - 3545', {
         x: headerTextX,
-        y: textY - 51,
-        size: 9,
+        y: textY - 40,
+        size: 8,
         font,
       })
 
-      // Approval
+      const companyTextBottomY = textY - 40
+
+      // Right Side - Approval Section
+      // Moved approval section up to align with the top of the page rather than below the logo
+      // This prevents overlap and uses the white space on the top right
+      const rightSectionTopY = height - 20
       page.drawText('1 de 1', {
         x: width - 60,
-        y: textY,
+        y: rightSectionTopY,
         size: 9,
         font: boldFont,
       })
+
+      const approvalY = rightSectionTopY - 25 // fixed position relative to page top
       page.drawLine({
-        start: { x: width - 200, y: textY - 20 },
-        end: { x: width - 40, y: textY - 20 },
+        start: { x: width - 200, y: approvalY },
+        end: { x: width - 40, y: approvalY },
         thickness: 1,
       })
       page.drawText('Aprovação do Cliente', {
         x: width - 195,
-        y: textY - 15,
+        y: approvalY + 3,
         size: 8,
         font,
       })
 
+      const signatureY = approvalY - 25
       page.drawLine({
-        start: { x: width - 200, y: textY - 50 },
-        end: { x: width - 40, y: textY - 50 },
+        start: { x: width - 200, y: signatureY },
+        end: { x: width - 40, y: signatureY },
         thickness: 1,
       })
       page.drawText(empresaNomeAssinatura, {
         x: width - 195,
-        y: textY - 45,
+        y: signatureY + 3,
         size: 8,
         font,
       })
 
+      const dateY = signatureY - 10
       page.drawText(
         `Data Impressão ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
-        {
-          x: width - 150,
-          y: textY - 62,
-          size: 6,
-          font,
-          color: rgb(0.4, 0.4, 0.4),
-        },
+        { x: width - 150, y: dateY, size: 6, font, color: rgb(0.4, 0.4, 0.4) },
       )
 
-      y = textY - maxLogoHeight - 10
+      // Calculate Lowest Y coordinate between Left (Company Info) and Right (Approval Section)
+      const lowestHeaderY = Math.min(companyTextBottomY, dateY)
+
+      // Add safe vertical margin below the lowest header element
+      let y = lowestHeaderY - 15
       page.drawLine({
         start: { x: 40, y },
         end: { x: width - 40, y },
@@ -282,59 +368,46 @@ Deno.serve(async (req: Request) => {
         font: boldFont,
       })
 
-      page.drawText(`CEP: ${budget.cliente?.cep || '-'}`, {
+      page.drawText(`CPF/CNPJ: ${budget.cliente?.cpf_cnpj || '-'}`, {
         x: 40,
         y: y - 35,
         size: 9,
         font,
       })
-      page.drawText(
-        `TEL: ${budget.cliente?.telefone || budget.cliente?.celular || '-'}`,
-        { x: 40, y: y - 47, size: 9, font },
-      )
+      page.drawText(`TEL: ${budget.cliente?.telefone || '-'}`, {
+        x: 40,
+        y: y - 47,
+        size: 9,
+        font,
+      })
 
       page.drawText('Orçamento', { x: width - 120, y, size: 11, font })
       page.drawText(
-        `#${budget.numero || budget.id.split('-')[0].toUpperCase()}`,
+        `${budget.numero || budget.id.split('-')[0].toUpperCase()}`,
         { x: width - 120, y: y - 18, size: 13, font: boldFont },
       )
 
       y -= 75
 
-      // Vendedor / Arquiteto
       page.drawText('Vendedor', { x: 40, y, size: 9, font })
-      page.drawText('Arquiteto Externo', { x: 200, y, size: 9, font })
 
-      let vendedorNome = 'Não informado'
-      if (budget.vendedor_id) {
-        const { data: v } = await supabase
-          .from('usuarios')
-          .select('nome')
-          .eq('id', budget.vendedor_id)
-          .single()
-        if (v) vendedorNome = v.nome
+      let vendedorNome = 'Equipe Comercial'
+      if (budget.vendedor?.nome) {
+        vendedorNome = budget.vendedor.nome
       }
 
       page.drawText(vendedorNome, { x: 40, y: y - 12, size: 9, font: boldFont })
-      page.drawText(budget.arquiteto?.nome || 'Não informado', {
-        x: 200,
-        y: y - 12,
-        size: 9,
-        font: boldFont,
-      })
 
       y -= 30
 
-      // Headers
       const headersList = [
-        'ID',
         'Código',
         'Descrição',
         'Qtd.',
         'Vl. Unit.',
         'Subtotal',
       ]
-      const xOffsets = [40, 70, 130, 390, 430, 490]
+      const xOffsets = [40, 90, 390, 430, 490]
 
       headersList.forEach((h, i) => {
         page.drawText(h, { x: xOffsets[i], y, size: 9, font: boldFont })
@@ -350,51 +423,31 @@ Deno.serve(async (req: Request) => {
       let subtotal = 0
 
       const items = (budget.itens || []).sort((a: any, b: any) => {
-        const idA = a.custom_id || ''
-        const idB = b.custom_id || ''
-        if (idA === idB) {
-          return (a.created_at || '').localeCompare(b.created_at || '')
-        }
-        return idA.localeCompare(idB)
+        return a.id > b.id ? 1 : -1
       })
-
-      let currentCustomId: string | null = null
 
       items.forEach((item: any) => {
         if (y < 60) {
           page = pdfDoc.addPage()
           y = height - 50
         }
-        const isAccessory = item.custom_id && item.custom_id === currentCustomId
-        currentCustomId = item.custom_id || null
 
-        const cod = isAccessory ? '' : item.custom_id || '-'
-        const produtoCod =
-          item.produto?.codigo_legado || item.produto?.codigo_produto || '-'
+        const cod = item.custom_id || item.produto?.referencia || '-'
         let desc = String(
-          item.produto?.nome || item.descricao || 'Produto sem nome',
+          item.descricao || item.produto?.nome || 'Produto sem nome',
         ).substring(0, 55)
-        if (isAccessory) desc = `  -> ${desc}`
 
-        const qtd = String(item.quantidade)
-        const preco = Number(item.preco_unitario)
-        const descPerc = Math.round(Number(item.desconto || 0))
+        const qtd = String(item.quantidade || 1)
+        const preco = Number(item.preco_unitario || 0)
 
-        const gross = Number(item.quantidade) * preco
-        const finalVal = gross * (1 - descPerc / 100)
+        const descItem = Number(item.desconto || 0)
+        const finalVal = preco * Number(item.quantidade || 1) - descItem
 
         subtotal += finalVal
 
         page.drawText(cod, { x: xOffsets[0], y, size: 8, font: boldFont })
-        page.drawText(String(produtoCod), { x: xOffsets[1], y, size: 8, font })
-        page.drawText(desc, {
-          x: xOffsets[2],
-          y,
-          size: 8,
-          font,
-          color: isAccessory ? rgb(0.3, 0.3, 0.3) : rgb(0, 0, 0),
-        })
-        page.drawText(qtd, { x: xOffsets[3], y, size: 8, font })
+        page.drawText(desc, { x: xOffsets[1], y, size: 8, font })
+        page.drawText(qtd, { x: xOffsets[2], y, size: 8, font })
 
         const fmtPreco = new Intl.NumberFormat('pt-BR', {
           style: 'currency',
@@ -404,17 +457,16 @@ Deno.serve(async (req: Request) => {
           style: 'currency',
           currency: 'BRL',
         }).format(finalVal)
-        page.drawText(fmtPreco, { x: xOffsets[4], y, size: 8, font })
-        page.drawText(fmtFinalVal, { x: xOffsets[5], y, size: 8, font })
+        page.drawText(fmtPreco, { x: xOffsets[3], y, size: 8, font })
+        page.drawText(fmtFinalVal, { x: xOffsets[4], y, size: 8, font })
 
         y -= 15
       })
 
       y -= 5
 
-      const globalDescPerc = Number(budget.desconto_global || 0)
-      const globalDesc = subtotal * (globalDescPerc / 100)
-      const finalTotal = subtotal - globalDesc
+      const globalDesc = Number(budget.desconto_global || 0)
+      const finalTotal = Number(budget.valor_total || subtotal - globalDesc)
 
       if (y < 200) {
         page = pdfDoc.addPage()
@@ -474,25 +526,19 @@ Deno.serve(async (req: Request) => {
       })
 
       y -= 80
-      page.drawText('Forma de Pagamento:', { x: width - 250, y, size: 8, font })
+      page.drawText('Condições de Pagamento:', {
+        x: width - 250,
+        y,
+        size: 8,
+        font,
+      })
 
-      const formatPaymentMethod = (method: string) => {
-        if (!method) return 'Dinheiro'
-        const map: Record<string, string> = {
-          pix: 'Pix',
-          cartao: 'Cartão',
-          boleto: 'Boleto',
-          dinheiro: 'Dinheiro',
-        }
-        return map[method.toLowerCase()] || method
-      }
-
-      page.drawText(
-        formatPaymentMethod(
-          budget.forma_pagamento || budget.condicoes_pagamento,
-        ),
-        { x: width - 250, y: y - 12, size: 9, font: boldFont },
-      )
+      page.drawText(budget.condicoes_pagamento || 'A Combinar', {
+        x: width - 250,
+        y: y - 12,
+        size: 9,
+        font: boldFont,
+      })
 
       y -= 40
       page.drawText('OBSERVAÇÕES: POLÍTICA DE TROCA / DEVOLUÇÃO:', {
@@ -506,18 +552,18 @@ Deno.serve(async (req: Request) => {
       const validadeDate = budget.validade
         ? new Date(budget.validade)
         : new Date(
-            new Date(budget.data_emissao || new Date()).getTime() +
+            new Date(budget.created_at || new Date()).getTime() +
               10 * 24 * 60 * 60 * 1000,
           )
       const validadeStr = validadeDate.toLocaleDateString('pt-BR', {
         timeZone: 'UTC',
       })
 
+      // Dynamic Policy Filtering: Include only specific items (originally 1, 4, 6) renumbered to 1, 2, 3
       const obsLines = [
-        `1- Este orçamento tem validade de 10 dias (${validadeStr}).`,
+        `1- Este orçamento tem validade até ${validadeStr}.`,
         '2- A LuceNera se reserva no direito de não aceitar trocas e devoluções, de acordo com o Código de Defesa do Consumidor.',
-        '3- O prazo de entrega padrão dos materiais é de 30 dias, a partir da aprovação das fichas técnicas.',
-        '    Pelos materiais especiais, prazo a consultar.',
+        '3- O prazo de entrega padrão dos materiais é de 30 dias, a partir da aprovação das fichas técnicas. Pelos materiais especiais, prazo a consultar.',
       ]
 
       obsLines.forEach((line) => {

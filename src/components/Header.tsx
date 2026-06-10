@@ -1,4 +1,4 @@
-import { Search, Bell, FileText } from 'lucide-react'
+import { Search, LogOut } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,6 @@ import {
 import { useAuth } from '@/hooks/use-auth'
 import { Link, useNavigate } from 'react-router-dom'
 import logoImg from '@/assets/lucenera-vertical-527dd.png'
-import { LogOut } from 'lucide-react'
 
 export function Header() {
   const { user, signOut } = useAuth()
@@ -47,24 +46,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="bg-white rounded-full shadow-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 relative"
-        >
-          <FileText className="w-5 h-5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="bg-white rounded-full shadow-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 relative"
-        >
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-        </Button>
-
-        <div className="h-8 w-px bg-gray-200 mx-2 hidden sm:block"></div>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="flex items-center gap-3 pl-2 cursor-pointer">

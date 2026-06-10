@@ -112,7 +112,15 @@ Se uma informação não existir, retorne null ou string vazia.`
     const base64Data = pdfBase64.replace(/^data:.*?;base64,/, '')
 
     if (!base64Data) {
-      throw new Error('O arquivo PDF base64 está vazio ou inválido.')
+      return new Response(
+        JSON.stringify({
+          error: 'O arquivo PDF base64 está vazio ou inválido.',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const response = await fetch(
@@ -144,8 +152,12 @@ Se uma informação não existir, retorne null ou string vazia.`
 
     if (!response.ok) {
       const err = await response.text()
+      console.error('Gemini API Error:', response.status, err)
       return new Response(
-        JSON.stringify({ error: `Erro na API do Gemini: ${err}` }),
+        JSON.stringify({
+          error:
+            'Erro ao processar o documento. Verifique o arquivo e tente novamente.',
+        }),
         {
           status: 502,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -157,6 +169,7 @@ Se uma informação não existir, retorne null ou string vazia.`
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text
 
     if (!text) {
+      console.error('No text returned from Gemini API', data)
       return new Response(
         JSON.stringify({
           error:
@@ -187,7 +200,7 @@ Se uma informação não existir, retorne null ou string vazia.`
       return new Response(
         JSON.stringify({
           error:
-            'Falha ao interpretar os dados extraídos. O formato retornado não é um JSON válido.',
+            'Erro ao processar o documento. Verifique o arquivo e tente novamente.',
         }),
         {
           status: 422,
