@@ -58,6 +58,7 @@ const formSchema = z.object({
     .min(1, 'Selecione uma empresa'),
   projeto_codigo: z
     .string({ required_error: 'O código do projeto é obrigatório' })
+    .trim()
     .min(1, 'O código do projeto é obrigatório'),
   cliente_id: z
     .string({ required_error: 'Selecione um cliente' })
@@ -271,13 +272,24 @@ export default function BudgetFormPage() {
 
       const { data: projeto, error: projError } = await supabase
         .from('projetos')
-        .select('id')
+        .select('id, arquivado')
         .eq('codigo', values.projeto_codigo)
         .single()
 
       if (projError || !projeto) {
         form.setError('projeto_codigo', {
-          message: 'Projeto não encontrado com o código informado.',
+          message: 'Código de projeto não encontrado na base de dados',
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      if (
+        projeto.arquivado &&
+        (!isEditing || budgetToEdit?.projeto_id !== projeto.id)
+      ) {
+        form.setError('projeto_codigo', {
+          message: 'Não é possível vincular a um projeto arquivado.',
         })
         setIsSubmitting(false)
         return
