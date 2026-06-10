@@ -61,7 +61,7 @@ const formSchema = z.object({
     .min(1, 'Selecione um cliente'),
   arquiteto_id: z.string().optional().nullable(),
   vendedor_id: z.string().optional().nullable(),
-  status: z.string().default('Rascunho'),
+  status: z.string().default('Aguardando Aprovação'),
   data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
   desconto_global: z.coerce
     .number()
@@ -92,8 +92,8 @@ const formSchema = z.object({
 })
 
 const STATUS_OPTIONS = [
-  'Rascunho',
   'Aguardando Aprovação',
+  'Rascunho',
   'Aprovado',
   'Recusado',
   'Expirado',
@@ -128,7 +128,7 @@ export default function BudgetFormPage() {
       cliente_id: '',
       arquiteto_id: 'none',
       vendedor_id: 'none',
-      status: 'Rascunho',
+      status: 'Aguardando Aprovação',
       data_emissao: new Date(),
       desconto_global: 0,
       forma_pagamento: '',
@@ -209,7 +209,7 @@ export default function BudgetFormPage() {
             cliente_id: budget.cliente_id || '',
             arquiteto_id: budget.arquiteto_id || 'none',
             vendedor_id: budget.vendedor_id || 'none',
-            status: budget.status || 'Rascunho',
+            status: budget.status || 'Aguardando Aprovação',
             desconto_global: budget.desconto_global || 0,
             forma_pagamento: budget.forma_pagamento || '',
             observacoes: budget.observacoes || '',
@@ -418,7 +418,7 @@ export default function BudgetFormPage() {
         cliente_id: clienteId,
         arquiteto_id: arquitetoId || 'none',
         vendedor_id: vendedorId || 'none',
-        status: parsed.status || 'Rascunho',
+        status: parsed.status || 'Aguardando Aprovação',
         desconto_global: parsed.desconto_global || 0,
         forma_pagamento: formaPgto,
         observacoes: parsed.observacoes || '',

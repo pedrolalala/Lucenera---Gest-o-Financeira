@@ -1,4 +1,3 @@
-/* Tabs Component primitives - A component that displays a tabs (a component that displays a list of selectable tabs) - from shadcn/ui (exposes Tabs, TabsList, TabsTrigger, TabsContent) */
 import * as React from 'react'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,14 +12,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
+import { ApprovalsTab } from '@/components/budgets/ApprovalsTab'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
 
 const STATUS_OPTIONS = [
   'Todos',
-  'Rascunho',
   'Aguardando Aprovação',
+  'Rascunho',
   'Aprovado',
   'Recusado',
   'Expirado',
@@ -71,41 +73,54 @@ export default function Budgets() {
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            placeholder="Buscar por cliente ou empresa..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <Tabs defaultValue="todos" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="todos">Todos</TabsTrigger>
+          <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>
+        </TabsList>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((status) => (
-              <SelectItem
-                key={status}
-                value={status === 'Todos' ? 'all' : status}
-              >
-                {status}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        <TabsContent value="todos" className="flex flex-col gap-4 mt-0">
+          <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Buscar por cliente ou empresa..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
 
-      {showLoading ? (
-        <div className="flex justify-center py-10">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      ) : (
-        <BudgetsTable data={budgets} onEdit={handleEdit} />
-      )}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((status) => (
+                  <SelectItem
+                    key={status}
+                    value={status === 'Todos' ? 'all' : status}
+                  >
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {showLoading ? (
+            <div className="flex justify-center py-10">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <BudgetsTable data={budgets} onEdit={handleEdit} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="aprovacoes" className="mt-0">
+          <ApprovalsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

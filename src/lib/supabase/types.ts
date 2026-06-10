@@ -7804,6 +7804,10 @@ export const Constants = {
 //     USING: true
 //     WITH CHECK: true
 // Table: historico_status_orcamento
+//   Policy "authenticated_insert_historico_status_orcamento" (INSERT, PERMISSIVE) roles={authenticated}
+//     WITH CHECK: true
+//   Policy "authenticated_select_historico_status_orcamento" (SELECT, PERMISSIVE) roles={authenticated}
+//     USING: true
 //   Policy "historico_status_orcamento_authenticated_all" (ALL, PERMISSIVE) roles={authenticated}
 //     USING: true
 //     WITH CHECK: true
@@ -7896,6 +7900,9 @@ export const Constants = {
 //   Policy "auth_insert_orcamentos_revenda_ubiqua" (INSERT, PERMISSIVE) roles={authenticated}
 //     WITH CHECK: true
 //   Policy "authenticated_all_orcamentos_revenda_ubiqua" (ALL, PERMISSIVE) roles={authenticated}
+//     USING: true
+//     WITH CHECK: true
+//   Policy "authenticated_update_orcamentos_revenda_ubiqua" (UPDATE, PERMISSIVE) roles={authenticated}
 //     USING: true
 //     WITH CHECK: true
 //   Policy "update_orcamentos_revenda_ubiqua" (UPDATE, PERMISSIVE) roles={anon,authenticated}
