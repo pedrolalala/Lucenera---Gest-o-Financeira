@@ -56,6 +56,9 @@ const formSchema = z.object({
   empresa_id: z
     .string({ required_error: 'Selecione uma empresa' })
     .min(1, 'Selecione uma empresa'),
+  projeto_codigo: z
+    .string({ required_error: 'O código do projeto é obrigatório' })
+    .min(1, 'O código do projeto é obrigatório'),
   cliente_id: z
     .string({ required_error: 'Selecione um cliente' })
     .min(1, 'Selecione um cliente'),
@@ -125,6 +128,7 @@ export default function BudgetFormPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       empresa_id: '',
+      projeto_codigo: '',
       cliente_id: '',
       arquiteto_id: 'none',
       vendedor_id: 'none',
@@ -203,9 +207,20 @@ export default function BudgetFormPage() {
             if (vData) setAssignedVendedorNome(vData.nome)
           }
 
+          let projetoCodigo = ''
+          if (budget.projeto_id) {
+            const { data: pData } = await supabase
+              .from('projetos')
+              .select('codigo')
+              .eq('id', budget.projeto_id)
+              .single()
+            if (pData) projetoCodigo = pData.codigo
+          }
+
           setBudgetToEdit(budget)
           form.reset({
             empresa_id: budget.empresa_id,
+            projeto_codigo: projetoCodigo,
             cliente_id: budget.cliente_id || '',
             arquiteto_id: budget.arquiteto_id || 'none',
             vendedor_id: budget.vendedor_id || 'none',
@@ -254,8 +269,23 @@ export default function BudgetFormPage() {
     try {
       setIsSubmitting(true)
 
+      const { data: projeto, error: projError } = await supabase
+        .from('projetos')
+        .select('id')
+        .eq('codigo', values.projeto_codigo)
+        .single()
+
+      if (projError || !projeto) {
+        form.setError('projeto_codigo', {
+          message: 'Projeto não encontrado com o código informado.',
+        })
+        setIsSubmitting(false)
+        return
+      }
+
       const payload = {
         empresa_id: values.empresa_id,
+        projeto_id: projeto.id,
         cliente_id: values.cliente_id,
         arquiteto_id:
           values.arquiteto_id === 'none' ? null : values.arquiteto_id,
@@ -563,7 +593,9 @@ export default function BudgetFormPage() {
                   name="empresa_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Empresa</FormLabel>
+                      <FormLabel>
+                        Empresa <span className="text-red-500">*</span>
+                      </FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         defaultValue={field.value}
@@ -582,6 +614,26 @@ export default function BudgetFormPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="projeto_codigo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1">
+                        Código do Projeto{' '}
+                        <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Digite o código do projeto..."
+                          {...field}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -621,7 +673,9 @@ export default function BudgetFormPage() {
                   name="cliente_id"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Cliente</FormLabel>
+                      <FormLabel>
+                        Cliente <span className="text-red-500">*</span>
+                      </FormLabel>
                       <FormControl>
                         <SearchableSelect
                           options={clientes.map((c) => ({

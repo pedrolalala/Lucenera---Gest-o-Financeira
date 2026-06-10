@@ -23,6 +23,7 @@ export interface Budget {
   numero: string | null
   empresa_id: string
   cliente_id: string
+  projeto_id: string
   arquiteto_id: string | null
   vendedor_id: string | null
   status: string
@@ -38,6 +39,7 @@ export interface Budget {
   cliente?: { nome: string }
   arquiteto?: { nome: string }
   vendedor?: { nome: string }
+  projeto?: { nome: string; codigo: string }
   itens?: BudgetItem[]
 }
 
@@ -76,6 +78,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       cliente:contatos!orcamentos_cliente_id_fkey(nome),
       arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
       vendedor:funcionarios!orcamentos_vendedor_id_fkey(nome),
+      projeto:projetos(nome, codigo),
       itens:orcamento_itens(
         id,
         produto_id,

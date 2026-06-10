@@ -1944,6 +1944,7 @@ export type Database = {
           informacoes_cliente_id: string | null
           numero: string | null
           observacoes: string | null
+          projeto_id: string | null
           status: string | null
           validade: string | null
           valor_total: number | null
@@ -1964,6 +1965,7 @@ export type Database = {
           informacoes_cliente_id?: string | null
           numero?: string | null
           observacoes?: string | null
+          projeto_id?: string | null
           status?: string | null
           validade?: string | null
           valor_total?: number | null
@@ -1984,6 +1986,7 @@ export type Database = {
           informacoes_cliente_id?: string | null
           numero?: string | null
           observacoes?: string | null
+          projeto_id?: string | null
           status?: string | null
           validade?: string | null
           valor_total?: number | null
@@ -2038,6 +2041,76 @@ export type Database = {
             isOneToOne: false
             referencedRelation: 'informacoes_cliente_ubiqua'
             referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'projetos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_financeiro_projetos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_projetos_dashboard'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_projetos_pipeline'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_projetos_resumo'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_projetos_sem_empresa'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_projetos_sem_responsavel'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_separacoes_agenda'
+            referencedColumns: ['projeto_id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_transacoes_completas'
+            referencedColumns: ['projeto_id']
+          },
+          {
+            foreignKeyName: 'orcamentos_projeto_id_fkey'
+            columns: ['projeto_id']
+            isOneToOne: false
+            referencedRelation: 'vw_vendas_por_projeto'
+            referencedColumns: ['projeto_id']
           },
           {
             foreignKeyName: 'orcamentos_vendedor_id_fkey'
@@ -6406,7 +6479,7 @@ export const Constants = {
 //   cliente_id: uuid (nullable)
 //   arquiteto_id: uuid (nullable)
 //   vendedor_id: uuid (nullable)
-//   status: text (nullable, default: 'Rascunho'::text)
+//   status: text (nullable, default: 'aguardando_aprovacao'::text)
 //   data_emissao: timestamp with time zone (nullable, default: now())
 //   validade: date (nullable)
 //   valor_total: numeric (nullable, default: 0)
@@ -6417,6 +6490,7 @@ export const Constants = {
 //   desconto_global: numeric (nullable, default: 0)
 //   forma_pagamento: pagamento_forma (nullable)
 //   informacoes_cliente_id: uuid (nullable)
+//   projeto_id: uuid (nullable)
 // Table: orcamentos_revenda_ubiqua
 //   id: uuid (not null, default: gen_random_uuid())
 //   cliente_id: uuid (not null)
@@ -7480,12 +7554,12 @@ export const Constants = {
 //   FOREIGN KEY orcamentos_empresa_id_fkey: FOREIGN KEY (empresa_id) REFERENCES empresas(id)
 //   FOREIGN KEY orcamentos_informacoes_cliente_id_fkey: FOREIGN KEY (informacoes_cliente_id) REFERENCES informacoes_cliente_ubiqua(id) ON DELETE SET NULL
 //   PRIMARY KEY orcamentos_pkey: PRIMARY KEY (id)
+//   FOREIGN KEY orcamentos_projeto_id_fkey: FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE SET NULL
 //   FOREIGN KEY orcamentos_vendedor_id_fkey: FOREIGN KEY (vendedor_id) REFERENCES funcionarios(id) ON DELETE SET NULL
 // Table: orcamentos_revenda_ubiqua
 //   FOREIGN KEY orcamentos_revenda_ubiqua_cliente_id_fkey: FOREIGN KEY (cliente_id) REFERENCES informacoes_cliente_ubiqua(id) ON DELETE RESTRICT
 //   CHECK orcamentos_revenda_ubiqua_desconto_percentual_check: CHECK (((desconto_percentual >= (0)::numeric) AND (desconto_percentual <= (100)::numeric)))
 //   PRIMARY KEY orcamentos_revenda_ubiqua_pkey: PRIMARY KEY (id)
-//   CHECK orcamentos_revenda_ubiqua_status_check: CHECK ((status = ANY (ARRAY['rascunho'::text, 'enviado'::text, 'aprovado'::text, 'rejeitado'::text, 'cancelado'::text])))
 // Table: pedido_compra
 //   UNIQUE pedido_compra_codigo_pedido_key: UNIQUE (codigo_pedido)
 //   PRIMARY KEY pedido_compra_pkey: PRIMARY KEY (id)
