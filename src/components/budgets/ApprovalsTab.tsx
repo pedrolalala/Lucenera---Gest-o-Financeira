@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { Check } from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -18,6 +18,7 @@ export function ApprovalsTab() {
   const { pendingBudgets, loading, fetchPending, approveBudget } =
     useApprovalsStore()
   const { user } = useAuth()
+  const [approvingId, setApprovingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchPending()
@@ -25,12 +26,15 @@ export function ApprovalsTab() {
 
   const handleApprove = async (id: string, currentStatus: string) => {
     try {
+      setApprovingId(id)
       const userName = user?.user_metadata?.name || user?.email || 'Usuário'
       await approveBudget(id, currentStatus, userName)
       toast.success('Orçamento aprovado com sucesso!')
     } catch (error) {
       console.error(error)
       toast.error('Erro ao aprovar orçamento.')
+    } finally {
+      setApprovingId(null)
     }
   }
 
@@ -82,14 +86,21 @@ export function ApprovalsTab() {
                   }).format(budget.valor_total || 0)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700 text-white transition-colors"
-                    onClick={() => handleApprove(budget.id, budget.status)}
-                  >
-                    <Check className="w-4 h-4 mr-1" />
-                    Aprovar
-                  </Button>
+                  {budget.status === 'aguardando_aprovacao' && (
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white transition-colors"
+                      onClick={() => handleApprove(budget.id, budget.status)}
+                      disabled={approvingId === budget.id}
+                    >
+                      {approvingId === budget.id ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4 mr-1" />
+                      )}
+                      Aprovar
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))
