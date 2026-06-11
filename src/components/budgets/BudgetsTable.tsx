@@ -34,12 +34,12 @@ interface BudgetsTableProps {
 
 export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
   const { deleteBudget, updateBudgetStatus } = useBudgetStore()
-  const [printingId, setPrintingId] = useState<string | null>(null)
-  const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [printingIds, setPrintingIds] = useState<Set<string>>(new Set())
+  const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set())
 
   const handleApprove = async (budget: Budget) => {
     try {
-      setApprovingId(budget.id)
+      setApprovingIds((prev) => new Set(prev).add(budget.id))
       await updateBudgetStatus(budget.id, 'aprovado')
       toast.success('Orçamento aprovado com sucesso!')
     } catch (error: any) {
@@ -47,13 +47,17 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
         description: error.message,
       })
     } finally {
-      setApprovingId(null)
+      setApprovingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(budget.id)
+        return next
+      })
     }
   }
 
   const handleDownloadPdf = async (budget: Budget) => {
     try {
-      setPrintingId(budget.id)
+      setPrintingIds((prev) => new Set(prev).add(budget.id))
 
       let logoBase64 = null
       try {
@@ -116,7 +120,11 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
         description: error.message,
       })
     } finally {
-      setPrintingId(null)
+      setPrintingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(budget.id)
+        return next
+      })
     }
   }
 
@@ -205,9 +213,9 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
                       className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
                       title="Aprovar"
                       onClick={() => handleApprove(budget)}
-                      disabled={approvingId === budget.id}
+                      disabled={approvingIds.has(budget.id)}
                     >
-                      {approvingId === budget.id ? (
+                      {approvingIds.has(budget.id) ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <CheckCircle className="h-4 w-4" />
@@ -222,9 +230,9 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
                     className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                     title="Baixar PDF do Orçamento"
                     onClick={() => handleDownloadPdf(budget)}
-                    disabled={printingId === budget.id}
+                    disabled={printingIds.has(budget.id)}
                   >
-                    {printingId === budget.id ? (
+                    {printingIds.has(budget.id) ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Printer className="h-4 w-4" />
