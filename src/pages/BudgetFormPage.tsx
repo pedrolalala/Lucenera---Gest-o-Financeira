@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { ProjectCreateModal } from '@/components/ProjectCreateModal'
+import { ClientCreateModal } from '@/components/ClientCreateModal'
 import {
   Card,
   CardContent,
@@ -112,6 +113,7 @@ export default function BudgetFormPage() {
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
   const [isImporting, setIsImporting] = useState(false)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false)
   const {
     empresas,
     clientes,
@@ -121,6 +123,7 @@ export default function BudgetFormPage() {
     projetos,
     loading: optionsLoading,
     fetchProjetos,
+    fetchClientes,
   } = useOptions()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoadingBudget, setIsLoadingBudget] = useState(isEditing)
@@ -723,18 +726,31 @@ export default function BudgetFormPage() {
                         Cliente <span className="text-red-500">*</span>
                       </FormLabel>
                       <FormControl>
-                        <SearchableSelect
-                          options={clientes.map((c) => ({
-                            value: c.id,
-                            label: c.nome,
-                            searchTerms: [c.nome_empresa].filter(Boolean),
-                          }))}
-                          value={field.value}
-                          onChange={field.onChange}
-                          placeholder="Selecione um cliente..."
-                          searchPlaceholder="Buscar cliente..."
-                          emptyText="Nenhum cliente encontrado."
-                        />
+                        <div className="flex gap-2 items-center">
+                          <div className="flex-1">
+                            <SearchableSelect
+                              options={clientes.map((c) => ({
+                                value: c.id,
+                                label: c.nome,
+                                searchTerms: [c.nome_empresa].filter(Boolean),
+                              }))}
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="Selecione um cliente..."
+                              searchPlaceholder="Buscar cliente..."
+                              emptyText="Nenhum cliente encontrado."
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setIsClientModalOpen(true)}
+                            title="Criar Novo Cliente"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1254,6 +1270,17 @@ export default function BudgetFormPage() {
             }}
             clientes={clientes}
             arquitetos={arquitetos}
+          />
+
+          <ClientCreateModal
+            open={isClientModalOpen}
+            onOpenChange={setIsClientModalOpen}
+            onSuccess={async (newClient: any) => {
+              if (fetchClientes) await fetchClientes()
+              form.setValue('cliente_id', newClient.id, {
+                shouldValidate: true,
+              })
+            }}
           />
 
           <div className="flex justify-end mt-6">

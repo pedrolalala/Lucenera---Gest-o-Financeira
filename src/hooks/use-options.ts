@@ -18,6 +18,16 @@ export function useOptions() {
     if (data) setProjetos(data)
   }
 
+  const fetchClientes = async () => {
+    const { data } = await supabase
+      .from('contatos')
+      .select('id, nome, nome_empresa, codigo_legado')
+      .eq('tipo', 'cliente')
+      .order('codigo_legado', { ascending: false, nullsFirst: false })
+      .order('nome')
+    if (data) setClientes(data)
+  }
+
   useEffect(() => {
     async function load() {
       try {
@@ -116,5 +126,6 @@ export function useOptions() {
     projetos,
     loading,
     fetchProjetos,
+    fetchClientes,
   }
 }
