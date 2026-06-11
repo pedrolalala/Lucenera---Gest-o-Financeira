@@ -116,6 +116,7 @@ export default function BudgetFormPage() {
     arquitetos,
     vendedores,
     produtos,
+    projetos,
     loading: optionsLoading,
   } = useOptions()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -289,7 +290,7 @@ export default function BudgetFormPage() {
         (!isEditing || budgetToEdit?.projeto_id !== projeto.id)
       ) {
         form.setError('projeto_codigo', {
-          message: 'Não é possível vincular a um projeto arquivado.',
+          message: 'Código de projeto não encontrado na base de dados',
         })
         setIsSubmitting(false)
         return
@@ -641,9 +642,26 @@ export default function BudgetFormPage() {
                         <span className="text-red-500">*</span>
                       </FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="Digite o código do projeto..."
-                          {...field}
+                        <SearchableSelect
+                          options={projetos
+                            .filter(
+                              (p) =>
+                                !p.arquivado ||
+                                (isEditing &&
+                                  budgetToEdit?.projeto_id === p.id),
+                            )
+                            .map((p) => ({
+                              value: p.codigo,
+                              label: `${p.codigo} - ${p.nome || 'Sem nome'}`,
+                              searchTerms: [p.codigo, p.nome].filter(
+                                Boolean,
+                              ) as string[],
+                            }))}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Selecione um projeto..."
+                          searchPlaceholder="Buscar código do projeto..."
+                          emptyText="Nenhum projeto encontrado."
                         />
                       </FormControl>
                       <FormMessage />

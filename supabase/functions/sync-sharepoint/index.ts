@@ -7,9 +7,7 @@ function findFieldValue(fields: any, possibleNames: string[]) {
   const keys = Object.keys(fields)
   for (const name of possibleNames) {
     const match = keys.find(
-      (k) =>
-        k.toLowerCase() === name.toLowerCase() ||
-        k.toLowerCase().includes(name.toLowerCase()),
+      (k) => k.toLowerCase() === name.toLowerCase() || k.toLowerCase().includes(name.toLowerCase()),
     )
     if (match && fields[match] !== undefined && fields[match] !== null) {
       return fields[match]
@@ -47,13 +45,9 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-    const supabaseUserClient = createClient(
-      supabaseUrl,
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: { headers: { Authorization: authHeader } },
-      },
-    )
+    const supabaseUserClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
+      global: { headers: { Authorization: authHeader } },
+    })
 
     const {
       data: { user },
@@ -67,9 +61,7 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single()
     if (profile?.role !== 'admin') {
-      throw new Error(
-        'Acesso negado. Apenas administradores podem executar a sincronização.',
-      )
+      throw new Error('Acesso negado. Apenas administradores podem executar a sincronização.')
     }
 
     const tenantId = Deno.env.get('SHAREPOINT_TENANT_ID')
@@ -132,39 +124,29 @@ Deno.serve(async (req: Request) => {
     if (!siteResponse.ok) {
       const errTxt = await siteResponse.text()
       console.error('Site Error:', errTxt)
-      throw new Error(
-        `Falha ao acessar o site do SharePoint. Detalhes: ${errTxt}`,
-      )
+      throw new Error(`Falha ao acessar o site do SharePoint. Detalhes: ${errTxt}`)
     }
 
     const siteData = await siteResponse.json()
     const siteId = siteData.id
 
     // Get lists
-    const listsResponse = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-    )
+    const listsResponse = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
 
     if (!listsResponse.ok) {
       const errTxt = await listsResponse.text()
       console.error('Lists Error:', errTxt)
-      throw new Error(
-        `Falha ao obter listas do SharePoint. Detalhes: ${errTxt}`,
-      )
+      throw new Error(`Falha ao obter listas do SharePoint. Detalhes: ${errTxt}`)
     }
 
     const listsData = await listsResponse.json()
     const projetosList = listsData.value.find(
-      (l: any) =>
-        l.displayName === 'Organização Projetos' ||
-        l.name === 'Organização Projetos',
+      (l: any) => l.displayName === 'Organização Projetos' || l.name === 'Organização Projetos',
     )
     const precosList = listsData.value.find(
-      (l: any) =>
-        l.displayName === 'Tabelas de Preços' || l.name === 'Tabelas de Preços',
+      (l: any) => l.displayName === 'Tabelas de Preços' || l.name === 'Tabelas de Preços',
     )
 
     let projetosCount = 0
@@ -183,14 +165,10 @@ Deno.serve(async (req: Request) => {
       if (pItemsRes.ok) {
         const pItems = await pItemsRes.json()
         const extractedProjetos = pItems.value.map((item: any) => ({
-          codigo:
-            findFieldValue(item.fields, ['Codigo', 'Código', 'Code']) || null,
-          nome:
-            findFieldValue(item.fields, ['Projeto', 'Title', 'Nome']) ||
-            'Projeto Sem Nome',
+          codigo: findFieldValue(item.fields, ['Codigo', 'Código', 'Code']) || null,
+          nome: findFieldValue(item.fields, ['Projeto', 'Title', 'Nome']) || 'Projeto Sem Nome',
           responsavel:
-            findFieldValue(item.fields, ['Responsavel', 'Responsável']) ||
-            'Não Definido',
+            findFieldValue(item.fields, ['Responsavel', 'Responsável']) || 'Não Definido',
           arquiteto_responsavel:
             findFieldValue(item.fields, [
               'Arquiteto Responsavel',
@@ -212,17 +190,8 @@ Deno.serve(async (req: Request) => {
             'Data de Entrada',
             'DataEntrada',
           ]),
-          valor: getNumberValue(item.fields, [
-            'Valor',
-            'Orcamento',
-            'Orçamento',
-          ]),
-          observacoes:
-            findFieldValue(item.fields, [
-              'Observacoes',
-              'Observações',
-              'Notas',
-            ]) || null,
+          valor: getNumberValue(item.fields, ['Valor', 'Orcamento', 'Orçamento']),
+          observacoes: findFieldValue(item.fields, ['Observacoes', 'Observações', 'Notas']) || null,
         }))
 
         const uniqueProjetosMap = new Map()
@@ -231,9 +200,7 @@ Deno.serve(async (req: Request) => {
         }
         const uniqueProjetos = Array.from(uniqueProjetosMap.values())
 
-        const { data: existingProjetos } = await supabaseAdmin
-          .from('projetos')
-          .select('id, nome')
+        const { data: existingProjetos } = await supabaseAdmin.from('projetos').select('id, nome')
 
         const upsertData = uniqueProjetos.map((projeto: any) => {
           const existing = existingProjetos?.find(
@@ -243,21 +210,15 @@ Deno.serve(async (req: Request) => {
         })
 
         if (upsertData.length > 0) {
-          const { error: upsertError } = await supabaseAdmin
-            .from('projetos')
-            .upsert(upsertData)
+          const { error: upsertError } = await supabaseAdmin.from('projetos').upsert(upsertData)
           if (upsertError)
-            throw new Error(
-              `Erro ao salvar projetos no banco de dados: ${upsertError.message}`,
-            )
+            throw new Error(`Erro ao salvar projetos no banco de dados: ${upsertError.message}`)
           projetosCount = upsertData.length
         }
       } else {
         const errTxt = await pItemsRes.text()
         console.error('Erro ao buscar itens de Projetos:', errTxt)
-        throw new Error(
-          `Erro ao buscar itens de Projetos no SharePoint. Detalhes: ${errTxt}`,
-        )
+        throw new Error(`Erro ao buscar itens de Projetos no SharePoint. Detalhes: ${errTxt}`)
       }
     } else {
       console.warn('Lista "Organização Projetos" não encontrada no SharePoint.')
@@ -277,19 +238,11 @@ Deno.serve(async (req: Request) => {
         const prItems = await prItemsRes.json()
         const extractedPrecos = prItems.value.map((item: any) => ({
           servico:
-            findFieldValue(item.fields, ['Title', 'Servico', 'Serviço']) ||
-            'Serviço Sem Nome',
+            findFieldValue(item.fields, ['Title', 'Servico', 'Serviço']) || 'Serviço Sem Nome',
           categoria: findFieldValue(item.fields, ['Categoria']) || 'Geral',
           preco: getNumberValue(item.fields, ['Preco', 'Preço', 'Valor']),
-          vigencia:
-            findFieldValue(item.fields, ['Vigencia', 'Vigência', 'Periodo']) ||
-            '-',
-          observacao:
-            findFieldValue(item.fields, [
-              'Observacao',
-              'Observação',
-              'Notas',
-            ]) || null,
+          vigencia: findFieldValue(item.fields, ['Vigencia', 'Vigência', 'Periodo']) || '-',
+          observacao: findFieldValue(item.fields, ['Observacao', 'Observação', 'Notas']) || null,
         }))
 
         const uniquePrecosMap = new Map()
@@ -314,9 +267,7 @@ Deno.serve(async (req: Request) => {
             .from('tabela_precos')
             .upsert(upsertData)
           if (upsertError)
-            throw new Error(
-              `Erro ao salvar preços no banco de dados: ${upsertError.message}`,
-            )
+            throw new Error(`Erro ao salvar preços no banco de dados: ${upsertError.message}`)
           precosCount = upsertData.length
         }
       } else {
@@ -345,8 +296,7 @@ Deno.serve(async (req: Request) => {
     console.error('Edge Function Error (sync-sharepoint):', error)
     return new Response(
       JSON.stringify({
-        error:
-          error.message || 'Erro interno no servidor ao sincronizar dados.',
+        error: error.message || 'Erro interno no servidor ao sincronizar dados.',
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
