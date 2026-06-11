@@ -4,7 +4,8 @@ import { PDFDocument, StandardFonts, rgb } from 'npm:pdf-lib@1.17.1'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, x-supabase-client-platform, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 }
 
@@ -26,7 +27,12 @@ async function toPDF(data: any[], title: string) {
   const { height } = page.getSize()
   let y = height - 50
 
-  page.drawText(`Relatorio: ${title.toUpperCase()}`, { x: 40, y, size: 16, font })
+  page.drawText(`Relatorio: ${title.toUpperCase()}`, {
+    x: 40,
+    y,
+    size: 16,
+    font,
+  })
   y -= 30
 
   if (!data || !data.length) {
@@ -35,7 +41,13 @@ async function toPDF(data: any[], title: string) {
   }
 
   const headers = Object.keys(data[0])
-  page.drawText(headers.join(' | '), { x: 40, y, size: 9, font, color: rgb(0.3, 0.3, 0.3) })
+  page.drawText(headers.join(' | '), {
+    x: 40,
+    y,
+    size: 9,
+    font,
+    color: rgb(0.3, 0.3, 0.3),
+  })
   y -= 20
 
   for (const row of data) {
@@ -54,7 +66,8 @@ async function toPDF(data: any[], title: string) {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS')
+    return new Response('ok', { headers: corsHeaders })
 
   try {
     const { reportType, format, filters } = await req.json()
@@ -69,19 +82,24 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     const supabaseAdminKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    
+
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: authHeader } },
     })
-    
+
     const supabaseAdmin = createClient(supabaseUrl, supabaseAdminKey)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) {
-      return new Response(JSON.stringify({ error: 'Usuário não autenticado.' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Usuário não autenticado.' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const { data: profile } = await supabase
@@ -90,28 +108,42 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single()
 
-    if (reportType !== 'orcamento' && profile?.role !== 'admin' && profile?.role !== 'gerente') {
-      return new Response(JSON.stringify({ error: 'Acesso negado. Apenas administradores e gerentes podem gerar relatórios.' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    if (
+      reportType !== 'orcamento' &&
+      profile?.role !== 'admin' &&
+      profile?.role !== 'gerente'
+    ) {
+      return new Response(
+        JSON.stringify({
+          error:
+            'Acesso negado. Apenas administradores e gerentes podem gerar relatórios.',
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     if (reportType === 'orcamento') {
-      const { id, logoBase64 } = filters || {};
-      
+      const { id, logoBase64 } = filters || {}
+
       if (!id) {
-        return new Response(JSON.stringify({ error: 'ID do orçamento não fornecido.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return new Response(
+          JSON.stringify({ error: 'ID do orçamento não fornecido.' }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
 
-      let budget: any = null;
-      
+      let budget: any = null
+
       const { data: orcData } = await supabaseAdmin
         .from('orcamentos')
-        .select(`
+        .select(
+          `
           *,
           cliente:contatos!orcamentos_cliente_id_fkey(nome, email, telefone, cpf_cnpj),
           empresa:empresas!orcamentos_empresa_id_fkey(nome, razao_social, logradouro, numero, bairro, cidade, estado, cep, cnpj),
@@ -120,264 +152,438 @@ Deno.serve(async (req: Request) => {
             id, produto_id, quantidade, preco_unitario, desconto, descricao, custom_id,
             produto:produtos(nome, referencia, sku, codigo_produto)
           )
-        `)
+        `,
+        )
         .eq('id', id)
-        .maybeSingle();
+        .maybeSingle()
 
       if (orcData) {
-        budget = orcData;
+        budget = orcData
       } else {
         const { data: ubiquaData } = await supabaseAdmin
           .from('orcamentos_revenda_ubiqua')
-          .select(`
+          .select(
+            `
             *,
             cliente:informacoes_cliente_ubiqua!orcamentos_revenda_ubiqua_cliente_id_fkey(nome, email, telefone, cpf_cnpj),
             itens:itens_orcamento_ubiqua(
               id, produto_id, quantidade, valor_unitario, valor_total, desconto_item, referencia_snapshot, descricao_snapshot, observacao_item, ordem
             )
-          `)
+          `,
+          )
           .eq('id', id)
-          .maybeSingle();
+          .maybeSingle()
 
         if (ubiquaData) {
-          budget = ubiquaData;
-          const { data: empUbiqua } = await supabaseAdmin.from('empresa_ubiqua').select('*').limit(1).maybeSingle();
-          budget.empresa = empUbiqua || {};
-          budget.numero = ubiquaData.numero_orcamento;
-          budget.desconto_global = ubiquaData.valor_desconto;
+          budget = ubiquaData
+          const { data: empUbiqua } = await supabaseAdmin
+            .from('empresa_ubiqua')
+            .select('*')
+            .limit(1)
+            .maybeSingle()
+          budget.empresa = empUbiqua || {}
+          budget.numero = ubiquaData.numero_orcamento
+          budget.desconto_global = ubiquaData.valor_desconto
           budget.itens = (ubiquaData.itens || []).map((i: any) => ({
-             id: i.id,
-             produto_id: i.produto_id,
-             quantidade: i.quantidade,
-             preco_unitario: i.valor_unitario,
-             desconto: i.desconto_item,
-             descricao: i.descricao_snapshot,
-             custom_id: i.referencia_snapshot,
-          }));
+            id: i.id,
+            produto_id: i.produto_id,
+            quantidade: i.quantidade,
+            preco_unitario: i.valor_unitario,
+            desconto: i.desconto_item,
+            descricao: i.descricao_snapshot,
+            custom_id: i.referencia_snapshot,
+          }))
         }
       }
 
       if (!budget) {
-        return new Response(JSON.stringify({ error: 'Orçamento não encontrado.' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return new Response(
+          JSON.stringify({ error: 'Orçamento não encontrado.' }),
+          {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
 
-      const pdfDoc = await PDFDocument.create();
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-      let page = pdfDoc.addPage();
-      const { width, height } = page.getSize();
-      
-      let logoBottomY = height - 15;
-      let headerTextX = 40;
-      const maxLogoWidth = 140;
-      const maxLogoHeight = 40; // compact logo
-      let textY = height - 15;
+      const pdfDoc = await PDFDocument.create()
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+      let page = pdfDoc.addPage()
+      const { width, height } = page.getSize()
+
+      let logoBottomY = height - 15
+      let headerTextX = 40
+      const maxLogoWidth = 140
+      const maxLogoHeight = 40 // compact logo
+      let textY = height - 15
 
       if (logoBase64) {
         try {
-          const base64Data = logoBase64.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
-          const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-          let image;
-          if (logoBase64.includes('image/jpeg') || logoBase64.includes('image/jpg')) {
-            image = await pdfDoc.embedJpg(imageBytes);
+          const base64Data = logoBase64.replace(
+            /^data:image\/(png|jpeg|jpg);base64,/,
+            '',
+          )
+          const imageBytes = Uint8Array.from(atob(base64Data), (c) =>
+            c.charCodeAt(0),
+          )
+          let image
+          if (
+            logoBase64.includes('image/jpeg') ||
+            logoBase64.includes('image/jpg')
+          ) {
+            image = await pdfDoc.embedJpg(imageBytes)
           } else {
-            image = await pdfDoc.embedPng(imageBytes);
+            image = await pdfDoc.embedPng(imageBytes)
           }
-          
-          const scale = Math.min(maxLogoWidth / image.width, maxLogoHeight / image.height);
-          const imgWidth = image.width * scale;
-          const imgHeight = image.height * scale;
-          
-          const logoX = 40;
-          const logoY = height - 15 - imgHeight; // tighter top margin
-          
+
+          const scale = Math.min(
+            maxLogoWidth / image.width,
+            maxLogoHeight / image.height,
+          )
+          const imgWidth = image.width * scale
+          const imgHeight = image.height * scale
+
+          const logoX = 40
+          const logoY = height - 15 - imgHeight // tighter top margin
+
           page.drawImage(image, {
             x: logoX,
-            y: logoY, 
+            y: logoY,
             width: imgWidth,
             height: imgHeight,
-          });
-          
-          logoBottomY = logoY; 
-          textY = logoBottomY - 5; // minimize vertical space between logo and company text
+          })
+
+          logoBottomY = logoY
+          textY = logoBottomY - 5 // minimize vertical space between logo and company text
         } catch (e) {
-          console.error('Error embedding logo:', e);
+          console.error('Error embedding logo:', e)
         }
       }
 
-      const empresa = budget.empresa || {};
-      const empresaNomeLogo = empresa.nome_fantasia || empresa.nome || 'Luce Nera';
-      const empresaNomeAssinatura = empresa.nome_fantasia || empresa.nome || 'Lucenera';
-      const empresaRazao = empresa.razao_social || 'Manoella Zauith Leite Lopes';
-      const empresaEnd = `${empresa.cep || '14.025-270'} ${empresa.logradouro || 'Rua Ayrton Roxo'} ${empresa.numero || '867'}`;
-      const empresaCidade = `${empresa.bairro || 'Alto Da Boa Vista'}, ${empresa.cidade || 'Ribeirao Preto'}/${empresa.estado || 'SP'}`;
-      
-      page.drawText(empresaNomeLogo, { x: headerTextX, y: textY, size: 10, font: boldFont });
-      page.drawText(empresaRazao, { x: headerTextX, y: textY - 10, size: 8, font });
-      page.drawText(empresaEnd, { x: headerTextX, y: textY - 20, size: 8, font });
-      page.drawText(empresaCidade, { x: headerTextX, y: textY - 30, size: 8, font });
-      page.drawText('(16) 3442 - 3545', { x: headerTextX, y: textY - 40, size: 8, font });
+      const empresa = budget.empresa || {}
+      const empresaNomeLogo =
+        empresa.nome_fantasia || empresa.nome || 'Luce Nera'
+      const empresaNomeAssinatura =
+        empresa.nome_fantasia || empresa.nome || 'Lucenera'
+      const empresaRazao = empresa.razao_social || 'Manoella Zauith Leite Lopes'
+      const empresaEnd = `${empresa.cep || '14.025-270'} ${empresa.logradouro || 'Rua Ayrton Roxo'} ${empresa.numero || '867'}`
+      const empresaCidade = `${empresa.bairro || 'Alto Da Boa Vista'}, ${empresa.cidade || 'Ribeirao Preto'}/${empresa.estado || 'SP'}`
 
-      const companyTextBottomY = textY - 40;
+      page.drawText(empresaNomeLogo, {
+        x: headerTextX,
+        y: textY,
+        size: 10,
+        font: boldFont,
+      })
+      page.drawText(empresaRazao, {
+        x: headerTextX,
+        y: textY - 10,
+        size: 8,
+        font,
+      })
+      page.drawText(empresaEnd, {
+        x: headerTextX,
+        y: textY - 20,
+        size: 8,
+        font,
+      })
+      page.drawText(empresaCidade, {
+        x: headerTextX,
+        y: textY - 30,
+        size: 8,
+        font,
+      })
+      page.drawText('(16) 3442 - 3545', {
+        x: headerTextX,
+        y: textY - 40,
+        size: 8,
+        font,
+      })
+
+      const companyTextBottomY = textY - 40
 
       // Right Side - Approval Section
       // Moved approval section up to align with the top of the page rather than below the logo
       // This prevents overlap and uses the white space on the top right
-      const rightSectionTopY = height - 15;
-      page.drawText('1 de 1', { x: width - 60, y: rightSectionTopY, size: 9, font: boldFont });
-      
-      const approvalY = rightSectionTopY - 25; // fixed position relative to page top
-      page.drawLine({ start: { x: width - 200, y: approvalY }, end: { x: width - 40, y: approvalY }, thickness: 1 });
-      page.drawText('Aprovação do Cliente', { x: width - 195, y: approvalY + 3, size: 8, font });
+      const rightSectionTopY = height - 15
+      page.drawText('1 de 1', {
+        x: width - 60,
+        y: rightSectionTopY,
+        size: 9,
+        font: boldFont,
+      })
 
-      const signatureY = approvalY - 25;
-      page.drawLine({ start: { x: width - 200, y: signatureY }, end: { x: width - 40, y: signatureY }, thickness: 1 });
-      page.drawText(empresaNomeAssinatura, { x: width - 195, y: signatureY + 3, size: 8, font });
+      const approvalY = rightSectionTopY - 25 // fixed position relative to page top
+      page.drawLine({
+        start: { x: width - 200, y: approvalY },
+        end: { x: width - 40, y: approvalY },
+        thickness: 1,
+      })
+      page.drawText('Aprovação do Cliente', {
+        x: width - 195,
+        y: approvalY + 3,
+        size: 8,
+        font,
+      })
 
-      const dateY = signatureY - 10;
-      page.drawText(`Data Impressão ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`, { x: width - 150, y: dateY, size: 6, font, color: rgb(0.4,0.4,0.4) });
-      
+      const signatureY = approvalY - 25
+      page.drawLine({
+        start: { x: width - 200, y: signatureY },
+        end: { x: width - 40, y: signatureY },
+        thickness: 1,
+      })
+      page.drawText(empresaNomeAssinatura, {
+        x: width - 195,
+        y: signatureY + 3,
+        size: 8,
+        font,
+      })
+
+      const dateY = signatureY - 10
+      page.drawText(
+        `Data Impressão ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
+        { x: width - 150, y: dateY, size: 6, font, color: rgb(0.4, 0.4, 0.4) },
+      )
+
       // Calculate Lowest Y coordinate between Left (Company Info) and Right (Approval Section)
-      const lowestHeaderY = Math.min(companyTextBottomY, dateY);
-      
+      const lowestHeaderY = Math.min(companyTextBottomY, dateY)
+
       // Add safe vertical margin below the lowest header element
-      let y = lowestHeaderY - 15;
-      page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 2 });
-      
-      y -= 25;
-      page.drawText('Orçamento para', { x: 40, y, size: 11, font });
-      
-      const projName = budget.cliente?.nome || 'CLIENTE NÃO INFORMADO';
-      page.drawText(projName.toUpperCase(), { x: 40, y: y - 18, size: 13, font: boldFont });
-      
-      page.drawText(`CPF/CNPJ: ${budget.cliente?.cpf_cnpj || '-'}`, { x: 40, y: y - 35, size: 9, font });
-      page.drawText(`TEL: ${budget.cliente?.telefone || '-'}`, { x: 40, y: y - 47, size: 9, font });
+      let y = lowestHeaderY - 15
+      page.drawLine({
+        start: { x: 40, y },
+        end: { x: width - 40, y },
+        thickness: 2,
+      })
 
-      page.drawText('Orçamento', { x: width - 120, y, size: 11, font });
-      page.drawText(`${budget.numero || budget.id.split('-')[0].toUpperCase()}`, { x: width - 120, y: y - 18, size: 13, font: boldFont });
+      y -= 25
+      page.drawText('Orçamento para', { x: 40, y, size: 11, font })
 
-      y -= 75;
-      
-      page.drawText('Vendedor', { x: 40, y, size: 9, font });
-      
-      let vendedorNome = 'Equipe Comercial';
+      const projName = budget.cliente?.nome || 'CLIENTE NÃO INFORMADO'
+      page.drawText(projName.toUpperCase(), {
+        x: 40,
+        y: y - 18,
+        size: 13,
+        font: boldFont,
+      })
+
+      page.drawText(`CPF/CNPJ: ${budget.cliente?.cpf_cnpj || '-'}`, {
+        x: 40,
+        y: y - 35,
+        size: 9,
+        font,
+      })
+      page.drawText(`TEL: ${budget.cliente?.telefone || '-'}`, {
+        x: 40,
+        y: y - 47,
+        size: 9,
+        font,
+      })
+
+      page.drawText('Orçamento', { x: width - 120, y, size: 11, font })
+      page.drawText(
+        `${budget.numero || budget.id.split('-')[0].toUpperCase()}`,
+        { x: width - 120, y: y - 18, size: 13, font: boldFont },
+      )
+
+      y -= 75
+
+      page.drawText('Vendedor', { x: 40, y, size: 9, font })
+
+      let vendedorNome = 'Equipe Comercial'
       if (budget.vendedor?.nome) {
-         vendedorNome = budget.vendedor.nome;
+        vendedorNome = budget.vendedor.nome
       }
-      
-      page.drawText(vendedorNome, { x: 40, y: y - 12, size: 9, font: boldFont });
 
-      y -= 30;
+      page.drawText(vendedorNome, { x: 40, y: y - 12, size: 9, font: boldFont })
 
-      const headersList = ['Código', 'Descrição', 'Qtd.', 'Vl. Unit.', 'Subtotal'];
-      const xOffsets = [40, 90, 390, 430, 490];
-      
+      y -= 30
+
+      const headersList = [
+        'Código',
+        'Descrição',
+        'Qtd.',
+        'Vl. Unit.',
+        'Subtotal',
+      ]
+      const xOffsets = [40, 90, 390, 430, 490]
+
       headersList.forEach((h, i) => {
-        page.drawText(h, { x: xOffsets[i], y, size: 9, font: boldFont });
-      });
-      y -= 10;
-      page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 1 });
-      y -= 15;
+        page.drawText(h, { x: xOffsets[i], y, size: 9, font: boldFont })
+      })
+      y -= 10
+      page.drawLine({
+        start: { x: 40, y },
+        end: { x: width - 40, y },
+        thickness: 1,
+      })
+      y -= 15
 
-      let subtotal = 0;
+      let subtotal = 0
 
       const items = (budget.itens || []).sort((a: any, b: any) => {
-        return (a.id > b.id ? 1 : -1);
-      });
+        return a.id > b.id ? 1 : -1
+      })
 
       items.forEach((item: any) => {
         if (y < 60) {
-          page = pdfDoc.addPage();
-          y = height - 50;
+          page = pdfDoc.addPage()
+          y = height - 50
         }
 
-        const cod = item.custom_id || item.produto?.referencia || '-';
-        let desc = String(item.descricao || item.produto?.nome || 'Produto sem nome').substring(0, 55);
-        
-        const qtd = String(item.quantidade || 1);
-        const preco = Number(item.preco_unitario || 0);
-        
-        const descItem = Number(item.desconto || 0);
-        const finalVal = (preco * Number(item.quantidade || 1)) - descItem;
-        
-        subtotal += finalVal;
+        const cod = item.custom_id || item.produto?.referencia || '-'
+        let desc = String(
+          item.descricao || item.produto?.nome || 'Produto sem nome',
+        ).substring(0, 55)
 
-        page.drawText(cod, { x: xOffsets[0], y, size: 8, font: boldFont });
-        page.drawText(desc, { x: xOffsets[1], y, size: 8, font });
-        page.drawText(qtd, { x: xOffsets[2], y, size: 8, font });
-        
-        const fmtPreco = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(preco);
-        const fmtFinalVal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(finalVal);
-        page.drawText(fmtPreco, { x: xOffsets[3], y, size: 8, font });
-        page.drawText(fmtFinalVal, { x: xOffsets[4], y, size: 8, font });
-        
-        y -= 15;
-      });
+        const qtd = String(item.quantidade || 1)
+        const preco = Number(item.preco_unitario || 0)
 
-      y -= 5;
-      
-      const globalDesc = Number(budget.desconto_global || 0);
-      const finalTotal = Number(budget.valor_total || (subtotal - globalDesc));
+        const descItem = Number(item.desconto || 0)
+        const finalVal = preco * Number(item.quantidade || 1) - descItem
+
+        subtotal += finalVal
+
+        page.drawText(cod, { x: xOffsets[0], y, size: 8, font: boldFont })
+        page.drawText(desc, { x: xOffsets[1], y, size: 8, font })
+        page.drawText(qtd, { x: xOffsets[2], y, size: 8, font })
+
+        const fmtPreco = new Intl.NumberFormat('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        }).format(preco)
+        const fmtFinalVal = new Intl.NumberFormat('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        }).format(finalVal)
+        page.drawText(fmtPreco, { x: xOffsets[3], y, size: 8, font })
+        page.drawText(fmtFinalVal, { x: xOffsets[4], y, size: 8, font })
+
+        y -= 15
+      })
+
+      y -= 5
+
+      const globalDesc = Number(budget.desconto_global || 0)
+      const finalTotal = Number(budget.valor_total || subtotal - globalDesc)
 
       if (y < 200) {
-          page = pdfDoc.addPage();
-          y = height - 50;
+        page = pdfDoc.addPage()
+        y = height - 50
       }
-      
-      page.drawRectangle({ x: width - 270, y: y - 60, width: 230, height: 70, color: rgb(0.95, 0.95, 0.95) });
 
-      const fmtSubtotal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal);
-      const fmtGlobalDesc = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(globalDesc);
-      const fmtFinalTotal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(finalTotal);
+      page.drawRectangle({
+        x: width - 270,
+        y: y - 60,
+        width: 230,
+        height: 70,
+        color: rgb(0.95, 0.95, 0.95),
+      })
 
-      const rightPadX = width - 56;
+      const fmtSubtotal = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(subtotal)
+      const fmtGlobalDesc = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(globalDesc)
+      const fmtFinalTotal = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(finalTotal)
 
-      page.drawText(`SubTotal:`, { x: width - 250, y: y - 15, size: 10, font });
-      page.drawText(fmtSubtotal, { x: rightPadX - font.widthOfTextAtSize(fmtSubtotal, 10), y: y - 15, size: 10, font });
-      
-      page.drawText(`Desconto:`, { x: width - 250, y: y - 30, size: 10, font });
-      page.drawText(fmtGlobalDesc, { x: rightPadX - font.widthOfTextAtSize(fmtGlobalDesc, 10), y: y - 30, size: 10, font });
-      
-      page.drawText(`Valor Total:`, { x: width - 250, y: y - 48, size: 12, font: boldFont });
-      page.drawText(fmtFinalTotal, { x: rightPadX - boldFont.widthOfTextAtSize(fmtFinalTotal, 12), y: y - 48, size: 12, font: boldFont });
-      
-      y -= 80;
-      page.drawText('Condições de Pagamento:', { x: width - 250, y, size: 8, font });
-      
-      page.drawText(budget.condicoes_pagamento || 'A Combinar', { x: width - 250, y: y - 12, size: 9, font: boldFont });
+      const rightPadX = width - 56
 
-      y -= 40;
-      page.drawText('OBSERVAÇÕES: POLÍTICA DE TROCA / DEVOLUÇÃO:', { x: 40, y, size: 9, font: boldFont });
-      y -= 15;
-      
-      const validadeDate = budget.validade ? new Date(budget.validade) : new Date(new Date(budget.created_at || new Date()).getTime() + 10 * 24 * 60 * 60 * 1000);
-      const validadeStr = validadeDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-      
+      page.drawText(`SubTotal:`, { x: width - 250, y: y - 15, size: 10, font })
+      page.drawText(fmtSubtotal, {
+        x: rightPadX - font.widthOfTextAtSize(fmtSubtotal, 10),
+        y: y - 15,
+        size: 10,
+        font,
+      })
+
+      page.drawText(`Desconto:`, { x: width - 250, y: y - 30, size: 10, font })
+      page.drawText(fmtGlobalDesc, {
+        x: rightPadX - font.widthOfTextAtSize(fmtGlobalDesc, 10),
+        y: y - 30,
+        size: 10,
+        font,
+      })
+
+      page.drawText(`Valor Total:`, {
+        x: width - 250,
+        y: y - 48,
+        size: 12,
+        font: boldFont,
+      })
+      page.drawText(fmtFinalTotal, {
+        x: rightPadX - boldFont.widthOfTextAtSize(fmtFinalTotal, 12),
+        y: y - 48,
+        size: 12,
+        font: boldFont,
+      })
+
+      y -= 80
+      page.drawText('Condições de Pagamento:', {
+        x: width - 250,
+        y,
+        size: 8,
+        font,
+      })
+
+      page.drawText(budget.condicoes_pagamento || 'A Combinar', {
+        x: width - 250,
+        y: y - 12,
+        size: 9,
+        font: boldFont,
+      })
+
+      y -= 40
+      page.drawText('OBSERVAÇÕES: POLÍTICA DE TROCA / DEVOLUÇÃO:', {
+        x: 40,
+        y,
+        size: 9,
+        font: boldFont,
+      })
+      y -= 15
+
+      const validadeDate = budget.validade
+        ? new Date(budget.validade)
+        : new Date(
+            new Date(budget.created_at || new Date()).getTime() +
+              10 * 24 * 60 * 60 * 1000,
+          )
+      const validadeStr = validadeDate.toLocaleDateString('pt-BR', {
+        timeZone: 'UTC',
+      })
+
       // Dynamic Policy Filtering: Include only specific items (originally 1, 4, 6) renumbered to 1, 2, 3
       const obsLines = [
         `1- Este orçamento tem validade até ${validadeStr}.`,
         '2- A LuceNera se reserva no direito de não aceitar trocas e devoluções, de acordo com o Código de Defesa do Consumidor.',
-        '3- O prazo de entrega padrão dos materiais é de 30 dias, a partir da aprovação das fichas técnicas. Pelos materiais especiais, prazo a consultar.'
-      ];
+        '3- O prazo de entrega padrão dos materiais é de 30 dias, a partir da aprovação das fichas técnicas. Pelos materiais especiais, prazo a consultar.',
+      ]
 
-      obsLines.forEach(line => {
-         if (y < 40) {
-            page = pdfDoc.addPage();
-            y = height - 50;
-         }
-         page.drawText(line, { x: 40, y, size: 8, font });
-         y -= 12;
-      });
+      obsLines.forEach((line) => {
+        if (y < 40) {
+          page = pdfDoc.addPage()
+          y = height - 50
+        }
+        page.drawText(line, { x: 40, y, size: 8, font })
+        y -= 12
+      })
 
-      page.drawText('Connect Systems Enterprise Technologies, Inc. All rights reserved.', { x: width / 2 - 120, y: 20, size: 7, font, color: rgb(0.5,0.5,0.5) });
+      page.drawText(
+        'Connect Systems Enterprise Technologies, Inc. All rights reserved.',
+        { x: width / 2 - 120, y: 20, size: 7, font, color: rgb(0.5, 0.5, 0.5) },
+      )
 
-      const pdfBytes = await pdfDoc.save();
+      const pdfBytes = await pdfDoc.save()
       return new Response(pdfBytes, {
-        headers: { ...corsHeaders, 'Content-Type': 'application/pdf' }
-      });
+        headers: { ...corsHeaders, 'Content-Type': 'application/pdf' },
+      })
     }
 
     let query: any
@@ -386,11 +592,16 @@ Deno.serve(async (req: Request) => {
     if (reportType === 'ferias') {
       query = supabase
         .from('ferias')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
-      if (filters.startDate) query = query.gte('data_inicio', filters.startDate.split('T')[0])
-      if (filters.endDate) query = query.lte('data_fim', filters.endDate.split('T')[0])
+      if (filters.startDate)
+        query = query.gte('data_inicio', filters.startDate.split('T')[0])
+      if (filters.endDate)
+        query = query.lte('data_fim', filters.endDate.split('T')[0])
 
       const { data } = await query
       flatData = (data || []).map((d: any) => ({
@@ -404,8 +615,11 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'folha') {
       query = supabase
         .from('folha_pagamento')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
       if (filters.month) query = query.eq('mes', filters.month)
       if (filters.year) query = query.eq('ano', filters.year)
@@ -422,10 +636,14 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'avaliacoes') {
       query = supabase
         .from('avaliacoes')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
-      if (filters.startDate) query = query.gte('data_avaliacao', filters.startDate)
+      if (filters.startDate)
+        query = query.gte('data_avaliacao', filters.startDate)
       if (filters.endDate) query = query.lte('data_avaliacao', filters.endDate)
 
       const { data } = await query
@@ -441,12 +659,19 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'ponto') {
       query = supabase
         .from('controle_ponto')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
       if (filters.month && filters.year) {
-        const start = new Date(filters.year, filters.month - 1, 1).toISOString().split('T')[0]
-        const end = new Date(filters.year, filters.month, 0).toISOString().split('T')[0]
+        const start = new Date(filters.year, filters.month - 1, 1)
+          .toISOString()
+          .split('T')[0]
+        const end = new Date(filters.year, filters.month, 0)
+          .toISOString()
+          .split('T')[0]
         query = query.gte('data', start).lte('data', end)
       }
 
@@ -464,7 +689,9 @@ Deno.serve(async (req: Request) => {
 
     if (format === 'csv') {
       const csvStr = toCSV(flatData)
-      return new Response(csvStr, { headers: { ...corsHeaders, 'Content-Type': 'text/csv' } })
+      return new Response(csvStr, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/csv' },
+      })
     } else {
       const pdfBytes = await toPDF(flatData, reportType)
       return new Response(pdfBytes, {
@@ -472,7 +699,7 @@ Deno.serve(async (req: Request) => {
       })
     }
   } catch (error: any) {
-    console.error('Edge Function Error:', error);
+    console.error('Edge Function Error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

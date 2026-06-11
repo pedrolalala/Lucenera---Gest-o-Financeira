@@ -10,6 +10,14 @@ export function useOptions() {
   const [projetos, setProjetos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
+  const fetchProjetos = async () => {
+    const { data } = await supabase
+      .from('projetos')
+      .select('id, codigo, nome, arquivado')
+      .order('codigo', { ascending: false, nullsFirst: false })
+    if (data) setProjetos(data)
+  }
+
   useEffect(() => {
     async function load() {
       try {
@@ -107,5 +115,6 @@ export function useOptions() {
     produtos,
     projetos,
     loading,
+    fetchProjetos,
   }
 }

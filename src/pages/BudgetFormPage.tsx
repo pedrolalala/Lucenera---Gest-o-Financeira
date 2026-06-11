@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import { ProjectCreateModal } from '@/components/ProjectCreateModal'
 import {
   Card,
   CardContent,
@@ -110,6 +111,7 @@ export default function BudgetFormPage() {
 
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
   const [isImporting, setIsImporting] = useState(false)
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const {
     empresas,
     clientes,
@@ -118,6 +120,7 @@ export default function BudgetFormPage() {
     produtos,
     projetos,
     loading: optionsLoading,
+    fetchProjetos,
   } = useOptions()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoadingBudget, setIsLoadingBudget] = useState(isEditing)
@@ -642,27 +645,40 @@ export default function BudgetFormPage() {
                         <span className="text-red-500">*</span>
                       </FormLabel>
                       <FormControl>
-                        <SearchableSelect
-                          options={projetos
-                            .filter(
-                              (p) =>
-                                !p.arquivado ||
-                                (isEditing &&
-                                  budgetToEdit?.projeto_id === p.id),
-                            )
-                            .map((p) => ({
-                              value: p.codigo,
-                              label: `${p.codigo} - ${p.nome || 'Sem nome'}`,
-                              searchTerms: [p.codigo, p.nome].filter(
-                                Boolean,
-                              ) as string[],
-                            }))}
-                          value={field.value}
-                          onChange={field.onChange}
-                          placeholder="Selecione um projeto..."
-                          searchPlaceholder="Buscar código do projeto..."
-                          emptyText="Nenhum projeto encontrado."
-                        />
+                        <div className="flex gap-2 items-center">
+                          <div className="flex-1">
+                            <SearchableSelect
+                              options={projetos
+                                .filter(
+                                  (p) =>
+                                    !p.arquivado ||
+                                    (isEditing &&
+                                      budgetToEdit?.projeto_id === p.id),
+                                )
+                                .map((p) => ({
+                                  value: p.codigo,
+                                  label: `${p.codigo} - ${p.nome || 'Sem nome'}`,
+                                  searchTerms: [p.codigo, p.nome].filter(
+                                    Boolean,
+                                  ) as string[],
+                                }))}
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder="Selecione um projeto..."
+                              searchPlaceholder="Buscar código do projeto..."
+                              emptyText="Nenhum projeto encontrado."
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setIsProjectModalOpen(true)}
+                            title="Criar Novo Projeto"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1226,6 +1242,19 @@ export default function BudgetFormPage() {
               </div>
             </CardContent>
           </Card>
+
+          <ProjectCreateModal
+            open={isProjectModalOpen}
+            onOpenChange={setIsProjectModalOpen}
+            onSuccess={async (newProj: any) => {
+              if (fetchProjetos) await fetchProjetos()
+              form.setValue('projeto_codigo', newProj.codigo, {
+                shouldValidate: true,
+              })
+            }}
+            clientes={clientes}
+            arquitetos={arquitetos}
+          />
 
           <div className="flex justify-end mt-6">
             <div className="relative overflow-hidden rounded-md inline-block">
