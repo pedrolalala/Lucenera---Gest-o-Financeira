@@ -2,13 +2,14 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
+import { normalizeStatus } from '@/lib/utils'
 
 export function ApprovalsTab() {
   const { budgets, loading, initialized } = useBudgetStore()
   const navigate = useNavigate()
 
   const approvedBudgets = useMemo(() => {
-    return budgets.filter((b) => b.status === 'aprovado')
+    return budgets.filter((b) => normalizeStatus(b.status) === 'aprovado')
   }, [budgets])
 
   const handleEdit = (budget: Budget) => {
