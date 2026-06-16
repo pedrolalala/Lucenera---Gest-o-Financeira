@@ -273,6 +273,88 @@ export default function BudgetFormPage() {
 
   const valorTotal = valorSubtotal * (1 - descontoGlobalPerc / 100)
 
+  const handleProjectSelect = async (codigo: string) => {
+    if (!codigo) return
+
+    try {
+      const { data: projeto, error } = await supabase
+        .from('projetos')
+        .select('*')
+        .eq('codigo', codigo)
+        .single()
+
+      if (error || !projeto) return
+
+      if (projeto.empresa_id) {
+        form.setValue('empresa_id', projeto.empresa_id, {
+          shouldValidate: true,
+          shouldDirty: true,
+        })
+      }
+
+      if (projeto.cliente_id) {
+        form.setValue('cliente_id', projeto.cliente_id, {
+          shouldValidate: true,
+          shouldDirty: true,
+        })
+      }
+
+      if (projeto.arquiteto_id) {
+        form.setValue('arquiteto_id', projeto.arquiteto_id, {
+          shouldValidate: true,
+          shouldDirty: true,
+        })
+      }
+
+      const targetVendedorId = projeto.vendedor_id || projeto.responsavel_id
+      if (targetVendedorId) {
+        form.setValue('vendedor_id', targetVendedorId, {
+          shouldValidate: true,
+          shouldDirty: true,
+        })
+
+        if (!sortedVendedores.some((v) => v.id === targetVendedorId)) {
+          let nome = ''
+          const { data: vData } = await supabase
+            .from('funcionarios')
+            .select('nome')
+            .eq('id', targetVendedorId)
+            .maybeSingle()
+
+          if (vData?.nome) {
+            nome = vData.nome
+          } else {
+            const { data: uData } = await supabase
+              .from('usuarios')
+              .select('nome')
+              .eq('id', targetVendedorId)
+              .maybeSingle()
+
+            if (uData?.nome) {
+              nome = uData.nome
+            } else {
+              const { data: pData } = await supabase
+                .from('profiles')
+                .select('nome')
+                .eq('id', targetVendedorId)
+                .maybeSingle()
+
+              if (pData?.nome) nome = pData.nome
+            }
+          }
+          if (nome) setAssignedVendedorNome(nome)
+        }
+      }
+
+      form.setValue('data_emissao', new Date(), {
+        shouldValidate: true,
+        shouldDirty: true,
+      })
+    } catch (err) {
+      console.error('Erro ao buscar dados do projeto:', err)
+    }
+  }
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       setIsSubmitting(true)
@@ -666,7 +748,10 @@ export default function BudgetFormPage() {
                                   ) as string[],
                                 }))}
                               value={field.value}
-                              onChange={field.onChange}
+                              onChange={(val) => {
+                                field.onChange(val)
+                                handleProjectSelect(val)
+                              }}
                               placeholder="Selecione um projeto..."
                               searchPlaceholder="Buscar código do projeto..."
                               emptyText="Nenhum projeto encontrado."
@@ -1267,6 +1352,7 @@ export default function BudgetFormPage() {
               form.setValue('projeto_codigo', newProj.codigo, {
                 shouldValidate: true,
               })
+              handleProjectSelect(newProj.codigo)
             }}
             clientes={clientes}
             arquitetos={arquitetos}
