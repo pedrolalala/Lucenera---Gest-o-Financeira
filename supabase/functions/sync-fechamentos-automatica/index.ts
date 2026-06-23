@@ -72,28 +72,19 @@ Deno.serve(async (req: Request) => {
         const limite = Math.min(registros.length, 10)
         for (let i = 0; i < limite; i++) {
           const numParcela = i + 1
-          const parcelaExistente = parcelasExistentes?.find(
-            (p) => p.numero_parcela === numParcela,
-          )
+          const parcelaExistente = parcelasExistentes?.find((p) => p.numero_parcela === numParcela)
 
           const payload = {
             projeto_id: projeto.id,
             numero_parcela: numParcela,
-            valor: registros[i].valor_fechado
-              ? parseFloat(registros[i].valor_fechado)
-              : 0,
+            valor: registros[i].valor_fechado ? parseFloat(registros[i].valor_fechado) : 0,
             data_fechamento: registros[i].data_fechamento || null,
           }
 
           if (parcelaExistente) {
-            await supabase
-              .from('projeto_parcelas')
-              .update(payload)
-              .eq('id', parcelaExistente.id)
+            await supabase.from('projeto_parcelas').update(payload).eq('id', parcelaExistente.id)
           } else {
-            await supabase
-              .from('projeto_parcelas')
-              .insert([{ ...payload, status: 'pendente' }])
+            await supabase.from('projeto_parcelas').insert([{ ...payload, status: 'pendente' }])
           }
         }
         projetosAtualizados++
