@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import { AsyncProductSelect } from '@/components/AsyncProductSelect'
 import { ProjectCreateModal } from '@/components/ProjectCreateModal'
 import { ClientCreateModal } from '@/components/ClientCreateModal'
 import {
@@ -131,6 +132,15 @@ export default function BudgetFormPage() {
   const [assignedVendedorNome, setAssignedVendedorNome] = useState<
     string | null
   >(null)
+  const [projectDetails, setProjectDetails] = useState<{
+    nome?: string
+    responsavel_nome?: string
+    arquiteto_nome?: string
+    cliente_nome?: string
+    responsavel_sistema_nome?: string
+    empresa_nome?: string
+    isLoading?: boolean
+  } | null>(null)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -274,7 +284,12 @@ export default function BudgetFormPage() {
   const valorTotal = valorSubtotal * (1 - descontoGlobalPerc / 100)
 
   const handleProjectSelect = async (codigo: string) => {
-    if (!codigo) return
+    if (!codigo) {
+      setProjectDetails(null)
+      return
+    }
+
+    setProjectDetails({ isLoading: true })
 
     try {
       const { data: projeto, error } = await supabase
@@ -283,7 +298,51 @@ export default function BudgetFormPage() {
         .eq('codigo', codigo)
         .single()
 
-      if (error || !projeto) return
+      if (error || !projeto) {
+        setProjectDetails(null)
+        return
+      }
+
+      let clienteNome = 'Não encontrado'
+      let empresaNome = 'Não encontrado'
+      let responsavelSisNome = 'Não encontrado'
+
+      if (projeto.cliente_id) {
+        const { data: cli } = await supabase
+          .from('contatos')
+          .select('nome')
+          .eq('id', projeto.cliente_id)
+          .single()
+        if (cli) clienteNome = cli.nome
+      }
+
+      if (projeto.empresa_id) {
+        const { data: emp } = await supabase
+          .from('empresas')
+          .select('nome')
+          .eq('id', projeto.empresa_id)
+          .single()
+        if (emp) empresaNome = emp.nome
+      }
+
+      if (projeto.responsavel_id) {
+        const { data: usr } = await supabase
+          .from('usuarios')
+          .select('nome')
+          .eq('id', projeto.responsavel_id)
+          .single()
+        if (usr) responsavelSisNome = usr.nome
+      }
+
+      setProjectDetails({
+        nome: projeto.nome,
+        responsavel_nome: projeto.responsavel_nome || 'Não preenchido',
+        arquiteto_nome: projeto['Nome Arquiteto'] || 'Não preenchido',
+        cliente_nome: clienteNome,
+        responsavel_sistema_nome: responsavelSisNome,
+        empresa_nome: empresaNome,
+        isLoading: false,
+      })
 
       if (projeto.empresa_id) {
         form.setValue('empresa_id', projeto.empresa_id, {
@@ -352,6 +411,7 @@ export default function BudgetFormPage() {
       })
     } catch (err) {
       console.error('Erro ao buscar dados do projeto:', err)
+      setProjectDetails(null)
     }
   }
 
@@ -607,40 +667,6 @@ export default function BudgetFormPage() {
         shouldDirty: true,
         shouldTouch: true,
       })
-      return
-    }
-
-    const isRevenda = val && !val.includes('-') // UUIDs contain hyphens
-    let precoVenda = 0
-
-    if (isRevenda) {
-      const { data: revenda } = await supabase
-        .from('revenda_ubiqua')
-        .select('valor_revenda')
-        .eq('id', val)
-        .single()
-      if (revenda) precoVenda = Number(revenda.valor_revenda)
-    } else {
-      const { data: prod } = await supabase
-        .from('produtos')
-        .select('preco_venda')
-        .eq('id', val)
-        .single()
-      if (prod) precoVenda = Number(prod.preco_venda)
-    }
-
-    if (precoVenda > 0) {
-      form.setValue(`itens.${index}.preco_unitario`, precoVenda, {
-        shouldValidate: true,
-        shouldDirty: true,
-        shouldTouch: true,
-      })
-    } else {
-      form.setValue(`itens.${index}.preco_unitario`, 0, {
-        shouldValidate: true,
-        shouldDirty: true,
-        shouldTouch: true,
-      })
     }
   }
 
@@ -782,6 +808,68 @@ export default function BudgetFormPage() {
                     </FormItem>
                   )}
                 />
+
+                {projectDetails && (
+                  <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-100 text-sm space-y-2 mb-4 animate-in fade-in zoom-in-95">
+                    {projectDetails.isLoading ? (
+                      <div className="flex items-center gap-2 text-slate-500 py-2">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Carregando
+                        detalhes do projeto...
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
+                        <div>
+                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                            Nome do Projeto
+                          </p>
+                          <p className="font-medium text-slate-900">
+                            {projectDetails.nome || '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                            Empresa
+                          </p>
+                          <p className="font-medium text-slate-900">
+                            {projectDetails.empresa_nome}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                            Cliente
+                          </p>
+                          <p className="font-medium text-slate-900">
+                            {projectDetails.cliente_nome}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                            Arquiteto
+                          </p>
+                          <p className="font-medium text-slate-900">
+                            {projectDetails.arquiteto_nome}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                            Responsável do Projeto
+                          </p>
+                          <p className="font-medium text-slate-900">
+                            {projectDetails.responsavel_nome}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                            Responsável (Sistema)
+                          </p>
+                          <p className="font-medium text-slate-900">
+                            {projectDetails.responsavel_sistema_nome}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <FormField
                   control={form.control}
@@ -1095,25 +1183,23 @@ export default function BudgetFormPage() {
                                 Produto
                               </FormLabel>
                               <FormControl>
-                                <SearchableSelect
-                                  options={produtos.map((p) => ({
-                                    value: p.id,
-                                    label: p.nome,
-                                    searchTerms: [
-                                      p.sku,
-                                      p.referencia,
-                                      p.codigo_legado
-                                        ? String(p.codigo_legado)
-                                        : '',
-                                    ].filter(Boolean),
-                                  }))}
+                                <AsyncProductSelect
                                   value={f.value}
                                   onChange={(val) =>
                                     handleProductChange(index, val)
                                   }
+                                  onProductSelect={(prod) => {
+                                    form.setValue(
+                                      `itens.${index}.preco_unitario`,
+                                      prod.preco_venda || 0,
+                                      {
+                                        shouldValidate: true,
+                                        shouldDirty: true,
+                                        shouldTouch: true,
+                                      },
+                                    )
+                                  }}
                                   placeholder="Buscar produto..."
-                                  searchPlaceholder="Buscar por nome, sku..."
-                                  emptyText="Produto não encontrado."
                                 />
                               </FormControl>
                               <FormMessage />
