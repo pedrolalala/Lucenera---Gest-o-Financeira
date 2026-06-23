@@ -76,6 +76,13 @@ const formSchema = z.object({
     .max(100, 'O desconto não pode ser maior que 100%')
     .default(0),
   forma_pagamento: z.string().optional().nullable(),
+  parcelas: z.coerce
+    .number()
+    .int('Deve ser um valor inteiro')
+    .min(1)
+    .max(120)
+    .optional()
+    .default(1),
   observacoes: z.string().optional().nullable(),
   validade: z.date().optional().nullable(),
   itens: z
@@ -154,6 +161,7 @@ export default function BudgetFormPage() {
       data_emissao: new Date(),
       desconto_global: 0,
       forma_pagamento: '',
+      parcelas: 1,
       observacoes: '',
       validade: null,
       itens: [],
@@ -235,6 +243,12 @@ export default function BudgetFormPage() {
             if (pData) projetoCodigo = pData.codigo
           }
 
+          let parsedParcelas = 1
+          if (budget.condicoes_pagamento) {
+            const num = parseInt(budget.condicoes_pagamento.replace(/\D/g, ''))
+            if (!isNaN(num) && num > 0) parsedParcelas = num
+          }
+
           setBudgetToEdit(budget)
           form.reset({
             empresa_id: budget.empresa_id,
@@ -245,6 +259,7 @@ export default function BudgetFormPage() {
             status: budget.status || 'Aguardando Aprovação',
             desconto_global: budget.desconto_global || 0,
             forma_pagamento: budget.forma_pagamento || '',
+            parcelas: parsedParcelas,
             observacoes: budget.observacoes || '',
             data_emissao: budget.data_emissao
               ? new Date(budget.data_emissao)
@@ -454,7 +469,11 @@ export default function BudgetFormPage() {
         status: values.status,
         desconto_global: values.desconto_global,
         forma_pagamento: values.forma_pagamento || null,
-        condicoes_pagamento: null,
+        condicoes_pagamento: ['boleto', 'cartao'].includes(
+          values.forma_pagamento || '',
+        )
+          ? `${values.parcelas}x`
+          : null,
         observacoes: values.observacoes,
         data_emissao: values.data_emissao.toISOString(),
         validade: values.validade
@@ -474,8 +493,12 @@ export default function BudgetFormPage() {
       // Update store budgets list so table is updated without hard refresh
       await fetchBudgets()
       navigate('/budgets')
-    } catch (error) {
-      toast.error('Falha ao salvar orçamento')
+    } catch (error: any) {
+      console.error(error)
+      toast.error(
+        error.message ||
+          'Falha ao salvar orçamento. Verifique os dados e tente novamente.',
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -603,6 +626,12 @@ export default function BudgetFormPage() {
       if (formaPgto.includes('transferencia')) formaPgto = 'pix'
       else if (!validFormas.includes(formaPgto)) formaPgto = ''
 
+      let parsedParcelas = 1
+      if (parsed.condicoes_pagamento) {
+        const num = parseInt(parsed.condicoes_pagamento.replace(/\D/g, ''))
+        if (!isNaN(num) && num > 0) parsedParcelas = num
+      }
+
       form.reset({
         ...form.getValues(),
         empresa_id: empresaId,
@@ -612,6 +641,7 @@ export default function BudgetFormPage() {
         status: parsed.status || 'Aguardando Aprovação',
         desconto_global: parsed.desconto_global || 0,
         forma_pagamento: formaPgto,
+        parcelas: parsedParcelas,
         observacoes: parsed.observacoes || '',
       })
 
@@ -1344,6 +1374,32 @@ export default function BudgetFormPage() {
                       </FormItem>
                     )}
                   />
+
+                  {['boleto', 'cartao'].includes(
+                    form.watch('forma_pagamento') || '',
+                  ) && (
+                    <FormField
+                      control={form.control}
+                      name="parcelas"
+                      render={({ field }) => (
+                        <FormItem className="animate-in fade-in slide-in-from-top-2">
+                          <FormLabel>Quantidade de Parcelas</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="1"
+                              step="1"
+                              {...field}
+                              onChange={(e) =>
+                                field.onChange(parseInt(e.target.value) || 1)
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <FormField
                     control={form.control}

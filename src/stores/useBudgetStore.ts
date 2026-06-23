@@ -131,7 +131,11 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       .insert([finalBudget])
       .select()
       .single()
-    if (error) throw error
+
+    if (error) {
+      console.error('Error inserting budget:', error)
+      throw new Error(error.message || 'Erro ao criar orçamento.')
+    }
 
     if (items && items.length > 0) {
       const itemsToInsert = items.map((i) => ({
@@ -146,7 +150,13 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       const { error: itemsError } = await supabase
         .from('orcamento_itens')
         .insert(itemsToInsert)
-      if (itemsError) throw itemsError
+
+      if (itemsError) {
+        console.error('Error inserting budget items:', itemsError)
+        throw new Error(
+          itemsError.message || 'Erro ao inserir itens do orçamento.',
+        )
+      }
     }
 
     await get().fetchBudgets()
@@ -157,7 +167,11 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       .from('orcamentos')
       .update(budget)
       .eq('id', id)
-    if (error) throw error
+
+    if (error) {
+      console.error('Error updating budget:', error)
+      throw new Error(error.message || 'Erro ao atualizar orçamento.')
+    }
 
     await supabase.from('orcamento_itens').delete().eq('orcamento_id', id)
 
@@ -174,7 +188,13 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       const { error: itemsError } = await supabase
         .from('orcamento_itens')
         .insert(itemsToInsert)
-      if (itemsError) throw itemsError
+
+      if (itemsError) {
+        console.error('Error updating budget items:', itemsError)
+        throw new Error(
+          itemsError.message || 'Erro ao atualizar itens do orçamento.',
+        )
+      }
     }
 
     await get().fetchBudgets()
