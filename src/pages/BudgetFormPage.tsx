@@ -564,7 +564,9 @@ export default function BudgetFormPage() {
                 (i.custom_id &&
                   (p.sku === i.custom_id || p.referencia === i.custom_id)) ||
                 (i.descricao &&
-                  p.nome.toLowerCase().includes(i.descricao.toLowerCase())),
+                  (p.originalNome || p.nome)
+                    .toLowerCase()
+                    .includes(i.descricao.toLowerCase())),
             )
             if (found) produtoId = found.id
           }
@@ -608,19 +610,27 @@ export default function BudgetFormPage() {
       return
     }
 
-    const { data: prod } = await supabase
-      .from('produtos')
-      .select('preco_venda')
-      .eq('id', val)
-      .single()
+    const isRevenda = val && !val.includes('-') // UUIDs contain hyphens
+    let precoVenda = 0
 
-    if (
-      prod &&
-      prod.preco_venda !== null &&
-      prod.preco_venda !== undefined &&
-      Number(prod.preco_venda) > 0
-    ) {
-      form.setValue(`itens.${index}.preco_unitario`, Number(prod.preco_venda), {
+    if (isRevenda) {
+      const { data: revenda } = await supabase
+        .from('revenda_ubiqua')
+        .select('valor_revenda')
+        .eq('id', val)
+        .single()
+      if (revenda) precoVenda = Number(revenda.valor_revenda)
+    } else {
+      const { data: prod } = await supabase
+        .from('produtos')
+        .select('preco_venda')
+        .eq('id', val)
+        .single()
+      if (prod) precoVenda = Number(prod.preco_venda)
+    }
+
+    if (precoVenda > 0) {
+      form.setValue(`itens.${index}.preco_unitario`, precoVenda, {
         shouldValidate: true,
         shouldDirty: true,
         shouldTouch: true,

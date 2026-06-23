@@ -14,8 +14,17 @@ export function useOptions() {
     const { data } = await supabase
       .from('projetos')
       .select('id, codigo, nome, arquivado')
+      .limit(50000)
       .order('codigo', { ascending: false, nullsFirst: false })
-    if (data) setProjetos(data)
+    if (data) {
+      setProjetos(
+        data.map((p: any) => ({
+          ...p,
+          originalNome: p.nome,
+          nome: p.codigo ? `[${p.codigo}] ${p.nome}` : p.nome,
+        })),
+      )
+    }
   }
 
   const fetchClientes = async () => {
@@ -23,6 +32,7 @@ export function useOptions() {
       .from('contatos')
       .select('id, nome, nome_empresa, codigo_legado')
       .eq('tipo', 'cliente')
+      .limit(50000)
       .order('codigo_legado', { ascending: false, nullsFirst: false })
       .order('nome')
     if (data) setClientes(data)
@@ -31,31 +41,41 @@ export function useOptions() {
   useEffect(() => {
     async function load() {
       try {
-        const [empRes, cliRes, arqRes, funcRes, prodRes, projRes] =
+        const [empRes, cliRes, arqRes, funcRes, prodRes, revendaRes, projRes] =
           await Promise.all([
             supabase.from('empresas').select('id, nome').order('nome'),
             supabase
               .from('contatos')
               .select('id, nome, nome_empresa, codigo_legado')
               .eq('tipo', 'cliente')
+              .limit(50000)
               .order('codigo_legado', { ascending: false, nullsFirst: false })
               .order('nome'),
             supabase
               .from('contatos')
               .select('id, nome')
               .eq('tipo', 'arquiteto')
+              .limit(10000)
               .order('nome'),
             supabase
               .from('funcionarios')
               .select('id, nome')
-              .eq('status', 'Ativo'),
+              .eq('status', 'Ativo')
+              .limit(10000),
             supabase
               .from('produtos')
               .select('id, nome, preco_venda, sku, referencia, codigo_legado')
+              .limit(50000)
               .order('nome'),
+            supabase
+              .from('revenda_ubiqua')
+              .select('id, referencia, descricao, valor_revenda')
+              .limit(50000)
+              .order('descricao'),
             supabase
               .from('projetos')
               .select('id, codigo, nome, arquivado')
+              .limit(50000)
               .order('codigo', { ascending: false, nullsFirst: false }),
           ])
 
@@ -106,8 +126,33 @@ export function useOptions() {
 
           setVendedores(sorted)
         }
-        if (prodRes.data) setProdutos(prodRes.data)
-        if (projRes.data) setProjetos(projRes.data)
+        if (prodRes.data || revendaRes?.data) {
+          const normalProds = (prodRes.data || []).map((p: any) => ({
+            ...p,
+            originalNome: p.nome,
+            nome: `${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
+            source: 'produtos',
+          }))
+          const revendaProds = (revendaRes?.data || []).map((r: any) => ({
+            id: String(r.id),
+            nome: `${r.descricao}${r.referencia ? ` | Ref: ${r.referencia}` : ''} [Ubiqua]`,
+            preco_venda: r.valor_revenda,
+            sku: r.referencia,
+            referencia: r.referencia,
+            originalNome: r.descricao,
+            source: 'revenda_ubiqua',
+          }))
+          setProdutos([...normalProds, ...revendaProds])
+        }
+        if (projRes.data) {
+          setProjetos(
+            projRes.data.map((p: any) => ({
+              ...p,
+              originalNome: p.nome,
+              nome: p.codigo ? `[${p.codigo}] ${p.nome}` : p.nome,
+            })),
+          )
+        }
       } catch (error) {
         console.error('Error loading options', error)
       } finally {
