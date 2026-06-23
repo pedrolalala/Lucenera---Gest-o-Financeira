@@ -14,7 +14,24 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { format } from 'date-fns'
-import { Edit, Trash2, Printer, Loader2, CheckCircle } from 'lucide-react'
+import {
+  Edit,
+  Trash2,
+  Printer,
+  Loader2,
+  CheckCircle,
+  FileText,
+  RefreshCw,
+  AlertTriangle,
+} from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
@@ -34,19 +51,69 @@ export function BudgetTableRow({
   budget,
   onEdit,
 }: BudgetTableRowProps) {
-  const { deleteBudget, updateBudgetStatus } = useBudgetStore()
+  const { deleteBudget, approveBudgetAndMigrate } = useBudgetStore()
   const [isApproving, setIsApproving] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
 
   const normalizedStatus = normalizeStatus(status)
 
+  const hasSpecialItemsWithoutPrice = budget.itens?.some(
+    (i) => Number(i.preco_unitario) === 0,
+  )
+
+  const subtotalItens =
+    budget.itens?.reduce((acc, item) => {
+      return (
+        acc +
+        item.quantidade * item.preco_unitario * (1 - (item.desconto || 0) / 100)
+      )
+    }, 0) || 0
+  const valorLiquido = subtotalItens * (1 - (budget.desconto_global || 0) / 100)
+
+  const cfopItems =
+    budget.itens?.map((item) => {
+      const isST = (item.produto?.porc_st || 0) > 0
+      const cfop = isST ? '5405' : '5102'
+      const sub =
+        item.quantidade * item.preco_unitario * (1 - (item.desconto || 0) / 100)
+      return {
+        nome: item.produto?.nome || item.custom_id || 'Item',
+        cfop,
+        subtotal: sub * (1 - (budget.desconto_global || 0) / 100),
+      }
+    }) || []
+
   const handleApprove = async () => {
+    if (hasSpecialItemsWithoutPrice) {
+      toast.error(
+        'Atenção: Peças especiais detectadas sem preço. Solicite a precificação manual para Débora ou Vinícius antes de prosseguir.',
+        {
+          duration: 8000,
+        },
+      )
+      return
+    }
+
     try {
       setIsApproving(true)
-      await updateBudgetStatus(budgetId, 'aprovado')
-      toast.success('Orçamento aprovado com sucesso!')
+      await approveBudgetAndMigrate(budget)
+      toast.success(
+        `Orçamento aprovado! Projeto ${budget.projeto?.codigo || budget.projeto_id} pronto para emissão de NF e Boletos.`,
+      )
     } catch (error: any) {
       toast.error('Erro ao aprovar orçamento', { description: error.message })
+    } finally {
+      setIsApproving(false)
+    }
+  }
+
+  const handleSync = async () => {
+    try {
+      setIsApproving(true)
+      await approveBudgetAndMigrate(budget)
+      toast.success('Sincronização concluída com sucesso.')
+    } catch (error: any) {
+      toast.error('Erro ao sincronizar', { description: error.message })
     } finally {
       setIsApproving(false)
     }
@@ -168,21 +235,125 @@ export function BudgetTableRow({
       </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
+                title="Resumo Fiscal (NF 4740)"
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>
+                  Resumo Fiscal (NF 4740 - Roberta Lucchesi)
+                </DialogTitle>
+                <DialogDescription>
+                  Consolidação de dados para emissão de nota fiscal.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">
+                      Valor Bruto dos Itens
+                    </p>
+                    <p className="text-lg font-semibold">
+                      {formatCurrency(subtotalItens)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">
+                      Valor Líquido (com Desconto Global)
+                    </p>
+                    <p className="text-lg font-semibold text-green-600">
+                      {formatCurrency(valorLiquido)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border rounded-md">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100 text-gray-600 text-left">
+                      <tr>
+                        <th className="p-2 font-medium">Item</th>
+                        <th className="p-2 font-medium">CFOP</th>
+                        <th className="p-2 font-medium text-right">
+                          Subtotal Líquido
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cfopItems.map((ci, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="p-2">{ci.nome}</td>
+                          <td className="p-2 font-mono">
+                            <span
+                              className={cn(
+                                'px-2 py-1 rounded text-xs font-semibold',
+                                ci.cfop === '5405'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : 'bg-blue-100 text-blue-800',
+                              )}
+                            >
+                              {ci.cfop}
+                            </span>
+                          </td>
+                          <td className="p-2 text-right">
+                            {formatCurrency(ci.subtotal)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           {normalizedStatus === 'aguardando_aprovacao' && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-              title="Aprovar"
+              className={cn(
+                'h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50',
+                hasSpecialItemsWithoutPrice &&
+                  'text-amber-500 hover:text-amber-600 hover:bg-amber-50',
+              )}
+              title={
+                hasSpecialItemsWithoutPrice
+                  ? 'Atenção: Peças sem preço'
+                  : 'Aprovar'
+              }
               onClick={handleApprove}
               disabled={isApproving}
             >
               {isApproving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
+              ) : hasSpecialItemsWithoutPrice ? (
+                <AlertTriangle className="h-4 w-4" />
               ) : (
                 <CheckCircle className="h-4 w-4" />
               )}
               <span className="sr-only">Aprovar</span>
+            </Button>
+          )}
+
+          {normalizedStatus === 'aprovado' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+              title="Sincronizar Projetos/Financeiro"
+              onClick={handleSync}
+              disabled={isApproving}
+            >
+              <RefreshCw
+                className={cn('h-4 w-4', isApproving && 'animate-spin')}
+              />
             </Button>
           )}
 

@@ -10,7 +10,7 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
     // Fetch boletos ready for remittance
@@ -22,11 +22,17 @@ Deno.serve(async (req: Request) => {
     if (error) throw error
 
     if (!boletos || boletos.length === 0) {
-      return new Response(JSON.stringify({ message: 'Nenhum boleto pronto para remessa.', processed: 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(
+        JSON.stringify({
+          message: 'Nenhum boleto pronto para remessa.',
+          processed: 0,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
 
     // Update to 'Aguardando Retorno'
-    const ids = boletos.map(b => b.id)
+    const ids = boletos.map((b) => b.id)
     await supabaseClient
       .from('boletos')
       .update({ status: 'Aguardando Retorno' })
@@ -34,14 +40,20 @@ Deno.serve(async (req: Request) => {
 
     // Send mock notification to Teams
     await supabaseClient.functions.invoke('sync-teams', {
-      body: { 
+      body: {
         message: `Arquivo de Remessa processado com ${ids.length} boletos. Aguardando retorno bancário.`,
-        to: 'Financeiro'
-      }
+        to: 'Financeiro',
+      },
     })
 
-    return new Response(JSON.stringify({ success: true, processed: ids.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(
+      JSON.stringify({ success: true, processed: ids.length }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 })

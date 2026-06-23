@@ -1,12 +1,18 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
+import { supabase } from '@/lib/supabase/client'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
-import { normalizeStatus } from '@/lib/utils'
+import { normalizeStatus, cn } from '@/lib/utils'
 
 export function ApprovalsTab() {
-  const { budgets, loading, initialized } = useBudgetStore()
+  const { budgets, loading, initialized, approveBudgetAndMigrate } =
+    useBudgetStore()
   const navigate = useNavigate()
+  const [isSyncing, setIsSyncing] = useState(false)
 
   const approvedBudgets = useMemo(() => {
     return budgets.filter((b) => normalizeStatus(b.status) === 'aprovado')
@@ -14,6 +20,34 @@ export function ApprovalsTab() {
 
   const handleEdit = (budget: Budget) => {
     navigate(`/budgets/${budget.id}`)
+  }
+
+  const handleSyncAll = async () => {
+    setIsSyncing(true)
+    let synced = 0
+    try {
+      for (const b of approvedBudgets) {
+        if (!b.projeto_id) continue
+        const { data } = await supabase
+          .from('projeto_itens')
+          .select('id')
+          .eq('projeto_id', b.projeto_id)
+          .limit(1)
+        if (!data || data.length === 0) {
+          await approveBudgetAndMigrate(b)
+          synced++
+        }
+      }
+      if (synced > 0) {
+        toast.success(`${synced} orçamentos sincronizados com sucesso.`)
+      } else {
+        toast.info('Nenhum orçamento precisava de sincronização.')
+      }
+    } catch (e: any) {
+      toast.error('Erro na sincronização', { description: e.message })
+    } finally {
+      setIsSyncing(false)
+    }
   }
 
   if (loading && !initialized) {
@@ -25,7 +59,20 @@ export function ApprovalsTab() {
   }
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in space-y-4">
+      <div className="flex justify-end">
+        <Button
+          onClick={handleSyncAll}
+          disabled={isSyncing}
+          variant="outline"
+          className="shadow-sm"
+        >
+          <RefreshCw
+            className={cn('w-4 h-4 mr-2', isSyncing && 'animate-spin')}
+          />
+          Sincronizar Pendências
+        </Button>
+      </div>
       <BudgetsTable data={approvedBudgets} onEdit={handleEdit} />
     </div>
   )

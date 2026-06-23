@@ -117,7 +117,7 @@ export function AsyncProductSelect({
               source: 'revenda_ubiqua',
             }))
         } else {
-          const cleanTerm = debouncedSearchTerm.trim()
+          const cleanTerm = debouncedSearchTerm.trim().replace(/,/g, '')
           const [pRes, rRes] = await Promise.all([
             supabase
               .from('produtos')
