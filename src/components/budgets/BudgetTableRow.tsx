@@ -35,7 +35,7 @@ import {
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
-import { normalizeStatus } from '@/lib/utils'
+import { normalizeStatus, cn } from '@/lib/utils'
 import logoImg from '@/assets/lucenera-vertical-527dd.png'
 
 interface BudgetTableRowProps {
