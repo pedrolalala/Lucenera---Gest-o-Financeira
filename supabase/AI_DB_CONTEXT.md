@@ -79,6 +79,16 @@ RPCs/funções relevantes:
 - `validado`
 - `orcamento_id`
 
+`projeto_parcelas` possui `orcamento_id` para rastrear a origem do fluxo aprovado. Não possui `venda_id`.
+
+`projetos` possui, entre outras:
+
+- `id`
+- `codigo`
+- `nome`
+- `empresa_id`
+- `valor_total`
+
 ## Decisões de negócio
 
 - Somente orçamento aprovado gera `projeto_itens`.
@@ -88,6 +98,9 @@ RPCs/funções relevantes:
 - A RPC deve preparar itens aprovados, parcelas e boletos.
 - O financeiro deve exibir orçamento, projeto e cliente por relacionamento a partir de `orcamento_id`.
 - Vencimentos vêm da forma de pagamento e prazo registrados no orçamento; o financeiro valida, não presume manualmente.
+- `orcamentos.empresa_id` aponta para `empresas.id`, ou seja, empresa do grupo Lucenera responsável pela operação. Não confundir com a empresa/PJ de um cliente, fornecedor ou arquiteto, que é representada como registro em `contatos` e pode ser vinculada por `contatos.empresa_id -> contatos.id`.
+- Boletos gerados pela aprovação devem preencher `boletos.orcamento_id`. A coluna `boletos.projeto_id` foi removida, porque o projeto já é derivado de `orcamentos.projeto_id`.
+- `projetos.valor_total` é denormalizado e mantido por `public.sync_projeto_valor_total()` a partir da soma de `projeto_itens.subtotal`.
 
 ## Como agir ao codar
 

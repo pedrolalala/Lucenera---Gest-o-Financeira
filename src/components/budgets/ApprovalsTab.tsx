@@ -24,21 +24,40 @@ export function ApprovalsTab() {
   const handleSyncAll = async () => {
     setIsSyncing(true)
     let synced = 0
+    let semPrazo = 0
+    let comErro = 0
     try {
       for (const b of approvedBudgets) {
         if (!b.projeto_id) continue
-        const result = await approveBudgetAndMigrate(b)
-        if (!result.ja_processado) {
-          synced++
+        if (!Array.isArray(b.prazo_pagamento_dias) || b.prazo_pagamento_dias.length === 0) {
+          semPrazo++
+          continue
+        }
+        try {
+          const result = await approveBudgetAndMigrate(b)
+          if (!result.ja_processado) {
+            synced++
+          }
+        } catch (e: any) {
+          comErro++
+          console.error(`Erro ao sincronizar orçamento ${b.numero || b.id}:`, e)
         }
       }
+
       if (synced > 0) {
         toast.success(`${synced} orçamentos sincronizados com sucesso.`)
-      } else {
+      } else if (semPrazo === 0 && comErro === 0) {
         toast.info('Nenhum orçamento precisava de sincronização.')
       }
-    } catch (e: any) {
-      toast.error('Erro na sincronização', { description: e.message })
+      if (semPrazo > 0) {
+        toast.error(
+          `${semPrazo} orçamento(s) sem "Prazo para Início da Cobrança" preenchido. Edite-os antes de sincronizar.`,
+          { duration: 8000 },
+        )
+      }
+      if (comErro > 0) {
+        toast.error(`${comErro} orçamento(s) falharam na sincronização. Veja o console.`)
+      }
     } finally {
       setIsSyncing(false)
     }

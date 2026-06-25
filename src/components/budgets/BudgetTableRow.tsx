@@ -94,10 +94,24 @@ export function BudgetTableRow({
       }
     }) || []
 
+  const hasNoInterpretablePrazo =
+    !Array.isArray(budget.prazo_pagamento_dias) ||
+    budget.prazo_pagamento_dias.length === 0
+
   const handleApprove = async () => {
     if (hasSpecialItemsWithoutPrice) {
       toast.error(
         'Atenção: Peças especiais detectadas sem preço. Solicite a precificação manual para Débora ou Vinícius antes de prosseguir.',
+        {
+          duration: 8000,
+        },
+      )
+      return
+    }
+
+    if (hasNoInterpretablePrazo) {
+      toast.error(
+        'Este orçamento ainda não tem o "Prazo para Início da Cobrança" preenchido. Edite o orçamento e informe o prazo antes de aprovar.',
         {
           duration: 8000,
         },
@@ -125,6 +139,16 @@ export function BudgetTableRow({
   }
 
   const handleSync = async () => {
+    if (hasNoInterpretablePrazo) {
+      toast.error(
+        'Este orçamento ainda não tem o "Prazo para Início da Cobrança" preenchido. Edite o orçamento e informe o prazo antes de sincronizar.',
+        {
+          duration: 8000,
+        },
+      )
+      return
+    }
+
     try {
       setIsApproving(true)
       const result = await approveBudgetAndMigrate(budget)

@@ -31,6 +31,8 @@ export interface Budget {
   validade: string | null
   condicoes_pagamento: string | null
   forma_pagamento: string | null
+  prazo_inicio_cobranca_dias: number | null
+  prazo_pagamento_dias: number[] | null
   desconto_global: number | null
   observacoes: string | null
   valor_total: number

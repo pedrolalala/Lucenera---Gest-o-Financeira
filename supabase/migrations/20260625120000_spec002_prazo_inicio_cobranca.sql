@@ -1,108 +1,30 @@
--- SPEC-001 — Aprovação de orçamento para itens do projeto e Administração Bancária
--- Migration idempotente para preparar vínculos por orcamento_id e criar a RPC transacional.
-
-ALTER TABLE public.projeto_itens
-  ADD COLUMN IF NOT EXISTS orcamento_id uuid REFERENCES public.orcamentos(id) ON DELETE SET NULL;
-
-ALTER TABLE public.projeto_parcelas
-  ADD COLUMN IF NOT EXISTS orcamento_id uuid REFERENCES public.orcamentos(id) ON DELETE SET NULL;
-
-ALTER TABLE public.boletos
-  ADD COLUMN IF NOT EXISTS orcamento_id uuid REFERENCES public.orcamentos(id) ON DELETE SET NULL;
-
-ALTER TABLE public.notas_fiscais
-  ADD COLUMN IF NOT EXISTS orcamento_id uuid REFERENCES public.orcamentos(id) ON DELETE SET NULL;
+-- SPEC-002 — Prazo para início da cobrança no orçamento
+-- Objetivo: permitir que a tela de Orçamentos informe o prazo (em dias) usado
+-- para calcular vencimentos na aprovação financeira (SPEC-001).
+--
+-- Esta migration não altera a RPC aprovar_orcamento_financeiro nem
+-- _lucenera_parse_prazo_pagamento: ambas já priorizam orcamentos.prazo_pagamento_dias
+-- quando preenchido. Só falta o frontend preencher esse array, e esta coluna
+-- guarda o valor bruto digitado pelo usuário para reabrir o formulário de edição.
 
 ALTER TABLE public.orcamentos
-  ADD COLUMN IF NOT EXISTS frete_tipo text,
-  ADD COLUMN IF NOT EXISTS frete_valor numeric(12,2) DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS prazo_pagamento_dias integer[],
-  ADD COLUMN IF NOT EXISTS data_base_vencimento text DEFAULT 'aprovacao';
+  ADD COLUMN IF NOT EXISTS prazo_inicio_cobranca_dias integer;
 
-CREATE INDEX IF NOT EXISTS idx_projeto_itens_orcamento_id
-  ON public.projeto_itens(orcamento_id);
-
-CREATE INDEX IF NOT EXISTS idx_projeto_parcelas_orcamento_id
-  ON public.projeto_parcelas(orcamento_id);
-
-CREATE INDEX IF NOT EXISTS idx_boletos_orcamento_id
-  ON public.boletos(orcamento_id);
-
-CREATE INDEX IF NOT EXISTS idx_notas_fiscais_orcamento_id
-  ON public.notas_fiscais(orcamento_id);
-
-CREATE OR REPLACE FUNCTION public._lucenera_parse_prazo_pagamento(
-  p_condicoes_pagamento text,
-  p_prazo_pagamento_dias integer[]
-)
-RETURNS integer[]
-LANGUAGE plpgsql
-IMMUTABLE
-AS $$
-DECLARE
-  v_text text := lower(coalesce(p_condicoes_pagamento, ''));
-  v_nums integer[];
-  v_count integer;
-  v_interval integer;
-  v_len integer;
+DO $$
 BEGIN
-  IF p_prazo_pagamento_dias IS NOT NULL
-     AND array_length(p_prazo_pagamento_dias, 1) > 0 THEN
-    RETURN p_prazo_pagamento_dias;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'orcamentos_prazo_inicio_cobranca_dias_check'
+  ) THEN
+    ALTER TABLE public.orcamentos
+      ADD CONSTRAINT orcamentos_prazo_inicio_cobranca_dias_check
+      CHECK (prazo_inicio_cobranca_dias IS NULL OR prazo_inicio_cobranca_dias >= 0);
   END IF;
+END $$;
 
-  SELECT array_agg((matches.match)[1]::integer)
-    INTO v_nums
-  FROM regexp_matches(v_text, '([0-9]+)', 'g') AS matches(match);
-
-  v_len := coalesce(array_length(v_nums, 1), 0);
-
-  IF v_len = 0 THEN
-    RETURN ARRAY[]::integer[];
-  END IF;
-
-  -- Ex.: "3x30" ou "3x 30 dias" = 30/60/90.
-  IF v_text ~ '^\s*[0-9]+\s*x\s*[0-9]+'
-     AND v_len = 2
-     AND v_nums[1] > 1
-     AND v_nums[2] > 0 THEN
-    v_count := v_nums[1];
-    v_interval := v_nums[2];
-
-    SELECT array_agg(i * v_interval ORDER BY i)
-      INTO v_nums
-    FROM generate_series(1, v_count) AS i;
-
-    RETURN v_nums;
-  END IF;
-
-  -- Ex.: "3x 30/60/90" = ignora o primeiro número, que representa quantidade.
-  IF v_text ~ '^\s*[0-9]+\s*x' THEN
-    v_count := v_nums[1];
-
-    IF v_len - 1 = v_count THEN
-      RETURN v_nums[2:v_len];
-    END IF;
-
-    IF v_len > 1 THEN
-      RETURN v_nums[2:v_len];
-    END IF;
-
-    -- "3x" sozinho não tem base suficiente para cálculo seguro.
-    RETURN ARRAY[]::integer[];
-  END IF;
-
-  -- Ex.: "3 parcelas" sozinho não informa vencimento.
-  IF v_len = 1 AND v_text ~ '[0-9]+\s*parcel' THEN
-    RETURN ARRAY[]::integer[];
-  END IF;
-
-  -- Ex.: "30 dias" ou "15/30/45".
-  RETURN v_nums;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.aprovar_orcamento_financeiro(p_orcamento_id uuid)
+-- Melhoria de mensagem: orienta a correção em vez de só apontar o erro.
+CREATE OR REPLACE FUNCTION public.aprovar_orcamento_financeiro_base_spec001(p_orcamento_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -196,7 +118,7 @@ BEGIN
   v_qtd_parcelas := coalesce(array_length(v_prazos, 1), 0);
 
   IF v_qtd_parcelas = 0 THEN
-    RAISE EXCEPTION 'Orçamento % não possui prazo de pagamento interpretável.', v_numero_orcamento
+    RAISE EXCEPTION 'Orçamento % não possui prazo de pagamento interpretável. Edite o orçamento e informe o "Prazo para Início da Cobrança (dias)".', v_numero_orcamento
       USING ERRCODE = 'P0001';
   END IF;
 
@@ -346,7 +268,6 @@ BEGIN
     numero_documento,
     parcela_id,
     orcamento_id,
-    projeto_id,
     empresa_id,
     valor,
     vencimento,
@@ -363,7 +284,6 @@ BEGIN
     v_numero_orcamento || '-P' || pp.numero_parcela,
     pp.id,
     p_orcamento_id,
-    v_orcamento.projeto_id,
     v_orcamento.empresa_id,
     pp.valor,
     pp.data_vencimento,

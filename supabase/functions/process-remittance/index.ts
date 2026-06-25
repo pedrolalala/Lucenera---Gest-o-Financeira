@@ -13,42 +13,43 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    // Fetch boletos ready for remittance
+    // Fetch pending boletos
     const { data: boletos, error } = await supabaseClient
       .from('boletos')
       .select('*')
-      .in('status', ['Remessa Pendente', 'pendente_registro'])
+      .in('status', ['Pendente', 'pendente_registro'])
 
     if (error) throw error
 
     if (!boletos || boletos.length === 0) {
       return new Response(
-        JSON.stringify({
-          message: 'Nenhum boleto pronto para remessa.',
-          processed: 0,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        JSON.stringify({ message: 'Nenhum boleto pendente para remessa' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
       )
     }
 
-    // Update to 'Aguardando Retorno'
+    // Update to 'Remessa Enviada'
     const ids = boletos.map((b) => b.id)
     await supabaseClient
       .from('boletos')
-      .update({ status: 'Aguardando Retorno' })
+      .update({ status: 'Remessa Enviada' })
       .in('id', ids)
 
-    // Send mock notification to Teams
+    // Send mock notification
     await supabaseClient.functions.invoke('sync-teams', {
       body: {
-        message: `Arquivo de Remessa processado com ${ids.length} boletos. Aguardando retorno bancário.`,
+        message: `Arquivo de Remessa processado com ${ids.length} boletos.`,
         to: 'Financeiro',
       },
     })
 
     return new Response(
       JSON.stringify({ success: true, processed: ids.length }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      },
     )
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
