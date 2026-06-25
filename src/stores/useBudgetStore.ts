@@ -43,6 +43,17 @@ export interface Budget {
   itens?: BudgetItem[]
 }
 
+export interface ApprovalResult {
+  orcamento_id: string
+  status: string
+  projeto_id: string
+  projeto_itens_criados: number
+  parcelas_criadas: number
+  boletos_criados: number
+  nota_fiscal_status: string
+  ja_processado: boolean
+}
+
 interface BudgetState {
   budgets: Budget[]
   loading: boolean
@@ -62,7 +73,7 @@ interface BudgetState {
   ) => Promise<void>
   updateBudgetStatus: (id: string, status: string) => Promise<void>
   deleteBudget: (id: string) => Promise<void>
-  approveBudgetAndMigrate: (budget: Budget) => Promise<void>
+  approveBudgetAndMigrate: (budget: Budget) => Promise<ApprovalResult>
 }
 
 const useBudgetStore = create<BudgetState>((set, get) => ({
@@ -220,83 +231,19 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   },
 
   approveBudgetAndMigrate: async (budget) => {
-    if (budget.status !== 'aprovado') {
-      const { error } = await supabase
-        .from('orcamentos')
-        .update({ status: 'aprovado' })
-        .eq('id', budget.id)
-      if (error) throw error
-    }
+    const { data, error } = await (supabase as any).rpc(
+      'aprovar_orcamento_financeiro',
+      { p_orcamento_id: budget.id },
+    )
 
-    if (budget.projeto_id) {
-      const { data: existingItens } = await supabase
-        .from('projeto_itens')
-        .select('id')
-        .eq('projeto_id', budget.projeto_id)
-        .limit(1)
-
-      if (!existingItens || existingItens.length === 0) {
-        if (budget.itens && budget.itens.length > 0) {
-          const pItens = budget.itens.map((i) => ({
-            projeto_id: budget.projeto_id,
-            produto_id: i.produto_id,
-            descricao: i.custom_id || i.produto?.nome || 'Item do Orçamento',
-            quantidade: i.quantidade,
-            preco_unitario: i.preco_unitario,
-            desconto: i.desconto || 0,
-            subtotal:
-              i.quantidade * i.preco_unitario * (1 - (i.desconto || 0) / 100),
-            validado: true,
-          }))
-          await supabase.from('projeto_itens').insert(pItens)
-        }
-      }
-
-      const { data: existingParcelas } = await supabase
-        .from('projeto_parcelas')
-        .select('id')
-        .eq('projeto_id', budget.projeto_id)
-        .limit(1)
-
-      if (!existingParcelas || existingParcelas.length === 0) {
-        let parcelas = 1
-        if (budget.condicoes_pagamento) {
-          const parsed = parseInt(budget.condicoes_pagamento.replace(/\D/g, ''))
-          if (!isNaN(parsed) && parsed > 0) parcelas = parsed
-        }
-        const valorTotal = budget.valor_total || 0
-        const valorParcela = valorTotal / parcelas
-
-        const pParcelas = []
-        for (let i = 1; i <= parcelas; i++) {
-          const vencimento = new Date()
-          vencimento.setDate(vencimento.getDate() + 30 * i)
-
-          pParcelas.push({
-            projeto_id: budget.projeto_id,
-            numero_parcela: i,
-            valor: valorParcela,
-            data_fechamento: new Date().toISOString().split('T')[0],
-            status: 'pendente',
-            data_vencimento: vencimento.toISOString().split('T')[0],
-            forma_pagamento: budget.forma_pagamento || null,
-          })
-        }
-        await supabase.from('projeto_parcelas').insert(pParcelas)
-      }
-
-      try {
-        await supabase.functions.invoke('sync-teams', {
-          body: {
-            message: `Venda fechada! Orçamento #${budget.numero || budget.id.split('-')[0].toUpperCase()} aprovado.\nNotificação para: Matheus.\nProjeto ID: ${budget.projeto_id} pronto para emissão de NF e Boletos.`,
-          },
-        })
-      } catch (err) {
-        console.warn('Teams sync failed', err)
-      }
+    if (error) {
+      console.error('Error approving budget:', error)
+      throw new Error(error.message || 'Erro ao aprovar orçamento.')
     }
 
     await get().fetchBudgets()
+
+    return data as ApprovalResult
   },
 }))
 

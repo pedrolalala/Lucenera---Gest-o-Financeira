@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
-import { supabase } from '@/lib/supabase/client'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
 import { normalizeStatus, cn } from '@/lib/utils'
@@ -28,13 +27,8 @@ export function ApprovalsTab() {
     try {
       for (const b of approvedBudgets) {
         if (!b.projeto_id) continue
-        const { data } = await supabase
-          .from('projeto_itens')
-          .select('id')
-          .eq('projeto_id', b.projeto_id)
-          .limit(1)
-        if (!data || data.length === 0) {
-          await approveBudgetAndMigrate(b)
+        const result = await approveBudgetAndMigrate(b)
+        if (!result.ja_processado) {
           synced++
         }
       }

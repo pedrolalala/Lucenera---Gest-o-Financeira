@@ -12,7 +12,7 @@ Este projeto foi criado de ponta a ponta com o [Skip](https://goskip.dev).
 - **React Router** - Roteamento para aplicações React
 - **React Hook Form** - Gerenciamento de formulários performático
 - **Zod** - Validação de schemas TypeScript-first
-- **Recharts** - Biblioteca de gráficos para React
+- **Recharts** - Biblioteca de gráficos para React 
 
 ## 📋 Pré-requisitos
 
