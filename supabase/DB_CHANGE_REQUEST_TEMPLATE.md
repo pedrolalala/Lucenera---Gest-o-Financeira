@@ -29,4 +29,3 @@ Indique quais módulos podem ser afetados: Cadastro, Orçamentos, Financeiro, CR
 ## Critérios de aceite
 
 Liste como validar que a mudança ficou correta.
-
