@@ -29,7 +29,10 @@ export function ApprovalsTab() {
     try {
       for (const b of approvedBudgets) {
         if (!b.projeto_id) continue
-        if (!Array.isArray(b.prazo_pagamento_dias) || b.prazo_pagamento_dias.length === 0) {
+        if (
+          !Array.isArray(b.prazo_pagamento_dias) ||
+          b.prazo_pagamento_dias.length === 0
+        ) {
           semPrazo++
           continue
         }
@@ -56,7 +59,9 @@ export function ApprovalsTab() {
         )
       }
       if (comErro > 0) {
-        toast.error(`${comErro} orçamento(s) falharam na sincronização. Veja o console.`)
+        toast.error(
+          `${comErro} orçamento(s) falharam na sincronização. Veja o console.`,
+        )
       }
     } finally {
       setIsSyncing(false)

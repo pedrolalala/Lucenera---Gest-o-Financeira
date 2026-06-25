@@ -1449,14 +1449,16 @@ export default function BudgetFormPage() {
                             />
                           </FormControl>
                           <p className="text-xs text-muted-foreground">
-                            Dias após a aprovação até o vencimento da
-                            primeira cobrança. Confirme com o e-mail/negociação
-                            do cliente, como no fluxo do Connect.
+                            Dias após a aprovação até o vencimento da primeira
+                            cobrança. Confirme com o e-mail/negociação do
+                            cliente, como no fluxo do Connect.
                             {prazo > 0 && (
                               <>
                                 {' '}
-                                Vencimentos calculados:{' '}
-                                {vencimentos.join('/')} dias.
+                                Vencimentos calculados: {vencimentos.join(
+                                  '/',
+                                )}{' '}
+                                dias.
                               </>
                             )}
                           </p>
