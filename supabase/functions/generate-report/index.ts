@@ -384,7 +384,12 @@ Deno.serve(async (req: Request) => {
       page.drawText('Orçamento', { x: width - 120, y, size: 11, font })
       page.drawText(
         `${budget.numero || budget.id.split('-')[0].toUpperCase()}`,
-        { x: width - 120, y: y - 18, size: 13, font: boldFont },
+        {
+          x: width - 120,
+          y: y - 18,
+          size: 13,
+          font: boldFont,
+        },
       )
 
       y -= 75
@@ -577,7 +582,13 @@ Deno.serve(async (req: Request) => {
 
       page.drawText(
         'Connect Systems Enterprise Technologies, Inc. All rights reserved.',
-        { x: width / 2 - 120, y: 20, size: 7, font, color: rgb(0.5, 0.5, 0.5) },
+        {
+          x: width / 2 - 120,
+          y: 20,
+          size: 7,
+          font,
+          color: rgb(0.5, 0.5, 0.5),
+        },
       )
 
       const pdfBytes = await pdfDoc.save()

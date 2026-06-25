@@ -24,7 +24,6 @@ O objetivo atual é substituir o uso do Connect com um conjunto de sistemas mais
 - Se o schema atual não atender uma necessidade, registrar a solicitação de mudança de banco antes de criar código dependente.
 - O objetivo atual é substituir o uso do ERP Externo com módulos simples, focados no fluxo necessário.
 
-
 ## Como lidar com mudanças de banco
 
 Este projeto pode não conter a fonte completa do banco.
