@@ -87,7 +87,12 @@ Deno.serve(async (req: Request) => {
     page.drawText('Ubiqua - Orçamento', { x: 40, y, size: 20, font: boldFont })
     page.drawText(
       `Número: ${budget.numero_orcamento || budget.id.split('-')[0].toUpperCase()}`,
-      { x: width - 200, y, size: 12, font },
+      {
+        x: width - 200,
+        y,
+        size: 12,
+        font,
+      },
     )
     y -= 40
 
@@ -185,7 +190,12 @@ Deno.serve(async (req: Request) => {
         formatCurrency(
           item.valor_total || item.quantidade * item.valor_unitario,
         ),
-        { x: xOffsets[5], y, size: 9, font },
+        {
+          x: xOffsets[5],
+          y,
+          size: 9,
+          font,
+        },
       )
 
       y -= 15

@@ -27,6 +27,7 @@ export type Database = {
           nosso_numero: string
           num_parcela: number | null
           numero_documento: string | null
+          orcamento_id: string | null
           parcela_id: string | null
           projeto_id: string | null
           status: string
@@ -49,6 +50,7 @@ export type Database = {
           nosso_numero: string
           num_parcela?: number | null
           numero_documento?: string | null
+          orcamento_id?: string | null
           parcela_id?: string | null
           projeto_id?: string | null
           status?: string
@@ -71,6 +73,7 @@ export type Database = {
           nosso_numero?: string
           num_parcela?: number | null
           numero_documento?: string | null
+          orcamento_id?: string | null
           parcela_id?: string | null
           projeto_id?: string | null
           status?: string
@@ -124,6 +127,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: 'vw_transacoes_completas'
             referencedColumns: ['empresa_id']
+          },
+          {
+            foreignKeyName: 'boletos_orcamento_id_fkey'
+            columns: ['orcamento_id']
+            isOneToOne: false
+            referencedRelation: 'orcamentos'
+            referencedColumns: ['id']
           },
           {
             foreignKeyName: 'boletos_parcela_id_fkey'
@@ -2376,6 +2386,7 @@ export type Database = {
           fornecedor: string | null
           id: string
           numero_nf: string
+          orcamento_id: string | null
           serie: string | null
           updated_at: string | null
           valor: number | null
@@ -2389,6 +2400,7 @@ export type Database = {
           fornecedor?: string | null
           id?: string
           numero_nf: string
+          orcamento_id?: string | null
           serie?: string | null
           updated_at?: string | null
           valor?: number | null
@@ -2402,6 +2414,7 @@ export type Database = {
           fornecedor?: string | null
           id?: string
           numero_nf?: string
+          orcamento_id?: string | null
           serie?: string | null
           updated_at?: string | null
           valor?: number | null
@@ -2412,6 +2425,13 @@ export type Database = {
             columns: ['boleto_id']
             isOneToOne: false
             referencedRelation: 'boletos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'notas_fiscais_orcamento_id_fkey'
+            columns: ['orcamento_id']
+            isOneToOne: false
+            referencedRelation: 'orcamentos'
             referencedColumns: ['id']
           },
         ]
@@ -2518,14 +2538,18 @@ export type Database = {
           cliente_id: string | null
           condicoes_pagamento: string | null
           created_at: string | null
+          data_base_vencimento: string | null
           data_emissao: string | null
           desconto_global: number | null
           empresa_id: string
           forma_pagamento: Database['public']['Enums']['pagamento_forma'] | null
+          frete_tipo: string | null
+          frete_valor: number | null
           id: string
           informacoes_cliente_id: string | null
           numero: string | null
           observacoes: string | null
+          prazo_pagamento_dias: number[] | null
           projeto_id: string | null
           status: string | null
           validade: string | null
@@ -2537,16 +2561,20 @@ export type Database = {
           cliente_id?: string | null
           condicoes_pagamento?: string | null
           created_at?: string | null
+          data_base_vencimento?: string | null
           data_emissao?: string | null
           desconto_global?: number | null
           empresa_id: string
           forma_pagamento?:
             | Database['public']['Enums']['pagamento_forma']
             | null
+          frete_tipo?: string | null
+          frete_valor?: number | null
           id?: string
           informacoes_cliente_id?: string | null
           numero?: string | null
           observacoes?: string | null
+          prazo_pagamento_dias?: number[] | null
           projeto_id?: string | null
           status?: string | null
           validade?: string | null
@@ -2558,16 +2586,20 @@ export type Database = {
           cliente_id?: string | null
           condicoes_pagamento?: string | null
           created_at?: string | null
+          data_base_vencimento?: string | null
           data_emissao?: string | null
           desconto_global?: number | null
           empresa_id?: string
           forma_pagamento?:
             | Database['public']['Enums']['pagamento_forma']
             | null
+          frete_tipo?: string | null
+          frete_valor?: number | null
           id?: string
           informacoes_cliente_id?: string | null
           numero?: string | null
           observacoes?: string | null
+          prazo_pagamento_dias?: number[] | null
           projeto_id?: string | null
           status?: string | null
           validade?: string | null
@@ -3137,6 +3169,7 @@ export type Database = {
           desconto: number
           descricao: string
           id: string
+          orcamento_id: string | null
           preco_unitario: number
           produto_id: string | null
           projeto_id: string
@@ -3150,6 +3183,7 @@ export type Database = {
           desconto?: number
           descricao: string
           id?: string
+          orcamento_id?: string | null
           preco_unitario: number
           produto_id?: string | null
           projeto_id: string
@@ -3163,6 +3197,7 @@ export type Database = {
           desconto?: number
           descricao?: string
           id?: string
+          orcamento_id?: string | null
           preco_unitario?: number
           produto_id?: string | null
           projeto_id?: string
@@ -3172,6 +3207,13 @@ export type Database = {
           validado?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: 'projeto_itens_orcamento_id_fkey'
+            columns: ['orcamento_id']
+            isOneToOne: false
+            referencedRelation: 'orcamentos'
+            referencedColumns: ['id']
+          },
           {
             foreignKeyName: 'projeto_itens_produto_id_fkey'
             columns: ['produto_id']
@@ -3301,6 +3343,7 @@ export type Database = {
           multa: number
           numero_parcela: number
           observacoes: string | null
+          orcamento_id: string | null
           projeto_id: string
           status: Database['public']['Enums']['parcela_status']
           transacao_id: string | null
@@ -3324,6 +3367,7 @@ export type Database = {
           multa?: number
           numero_parcela: number
           observacoes?: string | null
+          orcamento_id?: string | null
           projeto_id: string
           status?: Database['public']['Enums']['parcela_status']
           transacao_id?: string | null
@@ -3347,6 +3391,7 @@ export type Database = {
           multa?: number
           numero_parcela?: number
           observacoes?: string | null
+          orcamento_id?: string | null
           projeto_id?: string
           status?: Database['public']['Enums']['parcela_status']
           transacao_id?: string | null
@@ -3355,6 +3400,13 @@ export type Database = {
           venda_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: 'projeto_parcelas_orcamento_id_fkey'
+            columns: ['orcamento_id']
+            isOneToOne: false
+            referencedRelation: 'orcamentos'
+            referencedColumns: ['id']
+          },
           {
             foreignKeyName: 'projeto_parcelas_projeto_id_fkey'
             columns: ['projeto_id']
@@ -5890,6 +5942,46 @@ export type Database = {
         }
         Relationships: []
       }
+      user_system_access: {
+        Row: {
+          created_at: string
+          system_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          system_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          system_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'user_system_access_system_id_fkey'
+            columns: ['system_id']
+            isOneToOne: false
+            referencedRelation: 'systems'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'user_system_access_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'usuarios'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'user_system_access_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'vw_projetos_por_responsavel'
+            referencedColumns: ['usuario_id']
+          },
+        ]
+      }
       usuarios: {
         Row: {
           ativo: boolean | null
@@ -7140,6 +7232,13 @@ export type Database = {
       }
     }
     Functions: {
+      _lucenera_parse_prazo_pagamento: {
+        Args: {
+          p_condicoes_pagamento: string
+          p_prazo_pagamento_dias: number[]
+        }
+        Returns: number[]
+      }
       admin_update_user_password: {
         Args: { p_new_password: string; p_user_id: string }
         Returns: undefined
@@ -7151,6 +7250,14 @@ export type Database = {
       admin_update_user_status: {
         Args: { p_ativo: boolean; p_user_id: string }
         Returns: undefined
+      }
+      aprovar_orcamento_financeiro: {
+        Args: { p_orcamento_id: string }
+        Returns: Json
+      }
+      aprovar_orcamento_financeiro_base_spec001: {
+        Args: { p_orcamento_id: string }
+        Returns: Json
       }
       criar_usuario: {
         Args: {
