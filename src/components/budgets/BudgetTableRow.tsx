@@ -28,14 +28,19 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
+import useBudgetStore, {
+  ApprovalResult,
+  Budget,
+} from '@/stores/useBudgetStore'
 import { normalizeStatus, cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
 import logoImg from '@/assets/lucenera-vertical-527dd.png'
 
 interface BudgetTableRowProps {
@@ -52,13 +57,22 @@ export function BudgetTableRow({
   onEdit,
 }: BudgetTableRowProps) {
   const { deleteBudget, approveBudgetAndMigrate } = useBudgetStore()
+  const { role } = useAuth()
   const [isApproving, setIsApproving] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
+  const [showFinanceModal, setShowFinanceModal] = useState(false)
+  const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
+    null,
+  )
 
   const normalizedStatus = normalizeStatus(status)
 
   const hasSpecialItemsWithoutPrice = budget.itens?.some(
     (i) => Number(i.preco_unitario) === 0,
+  )
+
+  const canAccessFinanceiro = ['admin', 'gerente', 'operador'].includes(
+    role || '',
   )
 
   const subtotalItens =
@@ -96,10 +110,14 @@ export function BudgetTableRow({
 
     try {
       setIsApproving(true)
-      await approveBudgetAndMigrate(budget)
-      toast.success(
-        `Orçamento aprovado! Projeto ${budget.projeto?.codigo || budget.projeto_id} pronto para emissão de NF e Boletos.`,
-      )
+      const result = await approveBudgetAndMigrate(budget)
+      setApprovalResult(result)
+      if (canAccessFinanceiro) {
+        setShowFinanceModal(true)
+        toast.success('Orçamento aprovado e enviado para o Financeiro.')
+      } else {
+        toast.success('Orçamento aprovado e enviado para Administração Bancária.')
+      }
     } catch (error: any) {
       toast.error('Erro ao aprovar orçamento', { description: error.message })
     } finally {
@@ -110,8 +128,16 @@ export function BudgetTableRow({
   const handleSync = async () => {
     try {
       setIsApproving(true)
-      await approveBudgetAndMigrate(budget)
-      toast.success('Sincronização concluída com sucesso.')
+      const result = await approveBudgetAndMigrate(budget)
+      setApprovalResult(result)
+      if (canAccessFinanceiro) {
+        setShowFinanceModal(true)
+      }
+      toast.success(
+        result.ja_processado
+          ? 'Orçamento já estava sincronizado.'
+          : 'Sincronização concluída com sucesso.',
+      )
     } catch (error: any) {
       toast.error('Erro ao sincronizar', { description: error.message })
     } finally {
@@ -191,8 +217,22 @@ export function BudgetTableRow({
     }).format(value || 0)
   }
 
+  const openFinanceRoute = (path: 'boletos' | 'notas-fiscais') => {
+    const orcamentoId = approvalResult?.orcamento_id || budget.id
+    const financeiroBaseUrl = (
+      import.meta.env.VITE_FINANCEIRO_URL as string | undefined
+    )?.replace(/\/$/, '')
+
+    window.open(
+      `${financeiroBaseUrl || ''}/${path}?orcamento_id=${encodeURIComponent(orcamentoId)}`,
+      '_blank',
+      'noopener,noreferrer',
+    )
+  }
+
   return (
-    <TableRow>
+    <>
+      <TableRow>
       <TableCell className="font-medium text-gray-600">
         {budget.data_emissao && !isNaN(new Date(budget.data_emissao).getTime())
           ? format(new Date(budget.data_emissao), 'dd/MM/yyyy')
@@ -415,6 +455,55 @@ export function BudgetTableRow({
           </AlertDialog>
         </div>
       </TableCell>
-    </TableRow>
+      </TableRow>
+    <Dialog open={showFinanceModal} onOpenChange={setShowFinanceModal}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Enviar para Administração Bancária</DialogTitle>
+          <DialogDescription>
+            O orçamento foi aprovado com vínculo por orçamento. Abra os boletos
+            pendentes ou a nota fiscal para validação financeira.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-700 space-y-1">
+          <p>
+            <span className="font-medium">Orçamento:</span>{' '}
+            {budget.numero || budget.id.split('-')[0].toUpperCase()}
+          </p>
+          <p>
+            <span className="font-medium">Itens criados:</span>{' '}
+            {approvalResult?.projeto_itens_criados ?? 0}
+          </p>
+          <p>
+            <span className="font-medium">Parcelas:</span>{' '}
+            {approvalResult?.parcelas_criadas ?? 0}
+          </p>
+          <p>
+            <span className="font-medium">Boletos:</span>{' '}
+            {approvalResult?.boletos_criados ?? 0}
+          </p>
+          {approvalResult?.ja_processado && (
+            <p className="text-xs text-blue-700">
+              Este orçamento já estava processado; nada foi duplicado.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => openFinanceRoute('notas-fiscais')}
+          >
+            Abrir Nota Fiscal
+          </Button>
+          <Button type="button" onClick={() => openFinanceRoute('boletos')}>
+            Abrir Boletos
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
