@@ -324,7 +324,6 @@ BEGIN
       status,
       forma_pagamento,
       orcamento_id,
-      venda_id,
       descricao
     )
     VALUES (
@@ -336,7 +335,6 @@ BEGIN
       'pendente',
       v_orcamento.forma_pagamento,
       p_orcamento_id,
-      NULL,
       'Parcela gerada pelo orçamento ' || v_numero_orcamento
     );
 
