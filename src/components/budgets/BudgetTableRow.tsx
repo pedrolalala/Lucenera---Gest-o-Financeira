@@ -98,6 +98,8 @@ export function BudgetTableRow({
     !Array.isArray(budget.prazo_pagamento_dias) ||
     budget.prazo_pagamento_dias.length === 0
 
+  const hasNoFreteEstruturado = !budget.frete_tipo
+
   const handleApprove = async () => {
     if (hasSpecialItemsWithoutPrice) {
       toast.error(
@@ -112,6 +114,16 @@ export function BudgetTableRow({
     if (hasNoInterpretablePrazo) {
       toast.error(
         'Este orçamento ainda não tem o "Prazo para Início da Cobrança" preenchido. Edite o orçamento e informe o prazo antes de aprovar.',
+        {
+          duration: 8000,
+        },
+      )
+      return
+    }
+
+    if (hasNoFreteEstruturado) {
+      toast.error(
+        'Este orçamento ainda não tem o frete estruturado. Edite o orçamento e informe "Com Frete" ou "Sem Frete" antes de aprovar.',
         {
           duration: 8000,
         },
@@ -142,6 +154,16 @@ export function BudgetTableRow({
     if (hasNoInterpretablePrazo) {
       toast.error(
         'Este orçamento ainda não tem o "Prazo para Início da Cobrança" preenchido. Edite o orçamento e informe o prazo antes de sincronizar.',
+        {
+          duration: 8000,
+        },
+      )
+      return
+    }
+
+    if (hasNoFreteEstruturado) {
+      toast.error(
+        'Este orçamento ainda não tem o frete estruturado. Edite o orçamento e informe "Com Frete" ou "Sem Frete" antes de sincronizar.',
         {
           duration: 8000,
         },

@@ -33,6 +33,8 @@ export interface Budget {
   forma_pagamento: string | null
   prazo_inicio_cobranca_dias: number | null
   prazo_pagamento_dias: number[] | null
+  frete_tipo: string | null
+  frete_valor: number | null
   desconto_global: number | null
   observacoes: string | null
   valor_total: number
