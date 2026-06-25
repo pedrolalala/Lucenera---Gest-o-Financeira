@@ -87,6 +87,14 @@ const formSchema = z.object({
     .number({ invalid_type_error: 'Informe o prazo em dias' })
     .int('Deve ser um valor inteiro')
     .min(0, 'O prazo não pode ser negativo'),
+  frete_tipo: z.enum(['com_frete', 'sem_frete'], {
+    required_error: 'Selecione o frete',
+    invalid_type_error: 'Selecione o frete',
+  }),
+  frete_valor: z.coerce
+    .number()
+    .min(0, 'O valor do frete não pode ser negativo')
+    .default(0),
   observacoes: z.string().optional().nullable(),
   validade: z.date().optional().nullable(),
   itens: z
@@ -107,6 +115,14 @@ const formSchema = z.object({
       }),
     )
     .min(1, 'Adicione pelo menos um item'),
+}).superRefine((data, ctx) => {
+  if (data.frete_tipo === 'com_frete' && !(data.frete_valor > 0)) {
+    ctx.addIssue({
+      path: ['frete_valor'],
+      code: z.ZodIssueCode.custom,
+      message: 'Informe o valor do frete (maior que zero)',
+    })
+  }
 })
 
 const STATUS_OPTIONS = [
@@ -167,6 +183,7 @@ export default function BudgetFormPage() {
       forma_pagamento: '',
       parcelas: 1,
       prazo_inicio_cobranca_dias: 0,
+      frete_valor: 0,
       observacoes: '',
       validade: null,
       itens: [],
@@ -264,6 +281,10 @@ export default function BudgetFormPage() {
             forma_pagamento: budget.forma_pagamento || '',
             parcelas: parsedParcelas,
             prazo_inicio_cobranca_dias: budget.prazo_inicio_cobranca_dias ?? 0,
+            frete_tipo:
+              (budget.frete_tipo as 'com_frete' | 'sem_frete' | undefined) ??
+              undefined,
+            frete_valor: budget.frete_valor ?? 0,
             observacoes: budget.observacoes || '',
             data_emissao: budget.data_emissao
               ? new Date(budget.data_emissao)
@@ -491,6 +512,8 @@ export default function BudgetFormPage() {
         prazo_inicio_cobranca_dias: prazoDias,
         prazo_pagamento_dias: prazoPagamentoDias,
         condicoes_pagamento: prazoPagamentoDias.join('/'),
+        frete_tipo: values.frete_tipo,
+        frete_valor: values.frete_tipo === 'sem_frete' ? 0 : values.frete_valor,
         observacoes: values.observacoes,
         data_emissao: values.data_emissao.toISOString(),
         validade: values.validade
@@ -1465,6 +1488,60 @@ export default function BudgetFormPage() {
                       )
                     }}
                   />
+
+                  <FormField
+                    control={form.control}
+                    name="frete_tipo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Frete</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value || undefined}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o frete" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="sem_frete">Sem Frete</SelectItem>
+                            <SelectItem value="com_frete">Com Frete</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Confirme se a condição negociada é "Com Frete" ou
+                          "Sem Frete", como no fluxo do Connect, para evitar
+                          divergência na nota fiscal.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {form.watch('frete_tipo') === 'com_frete' && (
+                    <FormField
+                      control={form.control}
+                      name="frete_valor"
+                      render={({ field }) => (
+                        <FormItem className="animate-in fade-in slide-in-from-top-2">
+                          <FormLabel>Valor do Frete</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              {...field}
+                              onChange={(e) =>
+                                field.onChange(parseFloat(e.target.value) || 0)
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <FormField
                     control={form.control}

@@ -25,12 +25,17 @@ export function ApprovalsTab() {
     setIsSyncing(true)
     let synced = 0
     let semPrazo = 0
+    let semFrete = 0
     let comErro = 0
     try {
       for (const b of approvedBudgets) {
         if (!b.projeto_id) continue
         if (!Array.isArray(b.prazo_pagamento_dias) || b.prazo_pagamento_dias.length === 0) {
           semPrazo++
+          continue
+        }
+        if (!b.frete_tipo) {
+          semFrete++
           continue
         }
         try {
@@ -46,12 +51,18 @@ export function ApprovalsTab() {
 
       if (synced > 0) {
         toast.success(`${synced} orçamentos sincronizados com sucesso.`)
-      } else if (semPrazo === 0 && comErro === 0) {
+      } else if (semPrazo === 0 && semFrete === 0 && comErro === 0) {
         toast.info('Nenhum orçamento precisava de sincronização.')
       }
       if (semPrazo > 0) {
         toast.error(
           `${semPrazo} orçamento(s) sem "Prazo para Início da Cobrança" preenchido. Edite-os antes de sincronizar.`,
+          { duration: 8000 },
+        )
+      }
+      if (semFrete > 0) {
+        toast.error(
+          `${semFrete} orçamento(s) sem frete estruturado ("Com Frete"/"Sem Frete"). Edite-os antes de sincronizar.`,
           { duration: 8000 },
         )
       }
