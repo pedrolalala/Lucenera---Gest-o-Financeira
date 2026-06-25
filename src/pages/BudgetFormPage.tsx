@@ -83,6 +83,10 @@ const formSchema = z.object({
     .max(120)
     .optional()
     .default(1),
+  prazo_inicio_cobranca_dias: z.coerce
+    .number({ invalid_type_error: 'Informe o prazo em dias' })
+    .int('Deve ser um valor inteiro')
+    .min(0, 'O prazo não pode ser negativo'),
   observacoes: z.string().optional().nullable(),
   validade: z.date().optional().nullable(),
   itens: z
@@ -162,6 +166,7 @@ export default function BudgetFormPage() {
       desconto_global: 0,
       forma_pagamento: '',
       parcelas: 1,
+      prazo_inicio_cobranca_dias: 0,
       observacoes: '',
       validade: null,
       itens: [],
@@ -243,11 +248,9 @@ export default function BudgetFormPage() {
             if (pData) projetoCodigo = pData.codigo
           }
 
-          let parsedParcelas = 1
-          if (budget.condicoes_pagamento) {
-            const num = parseInt(budget.condicoes_pagamento.replace(/\D/g, ''))
-            if (!isNaN(num) && num > 0) parsedParcelas = num
-          }
+          const parsedParcelas = Array.isArray(budget.prazo_pagamento_dias)
+            ? Math.max(1, budget.prazo_pagamento_dias.length)
+            : 1
 
           setBudgetToEdit(budget)
           form.reset({
@@ -260,6 +263,7 @@ export default function BudgetFormPage() {
             desconto_global: budget.desconto_global || 0,
             forma_pagamento: budget.forma_pagamento || '',
             parcelas: parsedParcelas,
+            prazo_inicio_cobranca_dias: budget.prazo_inicio_cobranca_dias ?? 0,
             observacoes: budget.observacoes || '',
             data_emissao: budget.data_emissao
               ? new Date(budget.data_emissao)
@@ -459,6 +463,21 @@ export default function BudgetFormPage() {
         return
       }
 
+      // SPEC-002: o usuário informa apenas o prazo (em dias) para início da
+      // cobrança. As parcelas seguintes vencem em múltiplos desse mesmo
+      // intervalo (ex.: prazo 30 dias + 3 parcelas = vencimentos 30/60/90),
+      // reproduzindo o padrão manual usado no Connect.
+      const totalParcelas = ['boleto', 'cartao'].includes(
+        values.forma_pagamento || '',
+      )
+        ? values.parcelas || 1
+        : 1
+      const prazoDias = values.prazo_inicio_cobranca_dias
+      const prazoPagamentoDias = Array.from(
+        { length: totalParcelas },
+        (_, i) => prazoDias * (i + 1),
+      )
+
       const payload = {
         empresa_id: values.empresa_id,
         projeto_id: projeto.id,
@@ -469,11 +488,9 @@ export default function BudgetFormPage() {
         status: values.status,
         desconto_global: values.desconto_global,
         forma_pagamento: values.forma_pagamento || null,
-        condicoes_pagamento: ['boleto', 'cartao'].includes(
-          values.forma_pagamento || '',
-        )
-          ? `${values.parcelas}x`
-          : null,
+        prazo_inicio_cobranca_dias: prazoDias,
+        prazo_pagamento_dias: prazoPagamentoDias,
+        condicoes_pagamento: prazoPagamentoDias.join('/'),
         observacoes: values.observacoes,
         data_emissao: values.data_emissao.toISOString(),
         validade: values.validade
@@ -1400,6 +1417,54 @@ export default function BudgetFormPage() {
                       )}
                     />
                   )}
+
+                  <FormField
+                    control={form.control}
+                    name="prazo_inicio_cobranca_dias"
+                    render={({ field }) => {
+                      const parcelas = ['boleto', 'cartao'].includes(
+                        form.watch('forma_pagamento') || '',
+                      )
+                        ? form.watch('parcelas') || 1
+                        : 1
+                      const prazo = Number(field.value) || 0
+                      const vencimentos = Array.from(
+                        { length: parcelas },
+                        (_, i) => prazo * (i + 1),
+                      )
+                      return (
+                        <FormItem>
+                          <FormLabel>
+                            Prazo para Início da Cobrança (dias)
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="1"
+                              {...field}
+                              onChange={(e) =>
+                                field.onChange(parseInt(e.target.value) || 0)
+                              }
+                            />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            Dias após a aprovação até o vencimento da
+                            primeira cobrança. Confirme com o e-mail/negociação
+                            do cliente, como no fluxo do Connect.
+                            {prazo > 0 && (
+                              <>
+                                {' '}
+                                Vencimentos calculados:{' '}
+                                {vencimentos.join('/')} dias.
+                              </>
+                            )}
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )
+                    }}
+                  />
 
                   <FormField
                     control={form.control}
