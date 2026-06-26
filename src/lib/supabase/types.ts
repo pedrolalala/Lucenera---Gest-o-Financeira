@@ -1,3 +1,4 @@
+// AVOID UPDATING THIS FILE DIRECTLY. It is automatically generated.
 export type Json =
   | string
   | number
@@ -1902,6 +1903,44 @@ export type Database = {
             columns: ['orcamento_id']
             isOneToOne: false
             referencedRelation: 'orcamentos_revenda_ubiqua'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      historico_status_orcamentos: {
+        Row: {
+          created_at: string | null
+          id: string
+          observacao: string | null
+          orcamento_id: string
+          status_anterior: string | null
+          status_novo: string
+          usuario: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          observacao?: string | null
+          orcamento_id: string
+          status_anterior?: string | null
+          status_novo: string
+          usuario?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          observacao?: string | null
+          orcamento_id?: string
+          status_anterior?: string | null
+          status_novo?: string
+          usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'historico_status_orcamentos_orcamento_id_fkey'
+            columns: ['orcamento_id']
+            isOneToOne: false
+            referencedRelation: 'orcamentos'
             referencedColumns: ['id']
           },
         ]

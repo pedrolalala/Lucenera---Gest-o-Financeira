@@ -315,6 +315,8 @@ export default function BudgetFormPage() {
 
   const watchItens = form.watch('itens')
   const descontoGlobalPerc = form.watch('desconto_global') || 0
+  const freteTipo = form.watch('frete_tipo')
+  const freteValor = form.watch('frete_valor') || 0
 
   const valorSubtotal = watchItens.reduce((acc, item) => {
     const q = Number(item.quantidade) || 0
@@ -323,7 +325,9 @@ export default function BudgetFormPage() {
     return acc + q * p * (1 - d / 100)
   }, 0)
 
-  const valorTotal = valorSubtotal * (1 - descontoGlobalPerc / 100)
+  const valorComDesconto = valorSubtotal * (1 - descontoGlobalPerc / 100)
+  const valorTotal =
+    valorComDesconto + (freteTipo === 'com_frete' ? freteValor : 0)
 
   const handleProjectSelect = async (codigo: string) => {
     if (!codigo) {
@@ -1500,7 +1504,12 @@ export default function BudgetFormPage() {
                       <FormItem>
                         <FormLabel>Frete</FormLabel>
                         <Select
-                          onValueChange={field.onChange}
+                          onValueChange={(val) => {
+                            field.onChange(val)
+                            if (val === 'sem_frete') {
+                              form.setValue('frete_valor', 0)
+                            }
+                          }}
                           value={field.value || undefined}
                         >
                           <FormControl>
@@ -1622,6 +1631,18 @@ export default function BudgetFormPage() {
                         }).format(valorSubtotal * (descontoGlobalPerc / 100))}
                       </span>
                     </div>
+                    {freteTipo === 'com_frete' && freteValor > 0 && (
+                      <div className="flex justify-between items-center text-sm text-gray-600">
+                        <span>Frete</span>
+                        <span className="font-medium text-blue-600">
+                          +
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(freteValor)}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-4 border-t border-gray-200">
