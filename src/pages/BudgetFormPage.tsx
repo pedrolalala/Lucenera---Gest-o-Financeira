@@ -55,75 +55,77 @@ import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useOptions } from '@/hooks/use-options'
 import { supabase } from '@/lib/supabase/client'
 
-const formSchema = z.object({
-  empresa_id: z
-    .string({ required_error: 'Selecione uma empresa' })
-    .min(1, 'Selecione uma empresa'),
-  projeto_codigo: z
-    .string({ required_error: 'O código do projeto é obrigatório' })
-    .trim()
-    .min(1, 'O código do projeto é obrigatório'),
-  cliente_id: z
-    .string({ required_error: 'Selecione um cliente' })
-    .min(1, 'Selecione um cliente'),
-  arquiteto_id: z.string().optional().nullable(),
-  vendedor_id: z.string().optional().nullable(),
-  status: z.string().default('Aguardando Aprovação'),
-  data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
-  desconto_global: z.coerce
-    .number()
-    .min(0, 'O desconto não pode ser negativo')
-    .max(100, 'O desconto não pode ser maior que 100%')
-    .default(0),
-  forma_pagamento: z.string().optional().nullable(),
-  parcelas: z.coerce
-    .number()
-    .int('Deve ser um valor inteiro')
-    .min(1)
-    .max(120)
-    .optional()
-    .default(1),
-  prazo_inicio_cobranca_dias: z.coerce
-    .number({ invalid_type_error: 'Informe o prazo em dias' })
-    .int('Deve ser um valor inteiro')
-    .min(0, 'O prazo não pode ser negativo'),
-  frete_tipo: z.enum(['com_frete', 'sem_frete'], {
-    required_error: 'Selecione o frete',
-    invalid_type_error: 'Selecione o frete',
-  }),
-  frete_valor: z.coerce
-    .number()
-    .min(0, 'O valor do frete não pode ser negativo')
-    .default(0),
-  observacoes: z.string().optional().nullable(),
-  validade: z.date().optional().nullable(),
-  itens: z
-    .array(
-      z.object({
-        custom_id: z.string().optional(),
-        produto_id: z.string().min(1, 'Selecione um produto'),
-        quantidade: z.coerce
-          .number()
-          .int('Deve ser um valor inteiro')
-          .min(1, 'Quantidade inválida'),
-        preco_unitario: z.coerce.number().min(0, 'Preço inválido'),
-        desconto: z.coerce
-          .number()
-          .int('Deve ser um valor inteiro')
-          .min(0)
-          .default(0),
-      }),
-    )
-    .min(1, 'Adicione pelo menos um item'),
-}).superRefine((data, ctx) => {
-  if (data.frete_tipo === 'com_frete' && !(data.frete_valor > 0)) {
-    ctx.addIssue({
-      path: ['frete_valor'],
-      code: z.ZodIssueCode.custom,
-      message: 'Informe o valor do frete (maior que zero)',
-    })
-  }
-})
+const formSchema = z
+  .object({
+    empresa_id: z
+      .string({ required_error: 'Selecione uma empresa' })
+      .min(1, 'Selecione uma empresa'),
+    projeto_codigo: z
+      .string({ required_error: 'O código do projeto é obrigatório' })
+      .trim()
+      .min(1, 'O código do projeto é obrigatório'),
+    cliente_id: z
+      .string({ required_error: 'Selecione um cliente' })
+      .min(1, 'Selecione um cliente'),
+    arquiteto_id: z.string().optional().nullable(),
+    vendedor_id: z.string().optional().nullable(),
+    status: z.string().default('Aguardando Aprovação'),
+    data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
+    desconto_global: z.coerce
+      .number()
+      .min(0, 'O desconto não pode ser negativo')
+      .max(100, 'O desconto não pode ser maior que 100%')
+      .default(0),
+    forma_pagamento: z.string().optional().nullable(),
+    parcelas: z.coerce
+      .number()
+      .int('Deve ser um valor inteiro')
+      .min(1)
+      .max(120)
+      .optional()
+      .default(1),
+    prazo_inicio_cobranca_dias: z.coerce
+      .number({ invalid_type_error: 'Informe o prazo em dias' })
+      .int('Deve ser um valor inteiro')
+      .min(0, 'O prazo não pode ser negativo'),
+    frete_tipo: z.enum(['com_frete', 'sem_frete'], {
+      required_error: 'Selecione o frete',
+      invalid_type_error: 'Selecione o frete',
+    }),
+    frete_valor: z.coerce
+      .number()
+      .min(0, 'O valor do frete não pode ser negativo')
+      .default(0),
+    observacoes: z.string().optional().nullable(),
+    validade: z.date().optional().nullable(),
+    itens: z
+      .array(
+        z.object({
+          custom_id: z.string().optional(),
+          produto_id: z.string().min(1, 'Selecione um produto'),
+          quantidade: z.coerce
+            .number()
+            .int('Deve ser um valor inteiro')
+            .min(1, 'Quantidade inválida'),
+          preco_unitario: z.coerce.number().min(0, 'Preço inválido'),
+          desconto: z.coerce
+            .number()
+            .int('Deve ser um valor inteiro')
+            .min(0)
+            .default(0),
+        }),
+      )
+      .min(1, 'Adicione pelo menos um item'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.frete_tipo === 'com_frete' && !(data.frete_valor > 0)) {
+      ctx.addIssue({
+        path: ['frete_valor'],
+        code: z.ZodIssueCode.custom,
+        message: 'Informe o valor do frete (maior que zero)',
+      })
+    }
+  })
 
 const STATUS_OPTIONS = [
   'Aguardando Aprovação',
@@ -1512,8 +1514,8 @@ export default function BudgetFormPage() {
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
-                          Confirme se a condição negociada é "Com Frete" ou
-                          "Sem Frete", como no fluxo do Connect, para evitar
+                          Confirme se a condição negociada é "Com Frete" ou "Sem
+                          Frete", como no fluxo do Connect, para evitar
                           divergência na nota fiscal.
                         </p>
                         <FormMessage />
