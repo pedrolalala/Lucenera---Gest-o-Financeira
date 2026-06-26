@@ -269,6 +269,15 @@ export function BudgetTableRow({
   }
 
   const openFinanceRoute = (path: 'boletos' | 'notas-fiscais') => {
+    if (path === 'boletos') {
+      window.open(
+        'https://retorno-bancario-bradesco-5392a.goskip.app/notas-fiscais',
+        '_blank',
+        'noopener,noreferrer',
+      )
+      return
+    }
+
     const orcamentoId = approvalResult?.orcamento_id || budget.id
     const financeiroBaseUrl = (
       import.meta.env.VITE_FINANCEIRO_URL as string | undefined
