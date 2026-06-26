@@ -143,6 +143,12 @@ export function BudgetTableRow({
           'Orçamento aprovado e enviado para Administração Bancária.',
         )
       }
+
+      window.open(
+        'https://retorno-bancario-bradesco-5392a.goskip.app/notas-fiscais',
+        '_blank',
+        'noopener,noreferrer',
+      )
     } catch (error: any) {
       toast.error('Erro ao aprovar orçamento', { description: error.message })
     } finally {
