@@ -1189,6 +1189,24 @@ export type Database = {
         }
         Relationships: []
       }
+      equipes_projetos: {
+        Row: {
+          created_at: string
+          equipes: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          equipes?: string | null
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          equipes?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       estoque_itens: {
         Row: {
           atualizado_em: string
@@ -1747,6 +1765,13 @@ export type Database = {
             foreignKeyName: 'funcionarios_beneficios_empresas_funcionario_id_fkey'
             columns: ['funcionario_id']
             isOneToOne: false
+            referencedRelation: 'vw_comissao_mensal'
+            referencedColumns: ['funcionario_id']
+          },
+          {
+            foreignKeyName: 'funcionarios_beneficios_empresas_funcionario_id_fkey'
+            columns: ['funcionario_id']
+            isOneToOne: false
             referencedRelation: 'vw_funcionarios_completo'
             referencedColumns: ['id']
           },
@@ -1795,6 +1820,13 @@ export type Database = {
             foreignKeyName: 'funcionarios_detalhes_funcionario_id_fkey'
             columns: ['funcionario_id']
             isOneToOne: true
+            referencedRelation: 'vw_comissao_mensal'
+            referencedColumns: ['funcionario_id']
+          },
+          {
+            foreignKeyName: 'funcionarios_detalhes_funcionario_id_fkey'
+            columns: ['funcionario_id']
+            isOneToOne: true
             referencedRelation: 'vw_funcionarios_completo'
             referencedColumns: ['id']
           },
@@ -1803,6 +1835,7 @@ export type Database = {
       funcionarios_financeiro: {
         Row: {
           comissao_percentual: number | null
+          equipes_id: string | null
           funcionario_id: string
           id: string
           salario_base: number
@@ -1811,6 +1844,7 @@ export type Database = {
         }
         Insert: {
           comissao_percentual?: number | null
+          equipes_id?: string | null
           funcionario_id: string
           id?: string
           salario_base?: number
@@ -1819,6 +1853,7 @@ export type Database = {
         }
         Update: {
           comissao_percentual?: number | null
+          equipes_id?: string | null
           funcionario_id?: string
           id?: string
           salario_base?: number
@@ -1827,11 +1862,32 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: 'funcionarios_financeiro_equipes_id_fkey'
+            columns: ['equipes_id']
+            isOneToOne: false
+            referencedRelation: 'equipes_projetos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'funcionarios_financeiro_equipes_id_fkey'
+            columns: ['equipes_id']
+            isOneToOne: false
+            referencedRelation: 'vw_comissao_mensal'
+            referencedColumns: ['equipe_id']
+          },
+          {
             foreignKeyName: 'funcionarios_financeiro_funcionario_id_fkey'
             columns: ['funcionario_id']
             isOneToOne: true
             referencedRelation: 'funcionarios_novo'
             referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'funcionarios_financeiro_funcionario_id_fkey'
+            columns: ['funcionario_id']
+            isOneToOne: true
+            referencedRelation: 'vw_comissao_mensal'
+            referencedColumns: ['funcionario_id']
           },
           {
             foreignKeyName: 'funcionarios_financeiro_funcionario_id_fkey'
@@ -3775,6 +3831,8 @@ export type Database = {
           created_by: string | null
           data_entrada: string | null
           empresa_id: string | null
+          equipe_id: string | null
+          equipe_responsavel_obra_id: string | null
           estado: string | null
           historico: Json
           id: string
@@ -3783,7 +3841,6 @@ export type Database = {
           'Nome Arquiteto': string | null
           responsavel_id: string | null
           responsavel_nome: string | null
-          responsavel_obra_id: string | null
           status: Database['public']['Enums']['projeto_status'] | null
           updated_at: string
           valor_total: number
@@ -3801,6 +3858,8 @@ export type Database = {
           created_by?: string | null
           data_entrada?: string | null
           empresa_id?: string | null
+          equipe_id?: string | null
+          equipe_responsavel_obra_id?: string | null
           estado?: string | null
           historico?: Json
           id?: string
@@ -3811,7 +3870,6 @@ export type Database = {
           'Nome Arquiteto'?: string | null
           responsavel_id?: string | null
           responsavel_nome?: string | null
-          responsavel_obra_id?: string | null
           status?: Database['public']['Enums']['projeto_status'] | null
           updated_at?: string
           valor_total?: number
@@ -3829,6 +3887,8 @@ export type Database = {
           created_by?: string | null
           data_entrada?: string | null
           empresa_id?: string | null
+          equipe_id?: string | null
+          equipe_responsavel_obra_id?: string | null
           estado?: string | null
           historico?: Json
           id?: string
@@ -3839,7 +3899,6 @@ export type Database = {
           'Nome Arquiteto'?: string | null
           responsavel_id?: string | null
           responsavel_nome?: string | null
-          responsavel_obra_id?: string | null
           status?: Database['public']['Enums']['projeto_status'] | null
           updated_at?: string
           valor_total?: number
@@ -3944,6 +4003,34 @@ export type Database = {
             referencedColumns: ['empresa_id']
           },
           {
+            foreignKeyName: 'projetos_equipe_id_fkey'
+            columns: ['equipe_id']
+            isOneToOne: false
+            referencedRelation: 'equipes_projetos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'projetos_equipe_id_fkey'
+            columns: ['equipe_id']
+            isOneToOne: false
+            referencedRelation: 'vw_comissao_mensal'
+            referencedColumns: ['equipe_id']
+          },
+          {
+            foreignKeyName: 'projetos_equipe_responsavel_obra_id_fkey'
+            columns: ['equipe_responsavel_obra_id']
+            isOneToOne: false
+            referencedRelation: 'equipes_projetos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'projetos_equipe_responsavel_obra_id_fkey'
+            columns: ['equipe_responsavel_obra_id']
+            isOneToOne: false
+            referencedRelation: 'vw_comissao_mensal'
+            referencedColumns: ['equipe_id']
+          },
+          {
             foreignKeyName: 'projetos_responsavel_id_fkey'
             columns: ['responsavel_id']
             isOneToOne: false
@@ -3956,20 +4043,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: 'vw_projetos_por_responsavel'
             referencedColumns: ['usuario_id']
-          },
-          {
-            foreignKeyName: 'projetos_responsavel_obra_id_fkey'
-            columns: ['responsavel_obra_id']
-            isOneToOne: false
-            referencedRelation: 'contatos'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'projetos_responsavel_obra_id_fkey'
-            columns: ['responsavel_obra_id']
-            isOneToOne: false
-            referencedRelation: 'vw_transacoes_completas'
-            referencedColumns: ['contato_id']
           },
         ]
       }
@@ -6269,6 +6342,20 @@ export type Database = {
         }
         Relationships: []
       }
+      vw_comissao_mensal: {
+        Row: {
+          comissao_calculada: number | null
+          comissao_percentual: number | null
+          equipe: string | null
+          equipe_id: string | null
+          funcionario: string | null
+          funcionario_id: string | null
+          mes: string | null
+          total_projetos: number | null
+          valor_total_projetos: number | null
+        }
+        Relationships: []
+      }
       vw_conferencia_financeira: {
         Row: {
           data_transacao: string | null
@@ -7254,6 +7341,8 @@ export type Database = {
           created_by: string | null
           data_entrada: string | null
           empresa_id: string | null
+          equipe_id: string | null
+          equipe_responsavel_obra_id: string | null
           estado: string | null
           historico: Json
           id: string
@@ -7262,7 +7351,6 @@ export type Database = {
           'Nome Arquiteto': string | null
           responsavel_id: string | null
           responsavel_nome: string | null
-          responsavel_obra_id: string | null
           status: Database['public']['Enums']['projeto_status'] | null
           updated_at: string
           valor_total: number

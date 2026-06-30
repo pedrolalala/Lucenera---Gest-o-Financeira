@@ -375,7 +375,14 @@ Deno.serve(async (req: Request) => {
       let subtotal = 0
 
       const items = (budget.itens || []).sort((a: any, b: any) => {
-        return a.id > b.id ? 1 : -1
+        const idA = (a.custom_id || '').toUpperCase()
+        const idB = (b.custom_id || '').toUpperCase()
+        const numA = parseInt(idA.replace(/^L/, ''), 10)
+        const numB = parseInt(idB.replace(/^L/, ''), 10)
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB
+        if (!idA && idB) return 1
+        if (idA && !idB) return -1
+        return idA.localeCompare(idB)
       })
 
       items.forEach((item: any) => {

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase/client'
+import { formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
 
 export interface BudgetItem {
   id?: string
@@ -133,6 +134,11 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       )
     }
 
+    filtered = filtered.map((b) => ({
+      ...b,
+      itens: b.itens ? sortItemsByCircuitId(b.itens) : b.itens,
+    }))
+
     set({ budgets: filtered, loading: false, initialized: true })
   },
 
@@ -160,7 +166,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         quantidade: i.quantidade,
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,
-        custom_id: i.custom_id || null,
+        custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
         item_pai_id: i.item_pai_id || null,
       }))
       const { error: itemsError } = await supabase
@@ -198,7 +204,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         quantidade: i.quantidade,
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,
-        custom_id: i.custom_id || null,
+        custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
         item_pai_id: i.item_pai_id || null,
       }))
       const { error: itemsError } = await supabase

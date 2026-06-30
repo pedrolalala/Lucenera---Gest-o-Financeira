@@ -15,7 +15,7 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
+import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
@@ -292,14 +292,15 @@ export default function BudgetFormPage() {
               ? new Date(budget.data_emissao)
               : new Date(),
             validade: budget.validade ? new Date(budget.validade) : null,
-            itens:
+            itens: sortItemsByCircuitId(
               budget.itens?.map((i) => ({
-                custom_id: i.custom_id || '',
+                custom_id: formatCircuitId(i.custom_id || ''),
                 produto_id: i.produto_id,
                 quantidade: Math.max(1, Math.floor(Number(i.quantidade) || 1)),
                 preco_unitario: i.preco_unitario,
                 desconto: i.desconto || 0,
               })) || [],
+            ),
           })
         }
       } catch (error) {
@@ -713,7 +714,7 @@ export default function BudgetFormPage() {
           }
 
           return {
-            custom_id: displayCustomId,
+            custom_id: formatCircuitId(displayCustomId),
             produto_id: produtoId,
             quantidade: i.quantidade || 1,
             preco_unitario: i.preco_unitario || 0,
@@ -1238,10 +1239,19 @@ export default function BudgetFormPage() {
                           render={({ field: f }) => (
                             <FormItem>
                               <FormLabel className="text-xs text-gray-500 font-medium">
-                                Cód. Customizado / Obs
+                                Circuito (L)
                               </FormLabel>
                               <FormControl>
-                                <Input placeholder="Opcional" {...f} />
+                                <Input
+                                  placeholder="L01"
+                                  value={f.value || ''}
+                                  onChange={(e) =>
+                                    f.onChange(formatCircuitId(e.target.value))
+                                  }
+                                  onFocus={() => {
+                                    if (!f.value) f.onChange('L')
+                                  }}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
