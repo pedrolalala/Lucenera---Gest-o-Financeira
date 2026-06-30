@@ -131,8 +131,10 @@ function StockPopover({ productId }: { productId: string }) {
             {l.local}
           </span>
           <span>
-            Total: <strong>{l.quantidade}</strong> | Disp:{' '}
-            <strong>{l.quantidade - l.quantidade_reservada}</strong>
+            Total: <strong>{l.quantidade ?? 0}</strong> | Disp:{' '}
+            <strong>
+              {(l.quantidade ?? 0) - (l.quantidade_reservada ?? 0)}
+            </strong>
           </span>
         </div>
       ))}
@@ -189,7 +191,6 @@ export function ProductSearchModal({
       .select(
         `
         id, nome, sku, referencia, preco_venda, valor_venda,
-        estoque_total, estoque_disponivel,
         marca:marcas(nome), categoria:categorias_produto(nome)
       `,
       )
@@ -200,26 +201,59 @@ export function ProductSearchModal({
     }
     if (brandFilter !== 'all') q = q.eq('marca_id', brandFilter)
     if (catFilter !== 'all') q = q.eq('categoria_id', catFilter)
-    q.limit(200).then(({ data, error }) => {
+    q.limit(200).then(async ({ data, error }) => {
       if (error) {
         console.error(error)
         setProducts([])
-      } else {
-        setProducts(
-          (data || []).map((p: any) => ({
-            id: p.id,
-            nome: p.nome,
-            sku: p.sku,
-            referencia: p.referencia,
-            preco_venda: p.preco_venda,
-            valor_venda: p.valor_venda,
-            estoque_total: p.estoque_total || 0,
-            estoque_disponivel: p.estoque_disponivel || 0,
-            marca_nome: p.marca?.nome || null,
-            categoria_nome: p.categoria?.nome || null,
-          })),
-        )
+        setLoading(false)
+        return
       }
+
+      const mapped: ProductSearchItem[] = (data || []).map((p: any) => ({
+        id: p.id,
+        nome: p.nome,
+        sku: p.sku,
+        referencia: p.referencia,
+        preco_venda: p.preco_venda,
+        valor_venda: p.valor_venda,
+        estoque_total: 0,
+        estoque_disponivel: 0,
+        marca_nome: p.marca?.nome || null,
+        categoria_nome: p.categoria?.nome || null,
+      }))
+
+      if (mapped.length > 0) {
+        const { data: stockData } = await supabase
+          .from('vw_detalhe_produto_estoque')
+          .select('produto_id, estoque_total, estoque_disponivel')
+          .in(
+            'produto_id',
+            mapped.map((p) => p.id),
+          )
+
+        const stockMap = new Map<
+          string,
+          { estoque_total: number; estoque_disponivel: number }
+        >(
+          (stockData || []).map((s: any) => [
+            s.produto_id,
+            {
+              estoque_total: s.estoque_total ?? 0,
+              estoque_disponivel: s.estoque_disponivel ?? 0,
+            },
+          ]),
+        )
+
+        mapped.forEach((p) => {
+          const stock = stockMap.get(p.id)
+          if (stock) {
+            p.estoque_total = stock.estoque_total
+            p.estoque_disponivel = stock.estoque_disponivel
+          }
+        })
+      }
+
+      setProducts(mapped)
       setLoading(false)
     })
   }, [open, debounced, brandFilter, catFilter])
