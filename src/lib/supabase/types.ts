@@ -1869,44 +1869,6 @@ export type Database = {
         }
         Relationships: []
       }
-      historico_status_orcamento: {
-        Row: {
-          created_at: string | null
-          id: string
-          observacao: string | null
-          orcamento_id: string
-          status_anterior: string | null
-          status_novo: string
-          usuario: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          observacao?: string | null
-          orcamento_id: string
-          status_anterior?: string | null
-          status_novo: string
-          usuario?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          observacao?: string | null
-          orcamento_id?: string
-          status_anterior?: string | null
-          status_novo?: string
-          usuario?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'historico_status_orcamento_orcamento_id_fkey'
-            columns: ['orcamento_id']
-            isOneToOne: false
-            referencedRelation: 'orcamentos_revenda_ubiqua'
-            referencedColumns: ['id']
-          },
-        ]
-      }
       historico_status_orcamentos: {
         Row: {
           created_at: string | null
@@ -6524,6 +6486,7 @@ export type Database = {
           cargo: string | null
           comissao_percentual: number | null
           cpf: string | null
+          created_at: string | null
           data_admissao: string | null
           data_nascimento: string | null
           email: string | null
@@ -6569,17 +6532,59 @@ export type Database = {
       }
       vw_produtos_estoque_detalhado: {
         Row: {
+          ativo: boolean | null
+          categoria: string | null
+          categoria_id: string | null
+          codigo_legado: number | null
           codigo_produto: number | null
-          disponivel: number | null
-          estoque_geral: number | null
+          descricao_tecnica: string | null
+          estoque_disponivel_calc: number | null
+          estoque_reservado_calc: number | null
+          estoque_setores: Json | null
+          estoque_total_calc: number | null
+          fornecedor_principal_id: string | null
           id: string | null
+          marca_id: string | null
+          ncm: string | null
           nome: string | null
+          preco_custo: number | null
           preco_venda: number | null
-          reserva: number | null
-          separacao: number | null
+          referencia: string | null
           sku: string | null
+          tipo_fiscal: string | null
+          unidade: string | null
+          valor_venda: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'produtos_categoria_id_fkey'
+            columns: ['categoria_id']
+            isOneToOne: false
+            referencedRelation: 'categorias_produto'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'produtos_fornecedor_principal_id_fkey'
+            columns: ['fornecedor_principal_id']
+            isOneToOne: false
+            referencedRelation: 'contatos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'produtos_fornecedor_principal_id_fkey'
+            columns: ['fornecedor_principal_id']
+            isOneToOne: false
+            referencedRelation: 'vw_transacoes_completas'
+            referencedColumns: ['contato_id']
+          },
+          {
+            foreignKeyName: 'produtos_marca_id_fkey'
+            columns: ['marca_id']
+            isOneToOne: false
+            referencedRelation: 'marcas'
+            referencedColumns: ['id']
+          },
+        ]
       }
       vw_produtos_estoque_por_local: {
         Row: {
