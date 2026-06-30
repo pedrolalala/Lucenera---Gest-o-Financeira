@@ -1,0 +1,443 @@
+import { useState, useEffect } from 'react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  HoverCard,
+  HoverCardTrigger,
+  HoverCardContent,
+} from '@/components/ui/hover-card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table'
+import {
+  Loader2,
+  Search,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  MapPin,
+  Check,
+} from 'lucide-react'
+import { supabase } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
+import { useDebounce } from '@/hooks/use-debounce'
+
+export interface ProductSearchItem {
+  id: string
+  nome: string
+  sku: string | null
+  referencia: string | null
+  preco_venda: number | null
+  valor_venda: number | null
+  estoque_total: number
+  estoque_disponivel: number
+  marca_nome: string | null
+  categoria_nome: string | null
+}
+
+type SortKey =
+  | 'sku'
+  | 'nome'
+  | 'marca_nome'
+  | 'categoria_nome'
+  | 'preco_venda'
+  | 'estoque_total'
+  | 'estoque_disponivel'
+type SortDir = 'asc' | 'desc'
+
+const FMT = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+})
+const COLS: { key: SortKey; label: string }[] = [
+  { key: 'sku', label: 'SKU / Referência' },
+  { key: 'nome', label: 'Nome' },
+  { key: 'marca_nome', label: 'Marca' },
+  { key: 'categoria_nome', label: 'Categoria' },
+  { key: 'preco_venda', label: 'Preço' },
+  { key: 'estoque_total', label: 'Estoque Total' },
+  { key: 'estoque_disponivel', label: 'Disponível' },
+]
+
+function sortData(
+  data: ProductSearchItem[],
+  key: SortKey,
+  dir: SortDir,
+): ProductSearchItem[] {
+  return [...data].sort((a, b) => {
+    const va = a[key] ?? 0
+    const vb = b[key] ?? 0
+    const cmp =
+      typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb))
+    return dir === 'asc' ? cmp : -cmp
+  })
+}
+
+function StockPopover({ productId }: { productId: string }) {
+  const [locs, setLocs] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('estoque_itens')
+      .select('local, quantidade, quantidade_reservada')
+      .eq('produto_id', productId)
+      .then(({ data }) => {
+        if (!cancelled) setLocs(data || [])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [productId])
+
+  if (!locs)
+    return <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+  if (!locs.length)
+    return (
+      <p className="text-sm text-muted-foreground">Sem detalhes por local.</p>
+    )
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-semibold uppercase text-muted-foreground">
+        Distribuição por Local
+      </p>
+      {locs.map((l, i) => (
+        <div key={i} className="flex justify-between gap-4 text-sm">
+          <span className="flex items-center gap-1">
+            <MapPin className="w-3 h-3" />
+            {l.local}
+          </span>
+          <span>
+            Total: <strong>{l.quantidade}</strong> | Disp:{' '}
+            <strong>{l.quantidade - l.quantidade_reservada}</strong>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function ProductSearchModal({
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onConfirm: (p: ProductSearchItem[]) => void
+}) {
+  const [search, setSearch] = useState('')
+  const debounced = useDebounce(search, 300)
+  const [brandFilter, setBrandFilter] = useState('all')
+  const [catFilter, setCatFilter] = useState('all')
+  const [brands, setBrands] = useState<{ id: string; nome: string }[]>([])
+  const [cats, setCats] = useState<{ id: string; nome: string }[]>([])
+  const [products, setProducts] = useState<ProductSearchItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('sku')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!open) {
+      setSelected(new Set())
+      setSearch('')
+      setBrandFilter('all')
+      setCatFilter('all')
+      return
+    }
+    supabase
+      .from('marcas')
+      .select('id, nome')
+      .order('nome')
+      .then(({ data }) => data && setBrands(data))
+    supabase
+      .from('categorias_produto')
+      .select('id, nome')
+      .order('nome')
+      .then(({ data }) => data && setCats(data))
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    let q = supabase
+      .from('produtos')
+      .select(
+        `
+        id, nome, sku, referencia, preco_venda, valor_venda,
+        estoque_total, estoque_disponivel,
+        marca:marcas(nome), categoria:categorias_produto(nome)
+      `,
+      )
+      .eq('ativo', true)
+    if (debounced) {
+      const t = debounced.trim()
+      q = q.or(`nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%`)
+    }
+    if (brandFilter !== 'all') q = q.eq('marca_id', brandFilter)
+    if (catFilter !== 'all') q = q.eq('categoria_id', catFilter)
+    q.limit(200).then(({ data, error }) => {
+      if (error) {
+        console.error(error)
+        setProducts([])
+      } else {
+        setProducts(
+          (data || []).map((p: any) => ({
+            id: p.id,
+            nome: p.nome,
+            sku: p.sku,
+            referencia: p.referencia,
+            preco_venda: p.preco_venda,
+            valor_venda: p.valor_venda,
+            estoque_total: p.estoque_total || 0,
+            estoque_disponivel: p.estoque_disponivel || 0,
+            marca_nome: p.marca?.nome || null,
+            categoria_nome: p.categoria?.nome || null,
+          })),
+        )
+      }
+      setLoading(false)
+    })
+  }, [open, debounced, brandFilter, catFilter])
+
+  const sorted = sortData(products, sortKey, sortDir)
+  const allSelected =
+    sorted.length > 0 && sorted.every((p) => selected.has(p.id))
+
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelected((s) => {
+      const n = new Set(s)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  }
+
+  const toggleAll = () => {
+    setSelected(() =>
+      allSelected ? new Set() : new Set(sorted.map((p) => p.id)),
+    )
+  }
+
+  const handleConfirm = () => {
+    const chosen = sorted.filter((p) => selected.has(p.id))
+    onConfirm(chosen)
+    setSelected(new Set())
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] w-[95vw] h-[95vh] p-0 gap-0 flex flex-col">
+        <DialogHeader className="px-6 py-4 border-b">
+          <DialogTitle>Buscar Produtos</DialogTitle>
+        </DialogHeader>
+
+        <div className="px-6 py-3 border-b flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por SKU ou nome..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={brandFilter} onValueChange={setBrandFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Marca" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as marcas</SelectItem>
+              {brands.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={catFilter} onValueChange={setCatFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as categorias</SelectItem>
+              {cats.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex-1 overflow-auto">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader className="sticky top-0 bg-background z-10">
+                <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleAll}
+                    />
+                  </TableHead>
+                  {COLS.map((col) => (
+                    <TableHead key={col.key}>
+                      <button
+                        type="button"
+                        onClick={() => handleSort(col.key)}
+                        className="flex items-center gap-1 hover:text-foreground"
+                      >
+                        {col.label}
+                        {sortKey === col.key ? (
+                          sortDir === 'asc' ? (
+                            <ArrowUp className="w-3 h-3" />
+                          ) : (
+                            <ArrowDown className="w-3 h-3" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 opacity-40" />
+                        )}
+                      </button>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sorted.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={COLS.length + 1}
+                      className="text-center text-muted-foreground py-8"
+                    >
+                      Nenhum produto encontrado.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sorted.map((p) => (
+                    <TableRow
+                      key={p.id}
+                      data-state={selected.has(p.id) ? 'selected' : undefined}
+                      className={cn(selected.has(p.id) && 'bg-primary/5')}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={selected.has(p.id)}
+                          onCheckedChange={() => toggleSelect(p.id)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-bold text-base text-gray-900">
+                          {p.sku || p.referencia || '-'}
+                        </div>
+                        {p.referencia && p.sku && p.referencia !== p.sku && (
+                          <div className="text-xs text-muted-foreground">
+                            Ref: {p.referencia}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="line-clamp-2 max-w-[200px] text-sm text-gray-600">
+                          {p.nome}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {p.marca_nome || '-'}
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {p.categoria_nome || '-'}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {FMT.format(p.preco_venda || p.valor_venda || 0)}
+                      </TableCell>
+                      <TableCell>
+                        <HoverCard openDelay={300} closeDelay={200}>
+                          <HoverCardTrigger asChild>
+                            <span className="cursor-help font-semibold underline decoration-dotted">
+                              {p.estoque_total}
+                            </span>
+                          </HoverCardTrigger>
+                          <HoverCardContent className="w-64">
+                            <StockPopover productId={p.id} />
+                          </HoverCardContent>
+                        </HoverCard>
+                      </TableCell>
+                      <TableCell>
+                        <HoverCard openDelay={300} closeDelay={200}>
+                          <HoverCardTrigger asChild>
+                            <span
+                              className={cn(
+                                'cursor-help font-semibold underline decoration-dotted',
+                                p.estoque_disponivel <= 0 && 'text-red-600',
+                              )}
+                            >
+                              {p.estoque_disponivel}
+                            </span>
+                          </HoverCardTrigger>
+                          <HoverCardContent className="w-64">
+                            <StockPopover productId={p.id} />
+                          </HoverCardContent>
+                        </HoverCard>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">
+            {selected.size} produto(s) selecionado(s)
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirm} disabled={selected.size === 0}>
+              <Check className="w-4 h-4 mr-2" />
+              Confirmar Seleção ({selected.size})
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

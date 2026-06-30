@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Save,
   Upload,
+  PackageSearch,
 } from 'lucide-react'
 
 import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
@@ -54,6 +55,10 @@ import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useOptions } from '@/hooks/use-options'
 import { supabase } from '@/lib/supabase/client'
+import {
+  ProductSearchModal,
+  type ProductSearchItem,
+} from '@/components/budgets/ProductSearchModal'
 
 const formSchema = z
   .object({
@@ -144,6 +149,7 @@ export default function BudgetFormPage() {
   const [isImporting, setIsImporting] = useState(false)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
+  const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
   const {
     empresas,
     clientes,
@@ -549,6 +555,21 @@ export default function BudgetFormPage() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
+    const newItems = products.map((p) => ({
+      custom_id: '',
+      produto_id: p.id,
+      quantidade: 1,
+      preco_unitario: p.preco_venda || p.valor_venda || 0,
+      desconto: 0,
+    }))
+    newItems.forEach((item) => append(item))
+    if (newItems.length > 0) {
+      toast.success(`${newItems.length} produto(s) adicionado(s) ao orçamento.`)
+    }
+    setIsProductSearchOpen(false)
   }
 
   const handleImportPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1175,22 +1196,32 @@ export default function BudgetFormPage() {
                   Produtos e quantidades que compõem o orçamento.
                 </CardDescription>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  append({
-                    custom_id: '',
-                    produto_id: '',
-                    quantidade: 1,
-                    preco_unitario: 0,
-                    desconto: 0,
-                  })
-                }
-              >
-                <Plus className="w-4 h-4 mr-2" /> Adicionar Item
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => setIsProductSearchOpen(true)}
+                >
+                  <PackageSearch className="w-4 h-4 mr-2" /> Buscar Produtos
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    append({
+                      custom_id: '',
+                      produto_id: '',
+                      quantidade: 1,
+                      preco_unitario: 0,
+                      desconto: 0,
+                    })
+                  }
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Adicionar Item
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {fields.length === 0 && (
@@ -1201,21 +1232,30 @@ export default function BudgetFormPage() {
                   <p className="text-sm text-gray-400 mb-4">
                     Adicione produtos para compor este orçamento.
                   </p>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() =>
-                      append({
-                        custom_id: '',
-                        produto_id: '',
-                        quantidade: 1,
-                        preco_unitario: 0,
-                        desconto: 0,
-                      })
-                    }
-                  >
-                    <Plus className="w-4 h-4 mr-2" /> Adicionar Primeiro Item
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="default"
+                      onClick={() => setIsProductSearchOpen(true)}
+                    >
+                      <PackageSearch className="w-4 h-4 mr-2" /> Buscar Produtos
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        append({
+                          custom_id: '',
+                          produto_id: '',
+                          quantidade: 1,
+                          preco_unitario: 0,
+                          desconto: 0,
+                        })
+                      }
+                    >
+                      <Plus className="w-4 h-4 mr-2" /> Adicionar Item
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -1696,6 +1736,12 @@ export default function BudgetFormPage() {
                 shouldValidate: true,
               })
             }}
+          />
+
+          <ProductSearchModal
+            open={isProductSearchOpen}
+            onOpenChange={setIsProductSearchOpen}
+            onConfirm={handleProductSearchConfirm}
           />
 
           <div className="flex justify-end mt-6">
