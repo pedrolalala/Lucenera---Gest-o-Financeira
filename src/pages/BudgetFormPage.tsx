@@ -118,6 +118,7 @@ const formSchema = z
             .int('Deve ser um valor inteiro')
             .min(0)
             .default(0),
+          sub_ordem: z.number().optional(),
         }),
       )
       .min(1, 'Adicione pelo menos um item'),
@@ -245,7 +246,7 @@ export default function BudgetFormPage() {
               `
               *,
               itens:orcamento_itens(
-                id, produto_id, quantidade, preco_unitario, desconto, custom_id
+                id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem
               )
             `,
             )
@@ -308,6 +309,7 @@ export default function BudgetFormPage() {
                 quantidade: Math.max(1, Math.floor(Number(i.quantidade) || 1)),
                 preco_unitario: i.preco_unitario,
                 desconto: i.desconto || 0,
+                sub_ordem: i.sub_ordem ?? 0,
               })) || [],
             ),
           })

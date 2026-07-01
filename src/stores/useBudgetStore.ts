@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase/client'
 import {
+  computeSubOrdem,
   extractCircuitNumber,
   formatCircuitId,
   sortItemsByCircuitId,
@@ -14,6 +15,7 @@ export interface BudgetItem {
   desconto: number
   custom_id?: string
   ordem?: number
+  sub_ordem?: number
   item_pai_id?: string
   produto?: {
     nome: string
@@ -108,6 +110,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         desconto,
         custom_id,
         ordem,
+        sub_ordem,
         item_pai_id,
         produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade, porc_st)
       )
@@ -165,7 +168,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     }
 
     if (items && items.length > 0) {
-      const itemsToInsert = items.map((i) => ({
+      const subOrdens = computeSubOrdem(items)
+      const itemsToInsert = items.map((i, idx) => ({
         orcamento_id: data.id,
         produto_id: i.produto_id || null,
         quantidade: i.quantidade,
@@ -173,6 +177,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         desconto: i.desconto,
         custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
         ordem: extractCircuitNumber(i.custom_id),
+        sub_ordem: subOrdens[idx],
         item_pai_id: i.item_pai_id || null,
       }))
       const { error: itemsError } = await supabase
@@ -204,7 +209,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     await supabase.from('orcamento_itens').delete().eq('orcamento_id', id)
 
     if (items && items.length > 0) {
-      const itemsToInsert = items.map((i) => ({
+      const subOrdens = computeSubOrdem(items)
+      const itemsToInsert = items.map((i, idx) => ({
         orcamento_id: id,
         produto_id: i.produto_id || null,
         quantidade: i.quantidade,
@@ -212,6 +218,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         desconto: i.desconto,
         custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
         ordem: extractCircuitNumber(i.custom_id),
+        sub_ordem: subOrdens[idx],
         item_pai_id: i.item_pai_id || null,
       }))
       const { error: itemsError } = await supabase

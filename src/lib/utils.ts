@@ -1,86 +1,88 @@
-/* General utility functions (exposes cn) */
-import { clsx, type ClassValue } from 'clsx'
+import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
-/**
- * Merges multiple class names into a single string
- * @param inputs - Array of class names
- * @returns Merged class names
- */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function normalizeStatus(status?: string | null) {
-  if (!status) return 'rascunho'
+export function normalizeStatus(status: string | null | undefined): string {
+  if (!status) return ''
   return status
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .trim()
     .replace(/\s+/g, '_')
 }
 
-/**
- * Formats a circuit identifier string.
- * Ensures uppercase "L" prefix and leading zero for single-digit numbers.
- * Examples: "l1" -> "L01", "L5" -> "L05", "l12" -> "L12", "100" -> "L100"
- */
-export function formatCircuitId(input: string | null | undefined): string {
-  if (!input) return ''
+export function formatCircuitId(value: string): string {
+  if (!value) return ''
+  const trimmed = value.trim().toUpperCase()
 
-  const trimmed = input.trim()
-  if (!trimmed) return ''
-
-  const value = trimmed.toUpperCase()
-
-  const match = value.match(/^L?(\d+)$/)
+  const match = trimmed.match(/^L\s*(\d+)$/)
   if (match) {
-    const num = parseInt(match[1], 10)
-    if (num < 10) {
-      return 'L0' + num
+    return `L${match[1].padStart(2, '0')}`
+  }
+
+  const numMatch = trimmed.match(/^(\d+)$/)
+  if (numMatch) {
+    return `L${numMatch[1].padStart(2, '0')}`
+  }
+
+  if (trimmed === 'L' || trimmed === 'L ') {
+    return 'L'
+  }
+
+  if (trimmed.startsWith('L')) {
+    const rest = trimmed.slice(1).trim()
+    const numMatch2 = rest.match(/^(\d+)$/)
+    if (numMatch2) {
+      return `L${numMatch2[1].padStart(2, '0')}`
     }
-    return 'L' + num
+    return trimmed
   }
 
-  if (value.startsWith('L')) {
-    return value
+  return trimmed
+}
+
+export function extractCircuitNumber(value: string | null | undefined): number {
+  if (!value) return 0
+  const match = value.match(/(\d+)/)
+  if (match) {
+    return parseInt(match[1], 10)
   }
-
-  return value
+  return 0
 }
 
-/**
- * Extracts the numeric value from a circuit identifier string.
- * Examples: "L01" -> 1, "L15" -> 15, "L100" -> 100, "" -> 0
- */
-export function extractCircuitNumber(input: string | null | undefined): number {
-  if (!input) return 0
-  const match = input.trim().match(/(\d+)/)
-  return match ? parseInt(match[1], 10) : 0
-}
-
-/**
- * Sorts items by their circuit ID (custom_id) field.
- * Items with valid circuit IDs (L01, L02, L10, etc.) are sorted numerically.
- * Items without circuit IDs are placed at the end.
- */
-export function sortItemsByCircuitId<T extends { custom_id?: string | null }>(
-  items: T[],
-): T[] {
+export function sortItemsByCircuitId<
+  T extends { custom_id?: string | null; sub_ordem?: number | null },
+>(items: T[]): T[] {
   return [...items].sort((a, b) => {
-    const idA = (a.custom_id || '').toUpperCase()
-    const idB = (b.custom_id || '').toUpperCase()
+    const numA = extractCircuitNumber(a.custom_id)
+    const numB = extractCircuitNumber(b.custom_id)
+    const aValid = numA > 0
+    const bValid = numB > 0
 
-    const numA = parseInt(idA.replace(/^L/, ''), 10)
-    const numB = parseInt(idB.replace(/^L/, ''), 10)
-
-    if (!isNaN(numA) && !isNaN(numB)) {
-      return numA - numB
+    if (!aValid && !bValid) {
+      return (a.sub_ordem ?? 0) - (b.sub_ordem ?? 0)
     }
+    if (!aValid) return 1
+    if (!bValid) return -1
 
-    if (!idA && idB) return 1
-    if (idA && !idB) return -1
+    if (numA !== numB) return numA - numB
 
-    return idA.localeCompare(idB)
+    return (a.sub_ordem ?? 0) - (b.sub_ordem ?? 0)
+  })
+}
+
+export function computeSubOrdem<T extends { custom_id?: string | null }>(
+  items: T[],
+): number[] {
+  const circuitCounts: Record<number, number> = {}
+  return items.map((item) => {
+    const circuitNum = extractCircuitNumber(item.custom_id)
+    const current = circuitCounts[circuitNum] ?? 0
+    circuitCounts[circuitNum] = current + 1
+    return current
   })
 }
