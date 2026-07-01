@@ -17,6 +17,7 @@ export interface ProductOption {
   preco_venda: number
   sku?: string
   referencia?: string
+  codigo_produto?: number | null
   source: 'produtos' | 'revenda_ubiqua'
 }
 
@@ -60,23 +61,23 @@ export function AsyncProductSelect({
       if (isRevenda) {
         const { data } = await supabase
           .from('revenda_ubiqua')
-          .select('id, referencia, descricao, valor_revenda')
+          .select('id, referencia, descricao, valor_revenda, cod_produto')
           .eq('id', value)
           .single()
         if (data) {
           setSelectedLabel(
-            `${data.descricao}${data.referencia ? ` | Ref: ${data.referencia}` : ''} [Ubiqua]`,
+            `${data.cod_produto ? `[${data.cod_produto}] ` : ''}${data.descricao}${data.referencia ? ` | Ref: ${data.referencia}` : ''} [Ubiqua]`,
           )
         }
       } else {
         const { data } = await supabase
           .from('produtos')
-          .select('id, nome, sku, referencia')
+          .select('id, nome, sku, referencia, codigo_produto')
           .eq('id', value)
           .single()
         if (data) {
           setSelectedLabel(
-            `${data.nome}${data.sku ? ` | SKU: ${data.sku}` : ''}${data.referencia ? ` | Ref: ${data.referencia}` : ''}`,
+            `${data.codigo_produto ? `[${data.codigo_produto}] ` : ''}${data.nome}${data.sku ? ` | SKU: ${data.sku}` : ''}${data.referencia ? ` | Ref: ${data.referencia}` : ''}`,
           )
         }
       }
@@ -99,19 +100,30 @@ export function AsyncProductSelect({
 
         let prodQuery = supabase
           .from('produtos')
-          .select('id, nome, preco_venda, sku, referencia')
+          .select('id, nome, preco_venda, sku, referencia, codigo_produto')
 
         let revQuery = supabase
           .from('revenda_ubiqua')
-          .select('id, referencia, descricao, valor_revenda')
+          .select('id, referencia, descricao, valor_revenda, cod_produto')
 
         if (cleanTerm) {
-          prodQuery = prodQuery.or(
-            `nome.ilike.%${cleanTerm}%,sku.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
-          )
-          revQuery = revQuery.or(
-            `descricao.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
-          )
+          const numericTerm = parseInt(cleanTerm, 10)
+          const isNumeric = !isNaN(numericTerm) && /^\d+$/.test(cleanTerm)
+          if (isNumeric) {
+            prodQuery = prodQuery.or(
+              `nome.ilike.%${cleanTerm}%,sku.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%,codigo_produto.eq.${numericTerm}`,
+            )
+            revQuery = revQuery.or(
+              `descricao.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%,cod_produto.eq.${numericTerm}`,
+            )
+          } else {
+            prodQuery = prodQuery.or(
+              `nome.ilike.%${cleanTerm}%,sku.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
+            )
+            revQuery = revQuery.or(
+              `descricao.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
+            )
+          }
         }
 
         const [pRes, rRes] = await Promise.all([
@@ -122,19 +134,21 @@ export function AsyncProductSelect({
         if (pRes.data)
           prods = pRes.data.map((p) => ({
             id: p.id,
-            nome: `${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
+            nome: `${p.codigo_produto ? `[${p.codigo_produto}] ` : ''}${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
             preco_venda: p.preco_venda,
             sku: p.sku,
             referencia: p.referencia,
+            codigo_produto: p.codigo_produto,
             source: 'produtos' as const,
           }))
         if (rRes.data)
           revs = rRes.data.map((r) => ({
             id: String(r.id),
-            nome: `${r.descricao}${r.referencia ? ` | Ref: ${r.referencia}` : ''} [Ubiqua]`,
+            nome: `${r.cod_produto ? `[${r.cod_produto}] ` : ''}${r.descricao}${r.referencia ? ` | Ref: ${r.referencia}` : ''} [Ubiqua]`,
             preco_venda: r.valor_revenda,
             sku: r.referencia,
             referencia: r.referencia,
+            codigo_produto: r.cod_produto,
             source: 'revenda_ubiqua' as const,
           }))
 

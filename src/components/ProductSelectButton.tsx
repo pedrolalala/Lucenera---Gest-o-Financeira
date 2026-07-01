@@ -28,25 +28,25 @@ export function ProductSelectButton({
       if (isRevenda) {
         const { data } = await supabase
           .from('revenda_ubiqua')
-          .select('referencia, descricao')
+          .select('referencia, descricao, cod_produto')
           .eq('id', value)
           .single()
 
         if (!cancelled && data) {
           setLabel(
-            `${data.descricao}${data.referencia ? ` | Ref: ${data.referencia}` : ''} [Ubiqua]`,
+            `${data.cod_produto ? `[${data.cod_produto}] ` : ''}${data.descricao}${data.referencia ? ` | Ref: ${data.referencia}` : ''} [Ubiqua]`,
           )
         }
       } else {
         const { data } = await supabase
           .from('produtos')
-          .select('nome, sku, referencia')
+          .select('nome, sku, referencia, codigo_produto')
           .eq('id', value)
           .single()
 
         if (!cancelled && data) {
           setLabel(
-            `${data.nome}${data.sku ? ` | SKU: ${data.sku}` : ''}${data.referencia ? ` | Ref: ${data.referencia}` : ''}`,
+            `${data.codigo_produto ? `[${data.codigo_produto}] ` : ''}${data.nome}${data.sku ? ` | SKU: ${data.sku}` : ''}${data.referencia ? ` | Ref: ${data.referencia}` : ''}`,
           )
         }
       }

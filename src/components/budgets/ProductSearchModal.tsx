@@ -47,6 +47,7 @@ export interface ProductSearchItem {
   nome: string
   sku: string | null
   referencia: string | null
+  codigo_produto: number | null
   preco_venda: number | null
   valor_venda: number | null
   estoque_total: number
@@ -56,6 +57,7 @@ export interface ProductSearchItem {
 }
 
 type SortKey =
+  | 'codigo_produto'
   | 'sku'
   | 'nome'
   | 'marca_nome'
@@ -72,6 +74,7 @@ const FMT = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL',
 })
 const COLS: { key: SortKey; label: string }[] = [
+  { key: 'codigo_produto', label: 'Código' },
   { key: 'sku', label: 'SKU / Referência' },
   { key: 'nome', label: 'Nome' },
   { key: 'marca_nome', label: 'Marca' },
@@ -205,7 +208,7 @@ export function ProductSearchModal({
         .from('produtos')
         .select(
           `
-          id, nome, sku, referencia, preco_venda, valor_venda,
+          id, nome, sku, referencia, codigo_produto, preco_venda, valor_venda,
           marca:marcas(nome), categoria:categorias_produto(nome)
         `,
         )
@@ -213,7 +216,15 @@ export function ProductSearchModal({
 
       if (debounced) {
         const t = debounced.trim()
-        q = q.or(`nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%`)
+        const numericTerm = parseInt(t, 10)
+        const isNumeric = !isNaN(numericTerm) && /^\d+$/.test(t)
+        if (isNumeric) {
+          q = q.or(
+            `nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%,codigo_produto.eq.${numericTerm}`,
+          )
+        } else {
+          q = q.or(`nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%`)
+        }
       }
       if (brandFilter !== 'all') q = q.eq('marca_id', brandFilter)
       if (catFilter !== 'all') q = q.eq('categoria_id', catFilter)
@@ -236,6 +247,7 @@ export function ProductSearchModal({
         nome: p.nome,
         sku: p.sku,
         referencia: p.referencia,
+        codigo_produto: p.codigo_produto,
         preco_venda: p.preco_venda,
         valor_venda: p.valor_venda,
         estoque_total: 0,
@@ -468,6 +480,11 @@ export function ProductSearchModal({
                           checked={selected.has(p.id)}
                           onCheckedChange={() => toggleSelect(p.id)}
                         />
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono font-bold text-sm text-primary">
+                          {p.codigo_produto ?? '-'}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <div className="font-bold text-base text-gray-900">
