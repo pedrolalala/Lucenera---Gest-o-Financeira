@@ -41,7 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
-import { AsyncProductSelect } from '@/components/AsyncProductSelect'
+import { ProductSelectButton } from '@/components/ProductSelectButton'
 import { ProjectCreateModal } from '@/components/ProjectCreateModal'
 import { ClientCreateModal } from '@/components/ClientCreateModal'
 import {
@@ -150,6 +150,9 @@ export default function BudgetFormPage() {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
+  const [productSearchRowIndex, setProductSearchRowIndex] = useState<
+    number | null
+  >(null)
   const {
     empresas,
     clientes,
@@ -558,18 +561,47 @@ export default function BudgetFormPage() {
   }
 
   const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
-    const newItems = products.map((p) => ({
-      custom_id: '',
-      produto_id: p.id,
-      quantidade: 1,
-      preco_unitario: p.preco_venda || p.valor_venda || 0,
-      desconto: 0,
-    }))
-    newItems.forEach((item) => append(item))
-    if (newItems.length > 0) {
-      toast.success(`${newItems.length} produto(s) adicionado(s) ao orçamento.`)
+    if (products.length === 0) {
+      setIsProductSearchOpen(false)
+      setProductSearchRowIndex(null)
+      return
     }
+
+    if (productSearchRowIndex !== null) {
+      const first = products[0]
+      form.setValue(`itens.${productSearchRowIndex}.produto_id`, first.id, {
+        shouldValidate: true,
+      })
+      form.setValue(
+        `itens.${productSearchRowIndex}.preco_unitario`,
+        first.preco_venda || first.valor_venda || 0,
+        { shouldValidate: true, shouldDirty: true, shouldTouch: true },
+      )
+
+      products.slice(1).forEach((p) => {
+        append({
+          custom_id: '',
+          produto_id: p.id,
+          quantidade: 1,
+          preco_unitario: p.preco_venda || p.valor_venda || 0,
+          desconto: 0,
+        })
+      })
+    } else {
+      products.forEach((p) => {
+        append({
+          custom_id: '',
+          produto_id: p.id,
+          quantidade: 1,
+          preco_unitario: p.preco_venda || p.valor_venda || 0,
+          desconto: 0,
+        })
+      })
+    }
+
+    toast.success(`${products.length} produto(s) adicionado(s) ao orçamento.`)
     setIsProductSearchOpen(false)
+    setProductSearchRowIndex(null)
   }
 
   const handleImportPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -753,18 +785,6 @@ export default function BudgetFormPage() {
     } finally {
       setIsImporting(false)
       e.target.value = ''
-    }
-  }
-
-  const handleProductChange = async (index: number, val: string) => {
-    form.setValue(`itens.${index}.produto_id`, val, { shouldValidate: true })
-
-    if (!val) {
-      form.setValue(`itens.${index}.preco_unitario`, 0, {
-        shouldValidate: true,
-        shouldDirty: true,
-        shouldTouch: true,
-      })
     }
   }
 
@@ -1201,7 +1221,10 @@ export default function BudgetFormPage() {
                   type="button"
                   variant="default"
                   size="sm"
-                  onClick={() => setIsProductSearchOpen(true)}
+                  onClick={() => {
+                    setProductSearchRowIndex(null)
+                    setIsProductSearchOpen(true)
+                  }}
                 >
                   <PackageSearch className="w-4 h-4 mr-2" /> Buscar Produtos
                 </Button>
@@ -1236,7 +1259,10 @@ export default function BudgetFormPage() {
                     <Button
                       type="button"
                       variant="default"
-                      onClick={() => setIsProductSearchOpen(true)}
+                      onClick={() => {
+                        setProductSearchRowIndex(null)
+                        setIsProductSearchOpen(true)
+                      }}
                     >
                       <PackageSearch className="w-4 h-4 mr-2" /> Buscar Produtos
                     </Button>
@@ -1309,25 +1335,15 @@ export default function BudgetFormPage() {
                                 Produto
                               </FormLabel>
                               <FormControl>
-                                <AsyncProductSelect
+                                <ProductSelectButton
                                   value={f.value}
-                                  onChange={(val) =>
-                                    handleProductChange(index, val)
-                                  }
-                                  onProductSelect={(prod) => {
-                                    form.setValue(
-                                      `itens.${index}.preco_unitario`,
-                                      prod.preco_venda || 0,
-                                      {
-                                        shouldValidate: true,
-                                        shouldDirty: true,
-                                        shouldTouch: true,
-                                      },
-                                    )
+                                  onClick={() => {
+                                    setProductSearchRowIndex(index)
+                                    setIsProductSearchOpen(true)
                                   }}
                                   placeholder="Buscar produto..."
                                 />
-                              </FormControl>
+                              </FormControl>{' '}
                               <FormMessage />
                             </FormItem>
                           )}
@@ -1740,7 +1756,10 @@ export default function BudgetFormPage() {
 
           <ProductSearchModal
             open={isProductSearchOpen}
-            onOpenChange={setIsProductSearchOpen}
+            onOpenChange={(v) => {
+              setIsProductSearchOpen(v)
+              if (!v) setProductSearchRowIndex(null)
+            }}
             onConfirm={handleProductSearchConfirm}
           />
 
