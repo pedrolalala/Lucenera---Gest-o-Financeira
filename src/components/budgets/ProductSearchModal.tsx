@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -64,6 +64,8 @@ type SortKey =
   | 'estoque_total'
   | 'estoque_disponivel'
 type SortDir = 'asc' | 'desc'
+
+const PAGE_SIZE = 50
 
 const FMT = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -159,9 +161,14 @@ export function ProductSearchModal({
   const [cats, setCats] = useState<{ id: string; nome: string }[]>([])
   const [products, setProducts] = useState<ProductSearchItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [page, setPage] = useState(0)
   const [sortKey, setSortKey] = useState<SortKey>('sku')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) {
@@ -169,6 +176,9 @@ export function ProductSearchModal({
       setSearch('')
       setBrandFilter('all')
       setCatFilter('all')
+      setProducts([])
+      setPage(0)
+      setHasMore(true)
       return
     }
     supabase
@@ -183,29 +193,41 @@ export function ProductSearchModal({
       .then(({ data }) => data && setCats(data))
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    setLoading(true)
-    let q = supabase
-      .from('produtos')
-      .select(
-        `
-        id, nome, sku, referencia, preco_venda, valor_venda,
-        marca:marcas(nome), categoria:categorias_produto(nome)
-      `,
-      )
-      .eq('ativo', true)
-    if (debounced) {
-      const t = debounced.trim()
-      q = q.or(`nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%`)
-    }
-    if (brandFilter !== 'all') q = q.eq('marca_id', brandFilter)
-    if (catFilter !== 'all') q = q.eq('categoria_id', catFilter)
-    q.limit(200).then(async ({ data, error }) => {
+  const fetchPage = useCallback(
+    async (pageNum: number, append: boolean) => {
+      if (append) setLoadingMore(true)
+      else setLoading(true)
+
+      const from = pageNum * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
+
+      let q = supabase
+        .from('produtos')
+        .select(
+          `
+          id, nome, sku, referencia, preco_venda, valor_venda,
+          marca:marcas(nome), categoria:categorias_produto(nome)
+        `,
+        )
+        .eq('ativo', true)
+
+      if (debounced) {
+        const t = debounced.trim()
+        q = q.or(`nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%`)
+      }
+      if (brandFilter !== 'all') q = q.eq('marca_id', brandFilter)
+      if (catFilter !== 'all') q = q.eq('categoria_id', catFilter)
+
+      q = q.range(from, to)
+
+      const { data, error } = await q
+
       if (error) {
         console.error(error)
-        setProducts([])
-        setLoading(false)
+        if (!append) setProducts([])
+        setHasMore(false)
+        if (append) setLoadingMore(false)
+        else setLoading(false)
         return
       }
 
@@ -253,10 +275,61 @@ export function ProductSearchModal({
         })
       }
 
-      setProducts(mapped)
-      setLoading(false)
-    })
-  }, [open, debounced, brandFilter, catFilter])
+      setHasMore(mapped.length === PAGE_SIZE)
+
+      if (append) {
+        setProducts((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id))
+          const filtered = mapped.filter((p) => !existingIds.has(p.id))
+          return [...prev, ...filtered]
+        })
+        setLoadingMore(false)
+      } else {
+        setProducts(mapped)
+        setLoading(false)
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = 0
+        }
+      }
+    },
+    [debounced, brandFilter, catFilter],
+  )
+
+  useEffect(() => {
+    if (!open) return
+    setPage(0)
+    setHasMore(true)
+    fetchPage(0, false)
+  }, [open, debounced, brandFilter, catFilter, fetchPage])
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || loading || !hasMore) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    fetchPage(nextPage, true)
+  }, [page, loadingMore, loading, hasMore, fetchPage])
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    const container = scrollContainerRef.current
+    if (!sentinel || !container) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore()
+        }
+      },
+      {
+        root: container,
+        rootMargin: '100px',
+        threshold: 0,
+      },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMore])
 
   const sorted = sortData(products, sortKey, sortDir)
   const allSelected =
@@ -302,7 +375,7 @@ export function ProductSearchModal({
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por SKU ou nome..."
+              placeholder="Buscar por nome, SKU ou referência..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -336,7 +409,7 @@ export function ProductSearchModal({
           </Select>
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div ref={scrollContainerRef} className="flex-1 overflow-auto">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -454,6 +527,17 @@ export function ProductSearchModal({
                 )}
               </TableBody>
             </Table>
+          )}
+          <div ref={sentinelRef} className="h-1" />
+          {loadingMore && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          )}
+          {!loading && !loadingMore && !hasMore && sorted.length > 0 && (
+            <div className="text-center py-4 text-sm text-muted-foreground">
+              Fim da lista — {sorted.length} produto(s) carregado(s)
+            </div>
           )}
         </div>
 

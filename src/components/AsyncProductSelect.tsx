@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react'
 import { useDebounce } from '@/hooks/use-debounce'
 import { supabase } from '@/lib/supabase/client'
@@ -20,6 +20,8 @@ export interface ProductOption {
   source: 'produtos' | 'revenda_ubiqua'
 }
 
+const PAGE_SIZE = 50
+
 export function AsyncProductSelect({
   value,
   onChange,
@@ -36,7 +38,12 @@ export function AsyncProductSelect({
   const debouncedSearchTerm = useDebounce(searchTerm, 300)
   const [options, setOptions] = useState<ProductOption[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [page, setPage] = useState(0)
   const [selectedLabel, setSelectedLabel] = useState<string>('')
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const scrollViewportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!value) {
@@ -77,92 +84,125 @@ export function AsyncProductSelect({
     fetchSelected()
   }, [value, options])
 
-  useEffect(() => {
-    if (!open) return
+  const fetchPage = useCallback(
+    async (pageNum: number, append: boolean) => {
+      if (append) setLoadingMore(true)
+      else setLoading(true)
 
-    async function search() {
-      setLoading(true)
       try {
+        const from = pageNum * PAGE_SIZE
+        const to = from + PAGE_SIZE - 1
         let prods: ProductOption[] = []
         let revs: ProductOption[] = []
 
-        if (!debouncedSearchTerm) {
-          const [pRes, rRes] = await Promise.all([
-            supabase
-              .from('produtos')
-              .select('id, nome, preco_venda, sku, referencia')
-              .limit(50),
-            supabase
-              .from('revenda_ubiqua')
-              .select('id, referencia, descricao, valor_revenda')
-              .limit(50),
-          ])
+        const cleanTerm = debouncedSearchTerm.trim().replace(/,/g, '')
 
-          if (pRes.data)
-            prods = pRes.data.map((p) => ({
-              id: p.id,
-              nome: `${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
-              preco_venda: p.preco_venda,
-              sku: p.sku,
-              referencia: p.referencia,
-              source: 'produtos',
-            }))
-          if (rRes.data)
-            revs = rRes.data.map((r) => ({
-              id: String(r.id),
-              nome: `${r.descricao}${r.referencia ? ` | Ref: ${r.referencia}` : ''} [Ubiqua]`,
-              preco_venda: r.valor_revenda,
-              sku: r.referencia,
-              referencia: r.referencia,
-              source: 'revenda_ubiqua',
-            }))
-        } else {
-          const cleanTerm = debouncedSearchTerm.trim().replace(/,/g, '')
-          const [pRes, rRes] = await Promise.all([
-            supabase
-              .from('produtos')
-              .select('id, nome, preco_venda, sku, referencia')
-              .or(
-                `nome.ilike.%${cleanTerm}%,sku.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
-              ),
-            supabase
-              .from('revenda_ubiqua')
-              .select('id, referencia, descricao, valor_revenda')
-              .or(
-                `descricao.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
-              ),
-          ])
+        let prodQuery = supabase
+          .from('produtos')
+          .select('id, nome, preco_venda, sku, referencia')
 
-          if (pRes.data)
-            prods = pRes.data.map((p) => ({
-              id: p.id,
-              nome: `${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
-              preco_venda: p.preco_venda,
-              sku: p.sku,
-              referencia: p.referencia,
-              source: 'produtos',
-            }))
-          if (rRes.data)
-            revs = rRes.data.map((r) => ({
-              id: String(r.id),
-              nome: `${r.descricao}${r.referencia ? ` | Ref: ${r.referencia}` : ''} [Ubiqua]`,
-              preco_venda: r.valor_revenda,
-              sku: r.referencia,
-              referencia: r.referencia,
-              source: 'revenda_ubiqua',
-            }))
+        let revQuery = supabase
+          .from('revenda_ubiqua')
+          .select('id, referencia, descricao, valor_revenda')
+
+        if (cleanTerm) {
+          prodQuery = prodQuery.or(
+            `nome.ilike.%${cleanTerm}%,sku.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
+          )
+          revQuery = revQuery.or(
+            `descricao.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
+          )
         }
 
-        setOptions([...prods, ...revs])
+        const [pRes, rRes] = await Promise.all([
+          prodQuery.range(from, to),
+          revQuery.range(from, to),
+        ])
+
+        if (pRes.data)
+          prods = pRes.data.map((p) => ({
+            id: p.id,
+            nome: `${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
+            preco_venda: p.preco_venda,
+            sku: p.sku,
+            referencia: p.referencia,
+            source: 'produtos' as const,
+          }))
+        if (rRes.data)
+          revs = rRes.data.map((r) => ({
+            id: String(r.id),
+            nome: `${r.descricao}${r.referencia ? ` | Ref: ${r.referencia}` : ''} [Ubiqua]`,
+            preco_venda: r.valor_revenda,
+            sku: r.referencia,
+            referencia: r.referencia,
+            source: 'revenda_ubiqua' as const,
+          }))
+
+        const combined = [...prods, ...revs]
+        const totalFetched = from + combined.length
+
+        setHasMore(
+          combined.length === PAGE_SIZE * 2 ||
+            (pageNum === 0 && combined.length >= PAGE_SIZE),
+        )
+
+        if (append) {
+          setOptions((prev) => {
+            const existingIds = new Set(prev.map((o) => o.id))
+            return [...prev, ...combined.filter((c) => !existingIds.has(c.id))]
+          })
+        } else {
+          setOptions(combined)
+          if (scrollViewportRef.current) {
+            scrollViewportRef.current.scrollTop = 0
+          }
+        }
       } catch (err) {
         console.error(err)
+        if (!append) setOptions([])
+        setHasMore(false)
       } finally {
-        setLoading(false)
+        if (append) setLoadingMore(false)
+        else setLoading(false)
       }
-    }
+    },
+    [debouncedSearchTerm],
+  )
 
-    search()
-  }, [debouncedSearchTerm, open])
+  useEffect(() => {
+    if (!open) return
+    setPage(0)
+    setHasMore(true)
+    fetchPage(0, false)
+  }, [debouncedSearchTerm, open, fetchPage])
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || loading || !hasMore) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    fetchPage(nextPage, true)
+  }, [page, loadingMore, loading, hasMore, fetchPage])
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore()
+        }
+      },
+      {
+        root: null,
+        rootMargin: '100px',
+        threshold: 0,
+      },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMore])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -194,7 +234,7 @@ export function AsyncProductSelect({
             <Loader2 className="ml-2 h-4 w-4 animate-spin opacity-50" />
           )}
         </div>
-        <ScrollArea className="h-64">
+        <ScrollArea className="h-64" viewportRef={scrollViewportRef}>
           <div className="p-1">
             {options.length === 0 && !loading && (
               <div className="py-6 text-center text-sm text-muted-foreground">
@@ -224,6 +264,17 @@ export function AsyncProductSelect({
                 <span className="truncate">{option.nome}</span>
               </div>
             ))}
+            <div ref={sentinelRef} className="h-1" />
+            {loadingMore && (
+              <div className="flex items-center justify-center py-3">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!loading && !loadingMore && !hasMore && options.length > 0 && (
+              <div className="text-center py-3 text-xs text-muted-foreground">
+                Fim da lista — {options.length} produto(s)
+              </div>
+            )}
           </div>
         </ScrollArea>
       </PopoverContent>
