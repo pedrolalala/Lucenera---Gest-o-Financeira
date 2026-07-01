@@ -1187,7 +1187,36 @@ export type Database = {
           telefone?: string | null
           vendedor?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'entregas_finalizadas_separacao_id_fkey'
+            columns: ['separacao_id']
+            isOneToOne: false
+            referencedRelation: 'separacoes'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'entregas_finalizadas_separacao_id_fkey'
+            columns: ['separacao_id']
+            isOneToOne: false
+            referencedRelation: 'vw_separacoes_agenda'
+            referencedColumns: ['separacao_id']
+          },
+          {
+            foreignKeyName: 'entregas_finalizadas_separacao_id_fkey'
+            columns: ['separacao_id']
+            isOneToOne: false
+            referencedRelation: 'vw_vendas_loja'
+            referencedColumns: ['separacao_id']
+          },
+          {
+            foreignKeyName: 'entregas_finalizadas_separacao_id_fkey'
+            columns: ['separacao_id']
+            isOneToOne: false
+            referencedRelation: 'vw_vendas_por_projeto'
+            referencedColumns: ['separacao_id']
+          },
+        ]
       }
       equipes_projetos: {
         Row: {
@@ -2421,6 +2450,7 @@ export type Database = {
           id: string
           item_pai_id: string | null
           orcamento_id: string
+          ordem: number | null
           preco_unitario: number | null
           produto_id: string | null
           quantidade: number | null
@@ -2433,6 +2463,7 @@ export type Database = {
           id?: string
           item_pai_id?: string | null
           orcamento_id: string
+          ordem?: number | null
           preco_unitario?: number | null
           produto_id?: string | null
           quantidade?: number | null
@@ -2445,6 +2476,7 @@ export type Database = {
           id?: string
           item_pai_id?: string | null
           orcamento_id?: string
+          ordem?: number | null
           preco_unitario?: number | null
           produto_id?: string | null
           quantidade?: number | null
@@ -4478,7 +4510,36 @@ export type Database = {
           tipo_arquivo?: string | null
           url_arquivo?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'separacao_arquivos_separacao_id_fkey'
+            columns: ['separacao_id']
+            isOneToOne: false
+            referencedRelation: 'separacoes'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'separacao_arquivos_separacao_id_fkey'
+            columns: ['separacao_id']
+            isOneToOne: false
+            referencedRelation: 'vw_separacoes_agenda'
+            referencedColumns: ['separacao_id']
+          },
+          {
+            foreignKeyName: 'separacao_arquivos_separacao_id_fkey'
+            columns: ['separacao_id']
+            isOneToOne: false
+            referencedRelation: 'vw_vendas_loja'
+            referencedColumns: ['separacao_id']
+          },
+          {
+            foreignKeyName: 'separacao_arquivos_separacao_id_fkey'
+            columns: ['separacao_id']
+            isOneToOne: false
+            referencedRelation: 'vw_vendas_por_projeto'
+            referencedColumns: ['separacao_id']
+          },
+        ]
       }
       separacao_itens: {
         Row: {

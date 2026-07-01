@@ -1,28 +1,9 @@
-import { Search, LogOut } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { useAuth } from '@/hooks/use-auth'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import logoImg from '@/assets/lucenera-vertical-527dd.png'
 
 export function Header() {
-  const { user, signOut } = useAuth()
-  const navigate = useNavigate()
-
-  const handleLogout = async () => {
-    await signOut()
-    navigate('/login')
-  }
-  const userName = user?.user_metadata?.full_name || 'Usuário'
-  const userInitials = userName.substring(0, 2).toUpperCase()
-
   return (
     <header className="sticky top-0 z-30 w-full bg-[#F8F9FB]/80 backdrop-blur-md px-6 py-4 flex items-center justify-between border-b border-gray-100">
       <div className="flex items-center gap-4 flex-1">
@@ -43,37 +24,6 @@ export function Header() {
             />
           </div>
         </div>
-      </div>
-
-      <div className="flex items-center gap-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <div className="flex items-center gap-3 pl-2 cursor-pointer">
-              <div className="text-right hidden sm:block">
-                <div className="text-sm font-bold text-gray-900">
-                  {userName}
-                </div>
-                <div className="text-xs text-gray-500">Membro</div>
-              </div>
-              <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
-                <AvatarImage
-                  src={`https://img.usecurling.com/ppl/medium?gender=male&seed=${user?.id}`}
-                  alt={userName}
-                />
-                <AvatarFallback>{userInitials}</AvatarFallback>
-              </Avatar>
-            </div>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem
-              onClick={handleLogout}
-              className="text-red-600 cursor-pointer"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sair
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </header>
   )

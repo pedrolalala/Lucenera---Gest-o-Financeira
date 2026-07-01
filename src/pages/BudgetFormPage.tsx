@@ -339,6 +339,20 @@ export default function BudgetFormPage() {
   const valorTotal =
     valorComDesconto + (freteTipo === 'com_frete' ? freteValor : 0)
 
+  const customIdsKey = watchItens.map((i) => i.custom_id || '').join('|')
+
+  useEffect(() => {
+    const items = form.getValues('itens')
+    if (!items || items.length <= 1) return
+    const sorted = sortItemsByCircuitId(items)
+    const currentKey = items.map((i) => i.custom_id || '').join('|')
+    const sortedKey = sorted.map((i) => i.custom_id || '').join('|')
+    if (currentKey !== sortedKey) {
+      replace(sorted, { shouldFocus: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customIdsKey])
+
   const handleProjectSelect = async (codigo: string) => {
     if (!codigo) {
       setProjectDetails(null)
@@ -1292,158 +1306,176 @@ export default function BudgetFormPage() {
                   const p = Number(itemValues.preco_unitario) || 0
                   const d = Math.round(Number(itemValues.desconto) || 0)
                   const itemSubtotal = q * p * (1 - d / 100)
+                  const currentCircuit = formatCircuitId(
+                    itemValues.custom_id || '',
+                  )
+                  const prevCircuit = formatCircuitId(
+                    watchItens[index - 1]?.custom_id || '',
+                  )
+                  const isNewGroup =
+                    index === 0 || currentCircuit !== prevCircuit
 
                   return (
-                    <div
-                      key={field.id}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-4 rounded-xl border shadow-sm relative group"
-                    >
-                      <div className="md:col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.custom_id`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs text-gray-500 font-medium">
-                                Circuito (L)
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="L01"
-                                  value={f.value || ''}
-                                  onChange={(e) =>
-                                    f.onChange(formatCircuitId(e.target.value))
-                                  }
-                                  onFocus={() => {
-                                    if (!f.value) f.onChange('L')
-                                  }}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <div className="md:col-span-4">
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.produto_id`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs text-gray-500 font-medium">
-                                Produto
-                              </FormLabel>
-                              <FormControl>
-                                <ProductSelectButton
-                                  value={f.value}
-                                  onClick={() => {
-                                    setProductSearchRowIndex(index)
-                                    setIsProductSearchOpen(true)
-                                  }}
-                                  placeholder="Buscar produto..."
-                                />
-                              </FormControl>{' '}
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-5">
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.quantidade`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs text-gray-500 font-medium">
-                                Qtd (Unid)
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="1"
-                                  min="1"
-                                  {...f}
-                                  onChange={(e) => {
-                                    const val = e.target.value
-                                    f.onChange(
-                                      val ? Math.floor(Number(val)) : '',
-                                    )
-                                  }}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.preco_unitario`}
-                          render={({ field: f }) => (
-                            <FormItem className="col-span-1 md:col-span-2">
-                              <FormLabel className="text-xs text-gray-500 font-medium">
-                                Preço Unit. (R$)
-                              </FormLabel>
-                              <FormControl>
-                                <Input type="number" step="0.01" {...f} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`itens.${index}.desconto`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs text-gray-500 font-medium">
-                                Desc (%)
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="1"
-                                  min="0"
-                                  max="100"
-                                  {...f}
-                                  onChange={(e) =>
-                                    f.onChange(
-                                      Math.round(Number(e.target.value) || 0),
-                                    )
-                                  }
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <div className="md:col-span-1 flex flex-row md:flex-col items-center md:items-end justify-between md:justify-end h-full pt-6 md:pt-0">
-                        <div className="flex flex-col md:text-right">
-                          <span className="text-[10px] uppercase font-bold text-gray-400 mb-1">
-                            Subtotal
+                    <div key={field.id}>
+                      {isNewGroup && currentCircuit && (
+                        <div className="flex items-center gap-2 mt-4 mb-2 first:mt-0 animate-fade-in">
+                          <div className="h-px bg-primary/20 flex-1" />
+                          <span className="text-xs font-bold uppercase text-primary px-3 py-0.5 rounded-full bg-primary/10">
+                            {currentCircuit}
                           </span>
-                          <span className="text-sm font-semibold text-gray-900">
-                            {new Intl.NumberFormat('pt-BR', {
-                              style: 'currency',
-                              currency: 'BRL',
-                            }).format(itemSubtotal)}
-                          </span>
+                          <div className="h-px bg-primary/20 flex-1" />
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-4 rounded-xl border shadow-sm relative group">
+                        <div className="md:col-span-2">
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.custom_id`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs text-gray-500 font-medium">
+                                  Circuito (L)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="L01"
+                                    value={f.value || ''}
+                                    onChange={(e) =>
+                                      f.onChange(
+                                        formatCircuitId(e.target.value),
+                                      )
+                                    }
+                                    onFocus={() => {
+                                      if (!f.value) f.onChange('L')
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
                         </div>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="md:absolute md:-right-2 md:-top-2 h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50 bg-white rounded-full shadow-sm md:opacity-0 md:group-hover:opacity-100 transition-all border"
-                          onClick={() => remove(index)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="md:col-span-4">
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.produto_id`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs text-gray-500 font-medium">
+                                  Produto
+                                </FormLabel>
+                                <FormControl>
+                                  <ProductSelectButton
+                                    value={f.value}
+                                    onClick={() => {
+                                      setProductSearchRowIndex(index)
+                                      setIsProductSearchOpen(true)
+                                    }}
+                                    placeholder="Buscar produto..."
+                                  />
+                                </FormControl>{' '}
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-5">
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.quantidade`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs text-gray-500 font-medium">
+                                  Qtd (Unid)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    step="1"
+                                    min="1"
+                                    {...f}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      f.onChange(
+                                        val ? Math.floor(Number(val)) : '',
+                                      )
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.preco_unitario`}
+                            render={({ field: f }) => (
+                              <FormItem className="col-span-1 md:col-span-2">
+                                <FormLabel className="text-xs text-gray-500 font-medium">
+                                  Preço Unit. (R$)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input type="number" step="0.01" {...f} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`itens.${index}.desconto`}
+                            render={({ field: f }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs text-gray-500 font-medium">
+                                  Desc (%)
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                    max="100"
+                                    {...f}
+                                    onChange={(e) =>
+                                      f.onChange(
+                                        Math.round(Number(e.target.value) || 0),
+                                      )
+                                    }
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <div className="md:col-span-1 flex flex-row md:flex-col items-center md:items-end justify-between md:justify-end h-full pt-6 md:pt-0">
+                          <div className="flex flex-col md:text-right">
+                            <span className="text-[10px] uppercase font-bold text-gray-400 mb-1">
+                              Subtotal
+                            </span>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {new Intl.NumberFormat('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL',
+                              }).format(itemSubtotal)}
+                            </span>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="md:absolute md:-right-2 md:-top-2 h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50 bg-white rounded-full shadow-sm md:opacity-0 md:group-hover:opacity-100 transition-all border"
+                            onClick={() => remove(index)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )

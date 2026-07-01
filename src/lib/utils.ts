@@ -50,6 +50,16 @@ export function formatCircuitId(input: string | null | undefined): string {
 }
 
 /**
+ * Extracts the numeric value from a circuit identifier string.
+ * Examples: "L01" -> 1, "L15" -> 15, "L100" -> 100, "" -> 0
+ */
+export function extractCircuitNumber(input: string | null | undefined): number {
+  if (!input) return 0
+  const match = input.trim().match(/(\d+)/)
+  return match ? parseInt(match[1], 10) : 0
+}
+
+/**
  * Sorts items by their circuit ID (custom_id) field.
  * Items with valid circuit IDs (L01, L02, L10, etc.) are sorted numerically.
  * Items without circuit IDs are placed at the end.

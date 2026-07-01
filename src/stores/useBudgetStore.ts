@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase/client'
-import { formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
+import {
+  extractCircuitNumber,
+  formatCircuitId,
+  sortItemsByCircuitId,
+} from '@/lib/utils'
 
 export interface BudgetItem {
   id?: string
@@ -9,6 +13,7 @@ export interface BudgetItem {
   preco_unitario: number
   desconto: number
   custom_id?: string
+  ordem?: number
   item_pai_id?: string
   produto?: {
     nome: string
@@ -94,7 +99,6 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       empresa:empresas(nome),
       cliente:contatos!orcamentos_cliente_id_fkey(nome),
       arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
-      vendedor:funcionarios!orcamentos_vendedor_id_fkey(nome),
       projeto:projetos(nome, codigo),
       itens:orcamento_itens(
         id,
@@ -103,6 +107,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         preco_unitario,
         desconto,
         custom_id,
+        ordem,
         item_pai_id,
         produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade, porc_st)
       )
@@ -167,6 +172,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,
         custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
+        ordem: extractCircuitNumber(i.custom_id),
         item_pai_id: i.item_pai_id || null,
       }))
       const { error: itemsError } = await supabase
@@ -205,6 +211,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,
         custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
+        ordem: extractCircuitNumber(i.custom_id),
         item_pai_id: i.item_pai_id || null,
       }))
       const { error: itemsError } = await supabase
