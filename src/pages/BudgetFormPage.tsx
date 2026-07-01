@@ -59,6 +59,8 @@ import {
   ProductSearchModal,
   type ProductSearchItem,
 } from '@/components/budgets/ProductSearchModal'
+import { BatchPdfImport } from '@/components/budgets/BatchPdfImport'
+import type { ParsedPdfResult } from '@/lib/pdf-import'
 
 const formSchema = z
   .object({
@@ -147,7 +149,7 @@ export default function BudgetFormPage() {
   const isEditing = Boolean(id)
 
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
-  const [isImporting, setIsImporting] = useState(false)
+  const [isBatchImportOpen, setIsBatchImportOpen] = useState(false)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
@@ -620,188 +622,117 @@ export default function BudgetFormPage() {
     setProductSearchRowIndex(null)
   }
 
-  const handleImportPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const handleBatchComplete = (results: ParsedPdfResult[]) => {
+    if (results.length === 0) return
 
-    if (file.type !== 'application/pdf') {
-      toast.error('O arquivo selecionado não é um PDF válido.')
-      e.target.value = ''
-      return
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      // Limite de 10MB
-      toast.error('O arquivo PDF é muito grande (máximo 10MB).')
-      e.target.value = ''
-      return
-    }
-
-    setIsImporting(true)
-
-    const readPdfBase64 = (file: File): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.readAsDataURL(file)
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = () =>
-          reject(new Error('Erro ao ler o arquivo selecionado.'))
-      })
-    }
-
-    try {
-      const base64 = await readPdfBase64(file)
-
-      const { data, error } = await supabase.functions.invoke(
-        'parse-budget-pdf',
-        {
-          body: { pdfBase64: base64 },
-        },
+    let empresaId = form.getValues('empresa_id')
+    const empresaNome = results.find((r) => r.empresa_nome)?.empresa_nome
+    if (empresaNome) {
+      const found = empresas.find(
+        (emp) =>
+          emp.nome.toLowerCase().includes(empresaNome.toLowerCase()) ||
+          empresaNome.toLowerCase().includes(emp.nome.toLowerCase()),
       )
+      if (found) empresaId = found.id
+    }
 
-      if (error) {
-        let errMsg = 'Erro ao processar PDF'
-        if (error.message) {
-          errMsg = error.message
+    let clienteId = form.getValues('cliente_id')
+    const clienteNome = results.find((r) => r.cliente_nome)?.cliente_nome
+    if (clienteNome) {
+      const found = clientes.find((c) =>
+        c.nome.toLowerCase().includes(clienteNome.toLowerCase()),
+      )
+      if (found) clienteId = found.id
+    }
+
+    let arquitetoId = form.getValues('arquiteto_id')
+    const arquitetoNome = results.find((r) => r.arquiteto_nome)?.arquiteto_nome
+    if (arquitetoNome) {
+      const found = arquitetos.find((a) =>
+        a.nome.toLowerCase().includes(arquitetoNome.toLowerCase()),
+      )
+      if (found) arquitetoId = found.id
+    }
+
+    let vendedorId = form.getValues('vendedor_id')
+    const vendedorNome = results.find((r) => r.vendedor_nome)?.vendedor_nome
+    if (vendedorNome) {
+      const found = sortedVendedores.find((v) =>
+        v.nome.toLowerCase().includes(vendedorNome.toLowerCase()),
+      )
+      if (found) vendedorId = found.id
+    }
+
+    const validFormas = ['pix', 'cartao', 'boleto', 'dinheiro']
+    const formaPgtoRaw =
+      results.find((r) => r.forma_pagamento)?.forma_pagamento?.toLowerCase() ||
+      ''
+    let formaPgto = formaPgtoRaw
+    if (formaPgto.includes('transferencia')) formaPgto = 'pix'
+    else if (!validFormas.includes(formaPgto)) formaPgto = ''
+
+    let parsedParcelas = 1
+    const condicoes = results.find(
+      (r) => r.condicoes_pagamento,
+    )?.condicoes_pagamento
+    if (condicoes) {
+      const num = parseInt(condicoes.replace(/\D/g, ''))
+      if (!isNaN(num) && num > 0) parsedParcelas = num
+    }
+
+    form.reset({
+      ...form.getValues(),
+      empresa_id: empresaId,
+      cliente_id: clienteId,
+      arquiteto_id: arquitetoId || 'none',
+      vendedor_id: vendedorId || 'none',
+      status: results.find((r) => r.status)?.status || 'Aguardando Aprovação',
+      desconto_global:
+        results.find((r) => r.desconto_global)?.desconto_global || 0,
+      forma_pagamento: formaPgto,
+      parcelas: parsedParcelas,
+      observacoes: results.find((r) => r.observacoes)?.observacoes || '',
+    })
+
+    const allParsedItems = results.flatMap((r) => r.itens || [])
+
+    if (allParsedItems.length > 0) {
+      const newItens = allParsedItems.map((i) => {
+        let produtoId = ''
+        if (i.custom_id || i.descricao) {
+          const found = produtos.find(
+            (p) =>
+              (i.custom_id &&
+                (p.sku === i.custom_id || p.referencia === i.custom_id)) ||
+              (i.descricao &&
+                (p.originalNome || p.nome)
+                  .toLowerCase()
+                  .includes(i.descricao.toLowerCase())),
+          )
+          if (found) produtoId = found.id
         }
 
-        try {
-          if (
-            (error as any).context &&
-            typeof (error as any).context.json === 'function'
-          ) {
-            const errData = await (error as any).context.json()
-            if (errData?.error) errMsg = errData.error
-          } else if (
-            typeof error === 'object' &&
-            error !== null &&
-            'error' in error
-          ) {
-            errMsg = (error as any).error
-          }
-        } catch (e) {
-          // fallback
+        let displayCustomId = i.custom_id || ''
+        if (!produtoId && i.descricao && !displayCustomId) {
+          displayCustomId = i.descricao
         }
 
-        if (errMsg.includes('non-2xx status code') && (error as any).context) {
-          try {
-            const errData = await (error as any).context.json()
-            if (errData?.error) errMsg = errData.error
-          } catch {
-            /* intentionally ignored */
-          }
+        return {
+          custom_id: formatCircuitId(displayCustomId),
+          produto_id: produtoId,
+          quantidade: i.quantidade || 1,
+          preco_unitario: i.preco_unitario || 0,
+          desconto: i.desconto || 0,
         }
-
-        throw new Error(errMsg)
-      }
-
-      if (!data || data.error) {
-        throw new Error(data?.error || 'Retorno inválido do servidor')
-      }
-
-      const parsed = data
-
-      let empresaId = form.getValues('empresa_id')
-      if (parsed.empresa_nome) {
-        const found = empresas.find(
-          (emp) =>
-            emp.nome
-              .toLowerCase()
-              .includes(parsed.empresa_nome.toLowerCase()) ||
-            parsed.empresa_nome.toLowerCase().includes(emp.nome.toLowerCase()),
-        )
-        if (found) empresaId = found.id
-      }
-
-      let clienteId = form.getValues('cliente_id')
-      if (parsed.cliente_nome) {
-        const found = clientes.find((c) =>
-          c.nome.toLowerCase().includes(parsed.cliente_nome.toLowerCase()),
-        )
-        if (found) clienteId = found.id
-      }
-
-      let arquitetoId = form.getValues('arquiteto_id')
-      if (parsed.arquiteto_nome) {
-        const found = arquitetos.find((a) =>
-          a.nome.toLowerCase().includes(parsed.arquiteto_nome.toLowerCase()),
-        )
-        if (found) arquitetoId = found.id
-      }
-
-      let vendedorId = form.getValues('vendedor_id')
-      if (parsed.vendedor_nome) {
-        const found = sortedVendedores.find((v) =>
-          v.nome.toLowerCase().includes(parsed.vendedor_nome.toLowerCase()),
-        )
-        if (found) vendedorId = found.id
-      }
-
-      const validFormas = ['pix', 'cartao', 'boleto', 'dinheiro']
-      let formaPgto = parsed.forma_pagamento?.toLowerCase() || ''
-      if (formaPgto.includes('transferencia')) formaPgto = 'pix'
-      else if (!validFormas.includes(formaPgto)) formaPgto = ''
-
-      let parsedParcelas = 1
-      if (parsed.condicoes_pagamento) {
-        const num = parseInt(parsed.condicoes_pagamento.replace(/\D/g, ''))
-        if (!isNaN(num) && num > 0) parsedParcelas = num
-      }
-
-      form.reset({
-        ...form.getValues(),
-        empresa_id: empresaId,
-        cliente_id: clienteId,
-        arquiteto_id: arquitetoId || 'none',
-        vendedor_id: vendedorId || 'none',
-        status: parsed.status || 'Aguardando Aprovação',
-        desconto_global: parsed.desconto_global || 0,
-        forma_pagamento: formaPgto,
-        parcelas: parsedParcelas,
-        observacoes: parsed.observacoes || '',
       })
 
-      if (parsed.itens && Array.isArray(parsed.itens)) {
-        const newItens = parsed.itens.map((i: any) => {
-          let produtoId = ''
-          if (i.custom_id || i.descricao) {
-            const found = produtos.find(
-              (p) =>
-                (i.custom_id &&
-                  (p.sku === i.custom_id || p.referencia === i.custom_id)) ||
-                (i.descricao &&
-                  (p.originalNome || p.nome)
-                    .toLowerCase()
-                    .includes(i.descricao.toLowerCase())),
-            )
-            if (found) produtoId = found.id
-          }
-
-          let displayCustomId = i.custom_id || ''
-          if (!produtoId && i.descricao && !displayCustomId) {
-            displayCustomId = i.descricao
-          }
-
-          return {
-            custom_id: formatCircuitId(displayCustomId),
-            produto_id: produtoId,
-            quantidade: i.quantidade || 1,
-            preco_unitario: i.preco_unitario || 0,
-            desconto: i.desconto || 0,
-          }
-        })
-        if (newItens.length > 0) {
-          replace(newItens)
-        }
-      }
-
-      toast.success('PDF importado com sucesso. Revise os dados preenchidos.')
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao importar PDF')
-    } finally {
-      setIsImporting(false)
-      e.target.value = ''
+      const existingItems = form.getValues('itens') || []
+      replace(sortItemsByCircuitId([...existingItems, ...newItens]))
     }
+
+    toast.success(
+      `${results.length} arquivo(s) processado(s) com sucesso. Revise os dados preenchidos.`,
+    )
   }
 
   if (isLoadingBudget || optionsLoading) {
@@ -1797,29 +1728,22 @@ export default function BudgetFormPage() {
             onConfirm={handleProductSearchConfirm}
           />
 
+          <BatchPdfImport
+            open={isBatchImportOpen}
+            onOpenChange={setIsBatchImportOpen}
+            onBatchComplete={handleBatchComplete}
+          />
+
           <div className="flex justify-end mt-6">
-            <div className="relative overflow-hidden rounded-md inline-block">
-              <Input
-                type="file"
-                accept="application/pdf"
-                className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full h-full"
-                onChange={handleImportPdf}
-                disabled={isImporting}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={isImporting}
-                className="w-full sm:w-auto"
-              >
-                {isImporting ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="w-4 h-4 mr-2" />
-                )}
-                Importar PDF
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsBatchImportOpen(true)}
+              className="w-full sm:w-auto"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Importar PDFs
+            </Button>
           </div>
         </form>
       </Form>
