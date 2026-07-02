@@ -9,19 +9,15 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS')
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Não autorizado. Token de acesso ausente.' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Não autorizado. Token de acesso ausente.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -35,13 +31,10 @@ Deno.serve(async (req: Request) => {
       error: userError,
     } = await supabaseClient.auth.getUser()
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Falha ao autenticar usuário.' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Falha ao autenticar usuário.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     let body
@@ -49,9 +42,7 @@ Deno.serve(async (req: Request) => {
       body = await req.json()
     } catch (e) {
       return new Response(
-        JSON.stringify({
-          error: 'Formato de requisição inválido. Esperado JSON.',
-        }),
+        JSON.stringify({ error: 'Formato de requisição inválido. Esperado JSON.' }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -62,9 +53,7 @@ Deno.serve(async (req: Request) => {
     const { pdfBase64 } = body
     if (!pdfBase64 || typeof pdfBase64 !== 'string') {
       return new Response(
-        JSON.stringify({
-          error: 'O arquivo PDF é obrigatório e deve ser uma string base64.',
-        }),
+        JSON.stringify({ error: 'O arquivo PDF é obrigatório e deve ser uma string base64.' }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -113,9 +102,7 @@ Se uma informação não existir, retorne null ou string vazia.`
 
     if (!base64Data) {
       return new Response(
-        JSON.stringify({
-          error: 'O arquivo PDF base64 está vazio ou inválido.',
-        }),
+        JSON.stringify({ error: 'O arquivo PDF base64 está vazio ou inválido.' }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -155,8 +142,7 @@ Se uma informação não existir, retorne null ou string vazia.`
       console.error('Gemini API Error:', response.status, err)
       return new Response(
         JSON.stringify({
-          error:
-            'Erro ao processar o documento. Verifique o arquivo e tente novamente.',
+          error: 'Erro ao processar o documento. Verifique o arquivo e tente novamente.',
         }),
         {
           status: 502,
@@ -172,8 +158,7 @@ Se uma informação não existir, retorne null ou string vazia.`
       console.error('No text returned from Gemini API', data)
       return new Response(
         JSON.stringify({
-          error:
-            'Nenhum dado legível retornado pela IA. Verifique se o PDF contém texto legível.',
+          error: 'Nenhum dado legível retornado pela IA. Verifique se o PDF contém texto legível.',
         }),
         {
           status: 400,
@@ -199,8 +184,7 @@ Se uma informação não existir, retorne null ou string vazia.`
       console.error('Failed to parse JSON from Gemini:', cleanText)
       return new Response(
         JSON.stringify({
-          error:
-            'Erro ao processar o documento. Verifique o arquivo e tente novamente.',
+          error: 'Erro ao processar o documento. Verifique o arquivo e tente novamente.',
         }),
         {
           status: 422,
@@ -215,12 +199,9 @@ Se uma informação não existir, retorne null ou string vazia.`
     })
   } catch (err: any) {
     console.error('PDF Parsing error:', err)
-    return new Response(
-      JSON.stringify({ error: err.message || 'Erro interno no servidor' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    )
+    return new Response(JSON.stringify({ error: err.message || 'Erro interno no servidor' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 })
