@@ -10,7 +10,8 @@ import {
 export interface BudgetItem {
   id?: string
   uid?: string
-  produto_id: string
+  produto_id: string | null
+  descricao?: string | null
   quantidade: number
   preco_unitario: number
   desconto: number
@@ -47,6 +48,7 @@ export interface Budget {
   desconto_global: number | null
   observacoes: string | null
   valor_total: number
+  requer_revisao_financeira: boolean | null
   created_at: string
   empresa?: { nome: string }
   cliente?: { nome: string }
@@ -106,6 +108,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       itens:orcamento_itens(
         id,
         produto_id,
+        descricao,
         quantidade,
         preco_unitario,
         desconto,
@@ -173,6 +176,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       const itemsToInsert = items.map((i, idx) => ({
         orcamento_id: data.id,
         produto_id: i.produto_id || null,
+        descricao: i.descricao || null,
         quantidade: i.quantidade,
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,
@@ -212,6 +216,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       const itemsPayload = items.map((i, idx) => ({
         orcamento_id: id,
         produto_id: i.produto_id || null,
+        descricao: i.descricao || null,
         quantidade: i.quantidade,
         preco_unitario: i.preco_unitario,
         desconto: i.desconto,

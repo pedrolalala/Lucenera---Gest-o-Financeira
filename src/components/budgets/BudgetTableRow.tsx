@@ -68,6 +68,10 @@ export function BudgetTableRow({
     (i) => Number(i.preco_unitario) === 0,
   )
 
+  const hasUnregisteredItems = budget.itens?.some((i) => !i.produto_id)
+  const needsFinancialReview =
+    budget.requer_revisao_financeira || hasUnregisteredItems
+
   const canAccessFinanceiro = ['admin', 'gerente', 'operador'].includes(
     role || '',
   )
@@ -88,12 +92,11 @@ export function BudgetTableRow({
       const sub =
         item.quantidade * item.preco_unitario * (1 - (item.desconto || 0) / 100)
       return {
-        nome: item.produto?.nome || item.custom_id || 'Item',
+        nome: item.produto?.nome || item.descricao || item.custom_id || 'Item',
         cfop,
         subtotal: sub * (1 - (budget.desconto_global || 0) / 100),
       }
     }) || []
-
   const hasNoInterpretablePrazo =
     !Array.isArray(budget.prazo_pagamento_dias) ||
     budget.prazo_pagamento_dias.length === 0
@@ -101,6 +104,16 @@ export function BudgetTableRow({
   const hasNoFreteEstruturado = !budget.frete_tipo
 
   const handleApprove = async () => {
+    if (needsFinancialReview && !canAccessFinanceiro) {
+      toast.error(
+        'Este orçamento contém itens não cadastrados e requer revisão financeira. Apenas o time financeiro pode aprová-lo.',
+        {
+          duration: 8000,
+        },
+      )
+      return
+    }
+
     if (hasSpecialItemsWithoutPrice) {
       toast.error(
         'Atenção: Peças especiais detectadas sem preço. Solicite a precificação manual para Débora ou Vinícius antes de prosseguir.',
@@ -300,22 +313,33 @@ export function BudgetTableRow({
           {budget.arquiteto?.nome || '-'}
         </TableCell>
         <TableCell>
-          <Badge
-            variant="outline"
-            className={
-              normalizedStatus === 'aprovado'
-                ? 'bg-green-50 text-green-700 border-green-200'
-                : normalizedStatus === 'aguardando_aprovacao'
-                  ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                  : 'bg-gray-50'
-            }
-          >
-            {normalizedStatus === 'aguardando_aprovacao'
-              ? 'Aguardando Aprovação'
-              : normalizedStatus === 'aprovado'
-                ? 'Aprovado'
-                : status || 'Rascunho'}
-          </Badge>
+          <div className="flex flex-col gap-1">
+            <Badge
+              variant="outline"
+              className={
+                normalizedStatus === 'aprovado'
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : normalizedStatus === 'aguardando_aprovacao'
+                    ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                    : 'bg-gray-50'
+              }
+            >
+              {normalizedStatus === 'aguardando_aprovacao'
+                ? 'Aguardando Aprovação'
+                : normalizedStatus === 'aprovado'
+                  ? 'Aprovado'
+                  : status || 'Rascunho'}
+            </Badge>
+            {needsFinancialReview && (
+              <Badge
+                variant="outline"
+                className="bg-orange-50 text-orange-700 border-orange-200 text-[10px] whitespace-nowrap"
+              >
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                Revisão Financeira Pendente
+              </Badge>
+            )}
+          </div>
         </TableCell>
         <TableCell className="text-right font-bold text-gray-900">
           {formatCurrency(budget.valor_total)}
@@ -407,13 +431,15 @@ export function BudgetTableRow({
                 size="icon"
                 className={cn(
                   'h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50',
-                  hasSpecialItemsWithoutPrice &&
+                  (hasSpecialItemsWithoutPrice || needsFinancialReview) &&
                     'text-amber-500 hover:text-amber-600 hover:bg-amber-50',
                 )}
                 title={
-                  hasSpecialItemsWithoutPrice
-                    ? 'Atenção: Peças sem preço'
-                    : 'Aprovar'
+                  needsFinancialReview
+                    ? 'Requer Revisão Financeira'
+                    : hasSpecialItemsWithoutPrice
+                      ? 'Atenção: Peças sem preço'
+                      : 'Aprovar'
                 }
                 onClick={handleApprove}
                 disabled={isApproving}

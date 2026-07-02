@@ -115,7 +115,8 @@ const formSchema = z
         z.object({
           uid: z.string().optional(),
           custom_id: z.string().optional(),
-          produto_id: z.string().min(1, 'Selecione um produto'),
+          produto_id: z.string().optional().default(''),
+          descricao: z.string().optional().default(''),
           quantidade: z.coerce
             .number()
             .int('Deve ser um valor inteiro')
@@ -139,6 +140,15 @@ const formSchema = z
         message: 'Informe o valor do frete (maior que zero)',
       })
     }
+    data.itens.forEach((item, index) => {
+      if (!item.produto_id && !item.descricao?.trim()) {
+        ctx.addIssue({
+          path: ['itens', index, 'produto_id'],
+          code: z.ZodIssueCode.custom,
+          message: 'Selecione um produto ou informe uma descrição',
+        })
+      }
+    })
   })
 
 const STATUS_OPTIONS = [
@@ -314,7 +324,8 @@ export default function BudgetFormPage() {
               budget.itens?.map((i) => ({
                 uid: crypto.randomUUID(),
                 custom_id: formatCircuitId(i.custom_id || ''),
-                produto_id: i.produto_id,
+                produto_id: i.produto_id || '',
+                descricao: i.descricao || '',
                 quantidade: Math.max(1, Math.floor(Number(i.quantidade) || 1)),
                 preco_unitario: i.preco_unitario,
                 desconto: i.desconto || 0,
@@ -540,6 +551,8 @@ export default function BudgetFormPage() {
         (_, i) => prazoDias * (i + 1),
       )
 
+      const hasUnregisteredItems = values.itens.some((i) => !i.produto_id)
+
       const payload = {
         empresa_id: values.empresa_id,
         projeto_id: projeto.id,
@@ -561,6 +574,7 @@ export default function BudgetFormPage() {
           ? format(values.validade, 'yyyy-MM-dd')
           : null,
         valor_total: valorTotal,
+        requer_revisao_financeira: hasUnregisteredItems,
       }
 
       if (isEditing && budgetToEdit) {
@@ -605,6 +619,7 @@ export default function BudgetFormPage() {
       uid: crypto.randomUUID(),
       custom_id: formatCircuitId(`L${seq}`),
       produto_id: p.id,
+      descricao: '',
       quantidade: 1,
       preco_unitario: p.preco_venda || p.valor_venda || 0,
       desconto: 0,
@@ -753,6 +768,7 @@ export default function BudgetFormPage() {
           uid: crypto.randomUUID(),
           custom_id: formatCircuitId(displayCustomId),
           produto_id: produtoId,
+          descricao: produtoId ? '' : i.descricao || displayCustomId,
           quantidade: i.quantidade || 1,
           preco_unitario: i.preco_unitario || 0,
           desconto: i.desconto || 0,
@@ -1196,7 +1212,7 @@ export default function BudgetFormPage() {
                   Produtos e quantidades que compõem o orçamento.
                 </CardDescription>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   type="button"
                   variant="default"
@@ -1217,6 +1233,7 @@ export default function BudgetFormPage() {
                       uid: crypto.randomUUID(),
                       custom_id: '',
                       produto_id: '',
+                      descricao: '',
                       quantidade: 1,
                       preco_unitario: 0,
                       desconto: 0,
@@ -1224,6 +1241,25 @@ export default function BudgetFormPage() {
                   }
                 >
                   <Plus className="w-4 h-4 mr-2" /> Adicionar Item
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    append({
+                      uid: crypto.randomUUID(),
+                      custom_id: '',
+                      produto_id: '',
+                      descricao: '',
+                      quantidade: 1,
+                      preco_unitario: 0,
+                      desconto: 0,
+                    })
+                  }
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Adicionar Item não
+                  Cadastrado
                 </Button>
               </div>
             </CardHeader>
@@ -1236,7 +1272,7 @@ export default function BudgetFormPage() {
                   <p className="text-sm text-gray-400 mb-4">
                     Adicione produtos para compor este orçamento.
                   </p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button
                       type="button"
                       variant="default"
@@ -1255,6 +1291,7 @@ export default function BudgetFormPage() {
                           uid: crypto.randomUUID(),
                           custom_id: '',
                           produto_id: '',
+                          descricao: '',
                           quantidade: 1,
                           preco_unitario: 0,
                           desconto: 0,
@@ -1262,6 +1299,24 @@ export default function BudgetFormPage() {
                       }
                     >
                       <Plus className="w-4 h-4 mr-2" /> Adicionar Item
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        append({
+                          uid: crypto.randomUUID(),
+                          custom_id: '',
+                          produto_id: '',
+                          descricao: '',
+                          quantidade: 1,
+                          preco_unitario: 0,
+                          desconto: 0,
+                        })
+                      }
+                    >
+                      <Plus className="w-4 h-4 mr-2" /> Adicionar Item não
+                      Cadastrado
                     </Button>
                   </div>
                 </div>
@@ -1337,17 +1392,51 @@ export default function BudgetFormPage() {
                             render={({ field: f }) => (
                               <FormItem>
                                 <FormLabel className="text-xs text-gray-500 font-medium">
-                                  Produto
+                                  {f.value ? 'Produto' : 'Produto / Descrição'}
                                 </FormLabel>
                                 <FormControl>
-                                  <ProductSelectButton
-                                    value={f.value}
-                                    onClick={() => {
-                                      setProductSearchRowIndex(index)
-                                      setIsProductSearchOpen(true)
-                                    }}
-                                    placeholder="Buscar produto..."
-                                  />
+                                  {f.value ? (
+                                    <ProductSelectButton
+                                      value={f.value}
+                                      onClick={() => {
+                                        setProductSearchRowIndex(index)
+                                        setIsProductSearchOpen(true)
+                                      }}
+                                      placeholder="Buscar produto..."
+                                    />
+                                  ) : (
+                                    <div className="flex gap-2">
+                                      <Input
+                                        placeholder="Descrição do item não cadastrado..."
+                                        value={
+                                          watchItens[index]?.descricao || ''
+                                        }
+                                        onChange={(e) =>
+                                          form.setValue(
+                                            `itens.${index}.descricao`,
+                                            e.target.value,
+                                            {
+                                              shouldValidate: true,
+                                              shouldDirty: true,
+                                            },
+                                          )
+                                        }
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => {
+                                          setProductSearchRowIndex(index)
+                                          setIsProductSearchOpen(true)
+                                        }}
+                                        title="Buscar produto cadastrado"
+                                        className="shrink-0"
+                                      >
+                                        <PackageSearch className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  )}
                                 </FormControl>{' '}
                                 <FormMessage />
                               </FormItem>
