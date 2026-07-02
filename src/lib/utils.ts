@@ -45,6 +45,23 @@ export function formatCircuitId(value: string): string {
   return trimmed
 }
 
+export function formatCircuitIdInput(value: string): string {
+  if (!value) return ''
+  const trimmed = value.trim().toUpperCase()
+
+  if (trimmed === 'L' || trimmed === '') return trimmed
+
+  if (/^\d/.test(trimmed)) {
+    return `L${trimmed}`
+  }
+
+  if (trimmed.startsWith('L')) {
+    return trimmed
+  }
+
+  return trimmed
+}
+
 export function extractCircuitNumber(value: string | null | undefined): number {
   if (!value) return 0
   const match = value.match(/(\d+)/)

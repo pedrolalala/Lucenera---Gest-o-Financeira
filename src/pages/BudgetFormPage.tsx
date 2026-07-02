@@ -16,7 +16,12 @@ import {
   PackageSearch,
 } from 'lucide-react'
 
-import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
+import {
+  cn,
+  formatCircuitId,
+  formatCircuitIdInput,
+  sortItemsByCircuitId,
+} from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
@@ -1279,9 +1284,15 @@ export default function BudgetFormPage() {
                                     value={f.value || ''}
                                     onChange={(e) =>
                                       f.onChange(
-                                        formatCircuitId(e.target.value),
+                                        formatCircuitIdInput(e.target.value),
                                       )
                                     }
+                                    onBlur={() => {
+                                      const current = f.value || ''
+                                      if (current) {
+                                        f.onChange(formatCircuitId(current))
+                                      }
+                                    }}
                                     onFocus={() => {
                                       if (!f.value) f.onChange('L')
                                     }}
