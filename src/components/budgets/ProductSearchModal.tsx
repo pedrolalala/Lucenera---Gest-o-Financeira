@@ -179,13 +179,15 @@ export function ProductSearchModal({
   const [page, setPage] = useState(0)
   const [sortKey, setSortKey] = useState<SortKey>('sku')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Map<string, ProductSearchItem>>(
+    new Map(),
+  )
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) {
-      setSelected(new Set())
+      setSelected(new Map())
       setSearch('')
       setBrandFilter('all')
       setCatFilter('all')
@@ -415,33 +417,36 @@ export function ProductSearchModal({
     }
   }
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (p: ProductSearchItem) => {
     setSelected((s) => {
-      const n = new Set(s)
-      if (n.has(id)) n.delete(id)
-      else n.add(id)
+      const n = new Map(s)
+      if (n.has(p.id)) n.delete(p.id)
+      else n.set(p.id, p)
       return n
     })
   }
 
   const toggleAll = () => {
     setSelected((s) => {
-      const n = new Set(s)
+      const n = new Map(s)
       if (allSelected) {
         sorted.forEach((p) => n.delete(p.id))
       } else {
-        sorted.forEach((p) => n.add(p.id))
+        sorted.forEach((p) => n.set(p.id, p))
       }
       return n
     })
   }
 
+  const clearSelection = () => {
+    setSelected(new Map())
+  }
+
   const handleConfirm = () => {
-    const chosen = sorted.filter((p) => selected.has(p.id))
-    console.log('Array de envio:', chosen)
-    console.log(`Quantidade de itens selecionados: ${chosen.length}`)
+    const chosen = Array.from(selected.values())
+    console.log(`[DEBUG] Itens selecionados para envio: [${chosen.length}]`)
     onConfirm(chosen)
-    setSelected(new Set())
+    setSelected(new Map())
   }
 
   return (
@@ -549,7 +554,7 @@ export function ProductSearchModal({
                       <TableCell>
                         <Checkbox
                           checked={selected.has(p.id)}
-                          onCheckedChange={() => toggleSelect(p.id)}
+                          onCheckedChange={() => toggleSelect(p)}
                         />
                       </TableCell>
                       <TableCell>
@@ -640,9 +645,31 @@ export function ProductSearchModal({
         </div>
 
         <DialogFooter className="px-6 py-4 border-t flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            {selected.size} produto(s) selecionado(s)
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              {selected.size} produto(s) selecionado(s)
+              {selected.size > 0 &&
+                sorted.filter((p) => selected.has(p.id)).length <
+                  selected.size && (
+                  <span className="text-amber-600 ml-1 font-medium">
+                    (
+                    {selected.size -
+                      sorted.filter((p) => selected.has(p.id)).length}{' '}
+                    oculto(s) na busca atual)
+                  </span>
+                )}
+            </span>
+            {selected.size > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearSelection}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                Limpar seleção
+              </Button>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar

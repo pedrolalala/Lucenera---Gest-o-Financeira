@@ -586,8 +586,7 @@ export default function BudgetFormPage() {
   }
 
   const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
-    console.log('Itens recebidos do modal:', products)
-    console.log(`Quantidade de itens recebidos: ${products.length}`)
+    console.log(`[DEBUG] Itens recebidos: [${products.length}]`)
 
     if (products.length === 0) {
       setIsProductSearchOpen(false)
@@ -595,18 +594,16 @@ export default function BudgetFormPage() {
       return
     }
 
-    const mapProductToItem = (p: ProductSearchItem) => ({
+    const currentItems = form.getValues('itens') || []
+
+    const buildNewItem = (p: ProductSearchItem, seq: number) => ({
       uid: crypto.randomUUID(),
-      custom_id: '',
+      custom_id: formatCircuitId(`L${seq}`),
       produto_id: p.id,
       quantidade: 1,
       preco_unitario: p.preco_venda || p.valor_venda || 0,
       desconto: 0,
     })
-
-    const newItems = products.map(mapProductToItem)
-
-    const currentItems = form.getValues('itens') || []
 
     if (
       productSearchRowIndex !== null &&
@@ -614,22 +611,36 @@ export default function BudgetFormPage() {
       productSearchRowIndex < currentItems.length
     ) {
       const updatedItems = [...currentItems]
+      const existingCustomId =
+        updatedItems[productSearchRowIndex].custom_id || ''
+
       updatedItems[productSearchRowIndex] = {
         ...updatedItems[productSearchRowIndex],
-        ...newItems[0],
-        custom_id: updatedItems[productSearchRowIndex].custom_id || '',
+        ...buildNewItem(products[0], productSearchRowIndex + 1),
+        custom_id:
+          existingCustomId || formatCircuitId(`L${productSearchRowIndex + 1}`),
       }
-      if (newItems.length > 1) {
-        updatedItems.push(...newItems.slice(1))
+
+      if (products.length > 1) {
+        const remaining = products
+          .slice(1)
+          .map((p, idx) => buildNewItem(p, updatedItems.length + idx + 1))
+        updatedItems.push(...remaining)
       }
+
       replace(updatedItems, { shouldFocus: false })
     } else {
+      const newItems = products.map((p, idx) =>
+        buildNewItem(p, currentItems.length + idx + 1),
+      )
       const combinedItems = [...currentItems, ...newItems]
       replace(combinedItems, { shouldFocus: false })
     }
 
     const finalCount = (form.getValues('itens') || []).length
-    console.log(`Total de itens na lista após inserção: ${finalCount}`)
+    console.log(
+      `[DEBUG] Total de itens na lista após inserção: [${finalCount}]`,
+    )
 
     toast.success(
       products.length === 1
