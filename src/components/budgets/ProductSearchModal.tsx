@@ -179,9 +179,9 @@ export function ProductSearchModal({
   const [page, setPage] = useState(0)
   const [sortKey, setSortKey] = useState<SortKey>('sku')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
-  const [selected, setSelected] = useState<Map<string, ProductSearchItem>>(
-    new Map(),
-  )
+  const [selected, setSelected] = useState<
+    Map<string, { product: ProductSearchItem; quantity: number }>
+  >(new Map())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
@@ -421,7 +421,21 @@ export function ProductSearchModal({
     setSelected((s) => {
       const n = new Map(s)
       if (n.has(p.id)) n.delete(p.id)
-      else n.set(p.id, p)
+      else n.set(p.id, { product: p, quantity: 1 })
+      return n
+    })
+  }
+
+  const updateQuantity = (productId: string, quantity: number) => {
+    setSelected((s) => {
+      const n = new Map(s)
+      const entry = n.get(productId)
+      if (entry) {
+        n.set(productId, {
+          ...entry,
+          quantity: Math.max(1, Math.min(99, quantity)),
+        })
+      }
       return n
     })
   }
@@ -432,7 +446,12 @@ export function ProductSearchModal({
       if (allSelected) {
         sorted.forEach((p) => n.delete(p.id))
       } else {
-        sorted.forEach((p) => n.set(p.id, p))
+        sorted.forEach((p) =>
+          n.set(p.id, {
+            product: p,
+            quantity: n.get(p.id)?.quantity ?? 1,
+          }),
+        )
       }
       return n
     })
@@ -443,11 +462,20 @@ export function ProductSearchModal({
   }
 
   const handleConfirm = () => {
-    const chosen = Array.from(selected.values())
-    console.log(`[DEBUG] Itens selecionados para envio: [${chosen.length}]`)
+    const chosen: ProductSearchItem[] = []
+    selected.forEach(({ product, quantity }) => {
+      for (let i = 0; i < quantity; i++) {
+        chosen.push(product)
+      }
+    })
     onConfirm(chosen)
     setSelected(new Map())
   }
+
+  const totalLines = Array.from(selected.values()).reduce(
+    (sum, s) => sum + s.quantity,
+    0,
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -503,7 +531,7 @@ export function ProductSearchModal({
             <Table>
               <TableHeader className="sticky top-0 bg-background z-10">
                 <TableRow>
-                  <TableHead className="w-10">
+                  <TableHead className="w-20">
                     <Checkbox
                       checked={allSelected}
                       onCheckedChange={toggleAll}
@@ -552,10 +580,29 @@ export function ProductSearchModal({
                       )}
                     >
                       <TableCell>
-                        <Checkbox
-                          checked={selected.has(p.id)}
-                          onCheckedChange={() => toggleSelect(p)}
-                        />
+                        <div className="flex flex-col items-center gap-1">
+                          <Checkbox
+                            checked={selected.has(p.id)}
+                            onCheckedChange={() => toggleSelect(p)}
+                          />
+                          {selected.has(p.id) && (
+                            <Input
+                              type="number"
+                              min="1"
+                              max="99"
+                              value={selected.get(p.id)?.quantity ?? 1}
+                              onChange={(e) =>
+                                updateQuantity(
+                                  p.id,
+                                  parseInt(e.target.value) || 1,
+                                )
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-14 h-7 text-xs text-center px-1"
+                              title="Número de linhas independentes para este SKU"
+                            />
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className="font-mono font-bold text-sm text-primary">
@@ -647,7 +694,7 @@ export function ProductSearchModal({
         <DialogFooter className="px-6 py-4 border-t flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">
-              {selected.size} produto(s) selecionado(s)
+              {totalLines} linha(s) independente(s) · {selected.size} SKU(s)
               {selected.size > 0 &&
                 sorted.filter((p) => selected.has(p.id)).length <
                   selected.size && (
@@ -676,7 +723,7 @@ export function ProductSearchModal({
             </Button>
             <Button onClick={handleConfirm} disabled={selected.size === 0}>
               <Check className="w-4 h-4 mr-2" />
-              Confirmar Seleção ({selected.size})
+              Confirmar Seleção ({totalLines} linha(s))
             </Button>
           </div>
         </DialogFooter>

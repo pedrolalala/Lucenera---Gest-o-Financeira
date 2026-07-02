@@ -596,6 +596,11 @@ export default function BudgetFormPage() {
 
     const currentItems = form.getValues('itens') || []
 
+    const maxL = currentItems.reduce((max, item) => {
+      const match = (item.custom_id || '').match(/L(\d+)/i)
+      return Math.max(max, match ? parseInt(match[1], 10) : 0)
+    }, 0)
+
     const buildNewItem = (p: ProductSearchItem, seq: number) => ({
       uid: crypto.randomUUID(),
       custom_id: formatCircuitId(`L${seq}`),
@@ -624,15 +629,13 @@ export default function BudgetFormPage() {
       if (products.length > 1) {
         const remaining = products
           .slice(1)
-          .map((p, idx) => buildNewItem(p, updatedItems.length + idx + 1))
+          .map((p, idx) => buildNewItem(p, maxL + idx + 1))
         updatedItems.push(...remaining)
       }
 
       replace(updatedItems, { shouldFocus: false })
     } else {
-      const newItems = products.map((p, idx) =>
-        buildNewItem(p, currentItems.length + idx + 1),
-      )
+      const newItems = products.map((p, idx) => buildNewItem(p, maxL + idx + 1))
       const combinedItems = [...currentItems, ...newItems]
       replace(combinedItems, { shouldFocus: false })
     }
