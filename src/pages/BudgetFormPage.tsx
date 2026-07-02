@@ -585,22 +585,20 @@ export default function BudgetFormPage() {
       return
     }
 
-    const appendProduct = (p: ProductSearchItem) => {
-      append({
-        custom_id: '',
-        produto_id: p.id,
-        quantidade: 1,
-        preco_unitario: p.preco_venda || p.valor_venda || 0,
-        desconto: 0,
-      })
-    }
+    const mapProductToItem = (p: ProductSearchItem) => ({
+      custom_id: '',
+      produto_id: p.id,
+      quantidade: 1,
+      preco_unitario: p.preco_venda || p.valor_venda || 0,
+      desconto: 0,
+    })
 
     if (productSearchRowIndex !== null) {
       const currentProductId = form.getValues(
         `itens.${productSearchRowIndex}.produto_id`,
       )
       if (!currentProductId) {
-        const first = products[0]
+        const [first, ...rest] = products
         form.setValue(`itens.${productSearchRowIndex}.produto_id`, first.id, {
           shouldValidate: true,
         })
@@ -609,12 +607,14 @@ export default function BudgetFormPage() {
           first.preco_venda || first.valor_venda || 0,
           { shouldValidate: true, shouldDirty: true, shouldTouch: true },
         )
-        products.slice(1).forEach(appendProduct)
+        if (rest.length > 0) {
+          append(rest.map(mapProductToItem))
+        }
       } else {
-        products.forEach(appendProduct)
+        append(products.map(mapProductToItem))
       }
     } else {
-      products.forEach(appendProduct)
+      append(products.map(mapProductToItem))
     }
 
     toast.success(

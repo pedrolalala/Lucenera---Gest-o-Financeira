@@ -206,11 +206,9 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       throw new Error(error.message || 'Erro ao atualizar orçamento.')
     }
 
-    await supabase.from('orcamento_itens').delete().eq('orcamento_id', id)
-
     if (items && items.length > 0) {
       const subOrdens = computeSubOrdem(items)
-      const itemsToInsert = items.map((i, idx) => ({
+      const itemsPayload = items.map((i, idx) => ({
         orcamento_id: id,
         produto_id: i.produto_id || null,
         quantidade: i.quantidade,
@@ -221,14 +219,31 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         sub_ordem: subOrdens[idx],
         item_pai_id: i.item_pai_id || null,
       }))
-      const { error: itemsError } = await supabase
-        .from('orcamento_itens')
-        .insert(itemsToInsert)
 
-      if (itemsError) {
-        console.error('Error updating budget items:', itemsError)
+      const { error: rpcError } = await (supabase as any).rpc(
+        'replace_orcamento_itens',
+        {
+          p_orcamento_id: id,
+          p_items: itemsPayload,
+        },
+      )
+
+      if (rpcError) {
+        console.error('Error updating budget items:', rpcError)
         throw new Error(
-          itemsError.message || 'Erro ao atualizar itens do orçamento.',
+          rpcError.message || 'Erro ao atualizar itens do orçamento.',
+        )
+      }
+    } else {
+      const { error: deleteError } = await supabase
+        .from('orcamento_itens')
+        .delete()
+        .eq('orcamento_id', id)
+
+      if (deleteError) {
+        console.error('Error deleting budget items:', deleteError)
+        throw new Error(
+          deleteError.message || 'Erro ao remover itens do orçamento.',
         )
       }
     }
