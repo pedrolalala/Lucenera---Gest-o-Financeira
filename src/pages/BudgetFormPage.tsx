@@ -617,7 +617,11 @@ export default function BudgetFormPage() {
       products.forEach(appendProduct)
     }
 
-    toast.success(`${products.length} produto(s) adicionado(s) ao orçamento.`)
+    toast.success(
+      products.length === 1
+        ? '1 produto adicionado com sucesso'
+        : `${products.length} produtos adicionados com sucesso`,
+    )
     setIsProductSearchOpen(false)
     setProductSearchRowIndex(null)
   }

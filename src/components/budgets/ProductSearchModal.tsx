@@ -41,6 +41,7 @@ import {
 import { supabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useDebounce } from '@/hooks/use-debounce'
+import { Badge } from '@/components/ui/badge'
 
 export interface ProductSearchItem {
   id: string
@@ -538,7 +539,10 @@ export function ProductSearchModal({
                     <TableRow
                       key={p.id}
                       data-state={selected.has(p.id) ? 'selected' : undefined}
-                      className={cn(selected.has(p.id) && 'bg-primary/5')}
+                      className={cn(
+                        selected.has(p.id) &&
+                          'bg-primary/10 border-l-4 border-l-primary',
+                      )}
                     >
                       <TableCell>
                         <Checkbox
@@ -562,8 +566,18 @@ export function ProductSearchModal({
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="line-clamp-2 max-w-[200px] text-sm text-gray-600">
-                          {p.nome}
+                        <div className="flex items-start gap-2">
+                          <div className="line-clamp-2 max-w-[200px] text-sm text-gray-600">
+                            {p.nome}
+                          </div>
+                          {selected.has(p.id) && (
+                            <Badge
+                              variant="default"
+                              className="shrink-0 text-[10px] px-1.5 py-0"
+                            >
+                              Selecionado
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">
