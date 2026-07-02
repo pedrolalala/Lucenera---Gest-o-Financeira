@@ -585,36 +585,36 @@ export default function BudgetFormPage() {
       return
     }
 
-    if (productSearchRowIndex !== null) {
-      const first = products[0]
-      form.setValue(`itens.${productSearchRowIndex}.produto_id`, first.id, {
-        shouldValidate: true,
+    const appendProduct = (p: ProductSearchItem) => {
+      append({
+        custom_id: '',
+        produto_id: p.id,
+        quantidade: 1,
+        preco_unitario: p.preco_venda || p.valor_venda || 0,
+        desconto: 0,
       })
-      form.setValue(
-        `itens.${productSearchRowIndex}.preco_unitario`,
-        first.preco_venda || first.valor_venda || 0,
-        { shouldValidate: true, shouldDirty: true, shouldTouch: true },
-      )
+    }
 
-      products.slice(1).forEach((p) => {
-        append({
-          custom_id: '',
-          produto_id: p.id,
-          quantidade: 1,
-          preco_unitario: p.preco_venda || p.valor_venda || 0,
-          desconto: 0,
+    if (productSearchRowIndex !== null) {
+      const currentProductId = form.getValues(
+        `itens.${productSearchRowIndex}.produto_id`,
+      )
+      if (!currentProductId) {
+        const first = products[0]
+        form.setValue(`itens.${productSearchRowIndex}.produto_id`, first.id, {
+          shouldValidate: true,
         })
-      })
+        form.setValue(
+          `itens.${productSearchRowIndex}.preco_unitario`,
+          first.preco_venda || first.valor_venda || 0,
+          { shouldValidate: true, shouldDirty: true, shouldTouch: true },
+        )
+        products.slice(1).forEach(appendProduct)
+      } else {
+        products.forEach(appendProduct)
+      }
     } else {
-      products.forEach((p) => {
-        append({
-          custom_id: '',
-          produto_id: p.id,
-          quantidade: 1,
-          preco_unitario: p.preco_venda || p.valor_venda || 0,
-          desconto: 0,
-        })
-      })
+      products.forEach(appendProduct)
     }
 
     toast.success(`${products.length} produto(s) adicionado(s) ao orçamento.`)

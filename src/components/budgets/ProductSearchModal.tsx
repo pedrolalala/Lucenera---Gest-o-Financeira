@@ -54,6 +54,7 @@ export interface ProductSearchItem {
   estoque_disponivel: number
   marca_nome: string | null
   categoria_nome: string | null
+  source: 'produtos' | 'revenda_ubiqua'
 }
 
 type SortKey =
@@ -105,6 +106,14 @@ function StockPopover({ productId }: { productId: string }) {
 
   useEffect(() => {
     let cancelled = false
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        productId,
+      )
+    if (!isUuid) {
+      setLocs([])
+      return
+    }
     supabase
       .from('estoque_itens')
       .select('local, quantidade, quantidade_reservada')
@@ -204,7 +213,7 @@ export function ProductSearchModal({
       const from = pageNum * PAGE_SIZE
       const to = from + PAGE_SIZE - 1
 
-      let q = supabase
+      let prodQuery = supabase
         .from('produtos')
         .select(
           `
@@ -214,55 +223,102 @@ export function ProductSearchModal({
         )
         .eq('ativo', true)
 
+      let revQuery = supabase
+        .from('revenda_ubiqua')
+        .select(
+          'id, referencia, descricao, valor_revenda, cod_produto, estoque, disponivel',
+        )
+
       if (debounced) {
-        const t = debounced.trim()
+        const t = debounced.trim().replace(/,/g, '')
         const numericTerm = parseInt(t, 10)
         const isNumeric = !isNaN(numericTerm) && /^\d+$/.test(t)
         if (isNumeric) {
-          q = q.or(
+          prodQuery = prodQuery.or(
             `nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%,codigo_produto.eq.${numericTerm}`,
           )
+          revQuery = revQuery.or(
+            `descricao.ilike.%${t}%,referencia.ilike.%${t}%,cod_produto.eq.${numericTerm}`,
+          )
         } else {
-          q = q.or(`nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%`)
+          prodQuery = prodQuery.or(
+            `nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%`,
+          )
+          revQuery = revQuery.or(
+            `descricao.ilike.%${t}%,referencia.ilike.%${t}%`,
+          )
         }
       }
-      if (brandFilter !== 'all') q = q.eq('marca_id', brandFilter)
-      if (catFilter !== 'all') q = q.eq('categoria_id', catFilter)
+      if (brandFilter !== 'all')
+        prodQuery = prodQuery.eq('marca_id', brandFilter)
+      if (catFilter !== 'all')
+        prodQuery = prodQuery.eq('categoria_id', catFilter)
 
-      q = q.range(from, to)
+      prodQuery = prodQuery.range(from, to)
+      revQuery = revQuery.range(from, to)
 
-      const { data, error } = await q
+      const [prodRes, revRes] = await Promise.all([prodQuery, revQuery])
 
-      if (error) {
-        console.error(error)
-        if (!append) setProducts([])
+      if (prodRes.error) console.error(prodRes.error)
+      if (revRes.error) console.error(revRes.error)
+
+      const prodMapped: ProductSearchItem[] = (prodRes.data || []).map(
+        (p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          sku: p.sku,
+          referencia: p.referencia,
+          codigo_produto: p.codigo_produto,
+          preco_venda: p.preco_venda,
+          valor_venda: p.valor_venda,
+          estoque_total: 0,
+          estoque_disponivel: 0,
+          marca_nome: p.marca?.nome || null,
+          categoria_nome: p.categoria?.nome || null,
+          source: 'produtos' as const,
+        }),
+      )
+
+      const revMapped: ProductSearchItem[] = (revRes.data || []).map(
+        (r: any) => ({
+          id: String(r.id),
+          nome: r.descricao || r.referencia || '-',
+          sku: r.referencia,
+          referencia: r.referencia,
+          codigo_produto: r.cod_produto,
+          preco_venda: r.valor_revenda,
+          valor_venda: r.valor_revenda,
+          estoque_total: r.estoque ?? 0,
+          estoque_disponivel: r.disponivel ?? 0,
+          marca_nome: null,
+          categoria_nome: null,
+          source: 'revenda_ubiqua' as const,
+        }),
+      )
+
+      const mapped = [...prodMapped, ...revMapped]
+
+      if (mapped.length === 0) {
         setHasMore(false)
-        if (append) setLoadingMore(false)
-        else setLoading(false)
+        if (append) {
+          setLoadingMore(false)
+        } else {
+          setProducts([])
+          setLoading(false)
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = 0
+          }
+        }
         return
       }
 
-      const mapped: ProductSearchItem[] = (data || []).map((p: any) => ({
-        id: p.id,
-        nome: p.nome,
-        sku: p.sku,
-        referencia: p.referencia,
-        codigo_produto: p.codigo_produto,
-        preco_venda: p.preco_venda,
-        valor_venda: p.valor_venda,
-        estoque_total: 0,
-        estoque_disponivel: 0,
-        marca_nome: p.marca?.nome || null,
-        categoria_nome: p.categoria?.nome || null,
-      }))
-
-      if (mapped.length > 0) {
+      if (prodMapped.length > 0) {
         const { data: stockData } = await supabase
           .from('vw_detalhe_produto_estoque')
           .select('produto_id, estoque_total, estoque_disponivel')
           .in(
             'produto_id',
-            mapped.map((p) => p.id),
+            prodMapped.map((p) => p.id),
           )
 
         const stockMap = new Map<
@@ -278,7 +334,7 @@ export function ProductSearchModal({
           ]),
         )
 
-        mapped.forEach((p) => {
+        prodMapped.forEach((p) => {
           const stock = stockMap.get(p.id)
           if (stock) {
             p.estoque_total = stock.estoque_total
@@ -287,7 +343,10 @@ export function ProductSearchModal({
         })
       }
 
-      setHasMore(mapped.length === PAGE_SIZE)
+      setHasMore(
+        (prodRes.data || []).length === PAGE_SIZE ||
+          (revRes.data || []).length === PAGE_SIZE,
+      )
 
       if (append) {
         setProducts((prev) => {
@@ -365,9 +424,15 @@ export function ProductSearchModal({
   }
 
   const toggleAll = () => {
-    setSelected(() =>
-      allSelected ? new Set() : new Set(sorted.map((p) => p.id)),
-    )
+    setSelected((s) => {
+      const n = new Set(s)
+      if (allSelected) {
+        sorted.forEach((p) => n.delete(p.id))
+      } else {
+        sorted.forEach((p) => n.add(p.id))
+      }
+      return n
+    })
   }
 
   const handleConfirm = () => {
