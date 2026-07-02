@@ -438,6 +438,10 @@ export function ProductSearchModal({
 
   const handleConfirm = () => {
     const chosen = sorted.filter((p) => selected.has(p.id))
+    if (import.meta.env.DEV) {
+      console.log(`Array de envio: [${chosen.map((c) => c.nome).join(', ')}]`)
+      console.log(`Quantidade de itens selecionados: ${chosen.length}`)
+    }
     onConfirm(chosen)
     setSelected(new Set())
   }
