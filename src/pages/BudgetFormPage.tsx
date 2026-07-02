@@ -113,6 +113,7 @@ const formSchema = z
     itens: z
       .array(
         z.object({
+          uid: z.string().optional(),
           custom_id: z.string().optional(),
           produto_id: z.string().min(1, 'Selecione um produto'),
           quantidade: z.coerce
@@ -311,6 +312,7 @@ export default function BudgetFormPage() {
             validade: budget.validade ? new Date(budget.validade) : null,
             itens: sortItemsByCircuitId(
               budget.itens?.map((i) => ({
+                uid: crypto.randomUUID(),
                 custom_id: formatCircuitId(i.custom_id || ''),
                 produto_id: i.produto_id,
                 quantidade: Math.max(1, Math.floor(Number(i.quantidade) || 1)),
@@ -591,6 +593,7 @@ export default function BudgetFormPage() {
     }
 
     const mapProductToItem = (p: ProductSearchItem) => ({
+      uid: crypto.randomUUID(),
       custom_id: '',
       produto_id: p.id,
       quantidade: 1,
@@ -727,6 +730,7 @@ export default function BudgetFormPage() {
         }
 
         return {
+          uid: crypto.randomUUID(),
           custom_id: formatCircuitId(displayCustomId),
           produto_id: produtoId,
           quantidade: i.quantidade || 1,
@@ -1190,6 +1194,7 @@ export default function BudgetFormPage() {
                   size="sm"
                   onClick={() =>
                     append({
+                      uid: crypto.randomUUID(),
                       custom_id: '',
                       produto_id: '',
                       quantidade: 1,
@@ -1227,6 +1232,7 @@ export default function BudgetFormPage() {
                       variant="secondary"
                       onClick={() =>
                         append({
+                          uid: crypto.randomUUID(),
                           custom_id: '',
                           produto_id: '',
                           quantidade: 1,
@@ -1258,7 +1264,7 @@ export default function BudgetFormPage() {
                     index === 0 || currentCircuit !== prevCircuit
 
                   return (
-                    <div key={field.id}>
+                    <div key={field.uid || field.id}>
                       {isNewGroup && currentCircuit && (
                         <div className="flex items-center gap-2 mt-4 mb-2 first:mt-0 animate-fade-in">
                           <div className="h-px bg-primary/20 flex-1" />

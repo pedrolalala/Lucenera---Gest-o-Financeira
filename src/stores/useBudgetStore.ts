@@ -9,6 +9,7 @@ import {
 
 export interface BudgetItem {
   id?: string
+  uid?: string
   produto_id: string
   quantidade: number
   preco_unitario: number
