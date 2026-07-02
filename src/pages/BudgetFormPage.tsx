@@ -601,29 +601,7 @@ export default function BudgetFormPage() {
       desconto: 0,
     })
 
-    if (productSearchRowIndex !== null) {
-      const currentProductId = form.getValues(
-        `itens.${productSearchRowIndex}.produto_id`,
-      )
-      if (!currentProductId) {
-        const [first, ...rest] = products
-        form.setValue(`itens.${productSearchRowIndex}.produto_id`, first.id, {
-          shouldValidate: true,
-        })
-        form.setValue(
-          `itens.${productSearchRowIndex}.preco_unitario`,
-          first.preco_venda || first.valor_venda || 0,
-          { shouldValidate: true, shouldDirty: true, shouldTouch: true },
-        )
-        if (rest.length > 0) {
-          append(rest.map(mapProductToItem))
-        }
-      } else {
-        append(products.map(mapProductToItem))
-      }
-    } else {
-      append(products.map(mapProductToItem))
-    }
+    append(products.map(mapProductToItem))
 
     toast.success(
       products.length === 1

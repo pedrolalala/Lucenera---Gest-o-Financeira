@@ -27,7 +27,12 @@ async function toPDF(data: any[], title: string) {
   const { height } = page.getSize()
   let y = height - 50
 
-  page.drawText(`Relatorio: ${title.toUpperCase()}`, { x: 40, y, size: 16, font })
+  page.drawText(`Relatorio: ${title.toUpperCase()}`, {
+    x: 40,
+    y,
+    size: 16,
+    font,
+  })
   y -= 30
 
   if (!data || !data.length) {
@@ -36,7 +41,13 @@ async function toPDF(data: any[], title: string) {
   }
 
   const headers = Object.keys(data[0])
-  page.drawText(headers.join(' | '), { x: 40, y, size: 9, font, color: rgb(0.3, 0.3, 0.3) })
+  page.drawText(headers.join(' | '), {
+    x: 40,
+    y,
+    size: 9,
+    font,
+    color: rgb(0.3, 0.3, 0.3),
+  })
   y -= 20
 
   for (const row of data) {
@@ -55,7 +66,8 @@ async function toPDF(data: any[], title: string) {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS')
+    return new Response('ok', { headers: corsHeaders })
 
   try {
     const { reportType, format, filters } = await req.json()
@@ -77,10 +89,13 @@ Deno.serve(async (req: Request) => {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
-      return new Response(JSON.stringify({ error: 'Usuário não autenticado.' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Usuário não autenticado.' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     const { data: profile } = await supabase
@@ -89,10 +104,15 @@ Deno.serve(async (req: Request) => {
       .eq('id', user.id)
       .single()
 
-    if (reportType !== 'orcamento' && profile?.role !== 'admin' && profile?.role !== 'gerente') {
+    if (
+      reportType !== 'orcamento' &&
+      profile?.role !== 'admin' &&
+      profile?.role !== 'gerente'
+    ) {
       return new Response(
         JSON.stringify({
-          error: 'Acesso negado. Apenas administradores e gerentes podem gerar relatórios.',
+          error:
+            'Acesso negado. Apenas administradores e gerentes podem gerar relatórios.',
         }),
         {
           status: 403,
@@ -105,15 +125,19 @@ Deno.serve(async (req: Request) => {
       const { id, logoBase64 } = filters || {}
 
       if (!id) {
-        return new Response(JSON.stringify({ error: 'ID do orçamento não fornecido.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return new Response(
+          JSON.stringify({ error: 'ID do orçamento não fornecido.' }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
 
       const { data: budget, error: budgetError } = await supabase
         .from('orcamentos')
-        .select(`
+        .select(
+          `
           *,
           cliente:contatos!orcamentos_cliente_id_fkey(nome, email, telefone, cpf_cnpj),
           empresa:empresas!orcamentos_empresa_id_fkey(nome, razao_social, logradouro, numero, bairro, cidade, estado, cep, cnpj),
@@ -122,15 +146,19 @@ Deno.serve(async (req: Request) => {
             id, produto_id, quantidade, preco_unitario, desconto, descricao, custom_id,
             produto:produtos(nome, referencia, sku, codigo_produto)
           )
-        `)
+        `,
+        )
         .eq('id', id)
         .single()
 
       if (budgetError || !budget) {
-        return new Response(JSON.stringify({ error: 'Orçamento não encontrado.' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return new Response(
+          JSON.stringify({ error: 'Orçamento não encontrado.' }),
+          {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
 
       const pdfDoc = await PDFDocument.create()
@@ -147,16 +175,27 @@ Deno.serve(async (req: Request) => {
 
       if (logoBase64) {
         try {
-          const base64Data = logoBase64.replace(/^data:image\/(png|jpeg|jpg);base64,/, '')
-          const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0))
+          const base64Data = logoBase64.replace(
+            /^data:image\/(png|jpeg|jpg);base64,/,
+            '',
+          )
+          const imageBytes = Uint8Array.from(atob(base64Data), (c) =>
+            c.charCodeAt(0),
+          )
           let image
-          if (logoBase64.includes('image/jpeg') || logoBase64.includes('image/jpg')) {
+          if (
+            logoBase64.includes('image/jpeg') ||
+            logoBase64.includes('image/jpg')
+          ) {
             image = await pdfDoc.embedJpg(imageBytes)
           } else {
             image = await pdfDoc.embedPng(imageBytes)
           }
 
-          const scale = Math.min(maxLogoWidth / image.width, maxLogoHeight / image.height)
+          const scale = Math.min(
+            maxLogoWidth / image.width,
+            maxLogoHeight / image.height,
+          )
           const imgWidth = image.width * scale
           const imgHeight = image.height * scale
 
@@ -186,40 +225,95 @@ Deno.serve(async (req: Request) => {
       const empresaCidade = `${empresa.bairro || 'Alto Da Boa Vista'}, ${empresa.cidade || 'Ribeirao Preto'}/${empresa.estado || 'SP'}`
 
       let textY = logoBottomY - 14
-      page.drawText(empresaNomeLogo, { x: headerTextX, y: textY, size: 14, font: boldFont })
-      page.drawText(empresaRazao, { x: headerTextX, y: textY - 15, size: 9, font })
-      page.drawText(empresaEnd, { x: headerTextX, y: textY - 27, size: 9, font })
-      page.drawText(empresaCidade, { x: headerTextX, y: textY - 39, size: 9, font })
-      page.drawText('(16) 3442 - 3545', { x: headerTextX, y: textY - 51, size: 9, font })
+      page.drawText(empresaNomeLogo, {
+        x: headerTextX,
+        y: textY,
+        size: 14,
+        font: boldFont,
+      })
+      page.drawText(empresaRazao, {
+        x: headerTextX,
+        y: textY - 15,
+        size: 9,
+        font,
+      })
+      page.drawText(empresaEnd, {
+        x: headerTextX,
+        y: textY - 27,
+        size: 9,
+        font,
+      })
+      page.drawText(empresaCidade, {
+        x: headerTextX,
+        y: textY - 39,
+        size: 9,
+        font,
+      })
+      page.drawText('(16) 3442 - 3545', {
+        x: headerTextX,
+        y: textY - 51,
+        size: 9,
+        font,
+      })
 
-      page.drawText('1 de 1', { x: width - 60, y: textY, size: 9, font: boldFont })
+      page.drawText('1 de 1', {
+        x: width - 60,
+        y: textY,
+        size: 9,
+        font: boldFont,
+      })
       page.drawLine({
         start: { x: width - 200, y: textY - 20 },
         end: { x: width - 40, y: textY - 20 },
         thickness: 1,
       })
-      page.drawText('Aprovação do Cliente', { x: width - 195, y: textY - 15, size: 8, font })
+      page.drawText('Aprovação do Cliente', {
+        x: width - 195,
+        y: textY - 15,
+        size: 8,
+        font,
+      })
 
       page.drawLine({
         start: { x: width - 200, y: textY - 50 },
         end: { x: width - 40, y: textY - 50 },
         thickness: 1,
       })
-      page.drawText(empresaNomeAssinatura, { x: width - 195, y: textY - 45, size: 8, font })
+      page.drawText(empresaNomeAssinatura, {
+        x: width - 195,
+        y: textY - 45,
+        size: 8,
+        font,
+      })
 
       page.drawText(
         `Data Impressão ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
-        { x: width - 150, y: textY - 62, size: 6, font, color: rgb(0.4, 0.4, 0.4) },
+        {
+          x: width - 150,
+          y: textY - 62,
+          size: 6,
+          font,
+          color: rgb(0.4, 0.4, 0.4),
+        },
       )
 
       y = textY - maxLogoHeight - 10
-      page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 2 })
+      page.drawLine({
+        start: { x: 40, y },
+        end: { x: width - 40, y },
+        thickness: 2,
+      })
 
       y -= 25
       page.drawText('Orçamento para', { x: 40, y, size: 11, font })
 
       const projName = budget.cliente?.nome || 'CLIENTE NÃO INFORMADO'
-      page.drawText(projName.toUpperCase(), { x: 40, y: y - 18, size: 13, font: boldFont })
+      page.drawText(projName.toUpperCase(), {
+        x: 40,
+        y: y - 18,
+        size: 13,
+        font: boldFont,
+      })
 
       page.drawText(`CPF/CNPJ: ${budget.cliente?.cpf_cnpj || '-'}`, {
         x: 40,
@@ -227,15 +321,23 @@ Deno.serve(async (req: Request) => {
         size: 9,
         font,
       })
-      page.drawText(`TEL: ${budget.cliente?.telefone || '-'}`, { x: 40, y: y - 47, size: 9, font })
+      page.drawText(`TEL: ${budget.cliente?.telefone || '-'}`, {
+        x: 40,
+        y: y - 47,
+        size: 9,
+        font,
+      })
 
       page.drawText('Orçamento', { x: width - 120, y, size: 11, font })
-      page.drawText(`${budget.numero || budget.id.split('-')[0].toUpperCase()}`, {
-        x: width - 120,
-        y: y - 18,
-        size: 13,
-        font: boldFont,
-      })
+      page.drawText(
+        `${budget.numero || budget.id.split('-')[0].toUpperCase()}`,
+        {
+          x: width - 120,
+          y: y - 18,
+          size: 13,
+          font: boldFont,
+        },
+      )
 
       y -= 75
 
@@ -250,14 +352,24 @@ Deno.serve(async (req: Request) => {
 
       y -= 30
 
-      const headersList = ['Código', 'Descrição', 'Qtd.', 'Vl. Unit.', 'Subtotal']
+      const headersList = [
+        'Código',
+        'Descrição',
+        'Qtd.',
+        'Vl. Unit.',
+        'Subtotal',
+      ]
       const xOffsets = [40, 90, 390, 430, 490]
 
       headersList.forEach((h, i) => {
         page.drawText(h, { x: xOffsets[i], y, size: 9, font: boldFont })
       })
       y -= 10
-      page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 1 })
+      page.drawLine({
+        start: { x: 40, y },
+        end: { x: width - 40, y },
+        thickness: 1,
+      })
       y -= 15
 
       let subtotal = 0
@@ -280,10 +392,9 @@ Deno.serve(async (req: Request) => {
         }
 
         const cod = item.custom_id || item.produto?.referencia || '-'
-        let desc = String(item.descricao || item.produto?.nome || 'Produto sem nome').substring(
-          0,
-          55,
-        )
+        let desc = String(
+          item.descricao || item.produto?.nome || 'Produto sem nome',
+        ).substring(0, 55)
 
         const qtd = String(item.quantidade || 1)
         const preco = Number(item.preco_unitario || 0)
@@ -360,7 +471,12 @@ Deno.serve(async (req: Request) => {
         font,
       })
 
-      page.drawText(`Valor Total:`, { x: width - 250, y: y - 48, size: 12, font: boldFont })
+      page.drawText(`Valor Total:`, {
+        x: width - 250,
+        y: y - 48,
+        size: 12,
+        font: boldFont,
+      })
       page.drawText(fmtFinalTotal, {
         x: rightPadX - boldFont.widthOfTextAtSize(fmtFinalTotal, 12),
         y: y - 48,
@@ -369,7 +485,12 @@ Deno.serve(async (req: Request) => {
       })
 
       y -= 80
-      page.drawText('Condições de Pagamento:', { x: width - 250, y, size: 8, font })
+      page.drawText('Condições de Pagamento:', {
+        x: width - 250,
+        y,
+        size: 8,
+        font,
+      })
 
       page.drawText(budget.condicoes_pagamento || 'A Combinar', {
         x: width - 250,
@@ -389,8 +510,13 @@ Deno.serve(async (req: Request) => {
 
       const validadeDate = budget.validade
         ? new Date(budget.validade)
-        : new Date(new Date(budget.created_at || new Date()).getTime() + 10 * 24 * 60 * 60 * 1000)
-      const validadeStr = validadeDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+        : new Date(
+            new Date(budget.created_at || new Date()).getTime() +
+              10 * 24 * 60 * 60 * 1000,
+          )
+      const validadeStr = validadeDate.toLocaleDateString('pt-BR', {
+        timeZone: 'UTC',
+      })
 
       // Dynamic Policy Filtering: Include only specific items (originally 1, 4, 6) renumbered to 1, 2, 3
       const obsLines = [
@@ -408,13 +534,16 @@ Deno.serve(async (req: Request) => {
         y -= 12
       })
 
-      page.drawText('Connect Systems Enterprise Technologies, Inc. All rights reserved.', {
-        x: width / 2 - 120,
-        y: 20,
-        size: 7,
-        font,
-        color: rgb(0.5, 0.5, 0.5),
-      })
+      page.drawText(
+        'Connect Systems Enterprise Technologies, Inc. All rights reserved.',
+        {
+          x: width / 2 - 120,
+          y: 20,
+          size: 7,
+          font,
+          color: rgb(0.5, 0.5, 0.5),
+        },
+      )
 
       const pdfBytes = await pdfDoc.save()
       return new Response(pdfBytes, {
@@ -428,11 +557,16 @@ Deno.serve(async (req: Request) => {
     if (reportType === 'ferias') {
       query = supabase
         .from('ferias')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
-      if (filters.startDate) query = query.gte('data_inicio', filters.startDate.split('T')[0])
-      if (filters.endDate) query = query.lte('data_fim', filters.endDate.split('T')[0])
+      if (filters.startDate)
+        query = query.gte('data_inicio', filters.startDate.split('T')[0])
+      if (filters.endDate)
+        query = query.lte('data_fim', filters.endDate.split('T')[0])
 
       const { data } = await query
       flatData = (data || []).map((d: any) => ({
@@ -446,8 +580,11 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'folha') {
       query = supabase
         .from('folha_pagamento')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
       if (filters.month) query = query.eq('mes', filters.month)
       if (filters.year) query = query.eq('ano', filters.year)
@@ -464,10 +601,14 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'avaliacoes') {
       query = supabase
         .from('avaliacoes')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
-      if (filters.startDate) query = query.gte('data_avaliacao', filters.startDate)
+      if (filters.startDate)
+        query = query.gte('data_avaliacao', filters.startDate)
       if (filters.endDate) query = query.lte('data_avaliacao', filters.endDate)
 
       const { data } = await query
@@ -483,12 +624,19 @@ Deno.serve(async (req: Request) => {
     } else if (reportType === 'ponto') {
       query = supabase
         .from('controle_ponto')
-        .select('*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))')
-      if (filters.deptId) query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
+        .select(
+          '*, funcionarios_rh!inner(nome, departamento_id, departamentos_rh(nome))',
+        )
+      if (filters.deptId)
+        query = query.eq('funcionarios_rh.departamento_id', filters.deptId)
       if (filters.empId) query = query.eq('funcionario_id', filters.empId)
       if (filters.month && filters.year) {
-        const start = new Date(filters.year, filters.month - 1, 1).toISOString().split('T')[0]
-        const end = new Date(filters.year, filters.month, 0).toISOString().split('T')[0]
+        const start = new Date(filters.year, filters.month - 1, 1)
+          .toISOString()
+          .split('T')[0]
+        const end = new Date(filters.year, filters.month, 0)
+          .toISOString()
+          .split('T')[0]
         query = query.gte('data', start).lte('data', end)
       }
 
@@ -506,7 +654,9 @@ Deno.serve(async (req: Request) => {
 
     if (format === 'csv') {
       const csvStr = toCSV(flatData)
-      return new Response(csvStr, { headers: { ...corsHeaders, 'Content-Type': 'text/csv' } })
+      return new Response(csvStr, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/csv' },
+      })
     } else {
       const pdfBytes = await toPDF(flatData, reportType)
       return new Response(pdfBytes, {
