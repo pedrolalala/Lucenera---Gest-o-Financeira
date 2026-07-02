@@ -9,10 +9,13 @@ Deno.serve(async (req: Request) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Não autorizado. Token de acesso ausente.' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({ error: 'Não autorizado. Token de acesso ausente.' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     // In a real scenario, this would authenticate with Microsoft Graph API
@@ -22,7 +25,8 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Sincronização com Microsoft Teams concluída com sucesso (Simulação).',
+        message:
+          'Sincronização com Microsoft Teams concluída com sucesso (Simulação).',
       }),
       {
         status: 200,
@@ -31,7 +35,9 @@ Deno.serve(async (req: Request) => {
     )
   } catch (error: any) {
     return new Response(
-      JSON.stringify({ error: error.message || 'Erro interno ao sincronizar.' }),
+      JSON.stringify({
+        error: error.message || 'Erro interno ao sincronizar.',
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

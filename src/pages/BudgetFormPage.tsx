@@ -586,6 +586,9 @@ export default function BudgetFormPage() {
   }
 
   const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
+    console.log('Itens recebidos do modal:', products)
+    console.log(`Quantidade de itens recebidos: ${products.length}`)
+
     if (products.length === 0) {
       setIsProductSearchOpen(false)
       setProductSearchRowIndex(null)
@@ -601,7 +604,32 @@ export default function BudgetFormPage() {
       desconto: 0,
     })
 
-    append(products.map(mapProductToItem))
+    const newItems = products.map(mapProductToItem)
+
+    const currentItems = form.getValues('itens') || []
+
+    if (
+      productSearchRowIndex !== null &&
+      productSearchRowIndex >= 0 &&
+      productSearchRowIndex < currentItems.length
+    ) {
+      const updatedItems = [...currentItems]
+      updatedItems[productSearchRowIndex] = {
+        ...updatedItems[productSearchRowIndex],
+        ...newItems[0],
+        custom_id: updatedItems[productSearchRowIndex].custom_id || '',
+      }
+      if (newItems.length > 1) {
+        updatedItems.push(...newItems.slice(1))
+      }
+      replace(updatedItems, { shouldFocus: false })
+    } else {
+      const combinedItems = [...currentItems, ...newItems]
+      replace(combinedItems, { shouldFocus: false })
+    }
+
+    const finalCount = (form.getValues('itens') || []).length
+    console.log(`Total de itens na lista após inserção: ${finalCount}`)
 
     toast.success(
       products.length === 1
@@ -1242,7 +1270,7 @@ export default function BudgetFormPage() {
                     index === 0 || currentCircuit !== prevCircuit
 
                   return (
-                    <div key={field.uid || field.id}>
+                    <div key={field.uid || field.id || `item-${index}`}>
                       {isNewGroup && currentCircuit && (
                         <div className="flex items-center gap-2 mt-4 mb-2 first:mt-0 animate-fade-in">
                           <div className="h-px bg-primary/20 flex-1" />
