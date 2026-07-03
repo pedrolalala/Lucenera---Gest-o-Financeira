@@ -174,38 +174,40 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   },
 
   addBudget: async (budget, items) => {
-  validateBudgetItems(items)
+    validateBudgetItems(items)
 
-  const finalBudget = { ...budget }
-  if (!finalBudget.numero) {
-    delete (finalBudget as any).numero
-  }
+    const finalBudget = { ...budget }
+    if (!finalBudget.numero) {
+      delete (finalBudget as any).numero
+    }
 
-  const { data, error } = await supabase
-    .from('orcamentos')
-    .insert([finalBudget])
-    .select()
-    .single()
+    const { data, error } = await supabase
+      .from('orcamentos')
+      .insert([finalBudget])
+      .select()
+      .single()
 
-  if (error) {
-    console.error('Error inserting budget:', error)
-    throw new Error(error.message || 'Erro ao criar orçamento.')
-  }
+    if (error) {
+      console.error('Error inserting budget:', error)
+      throw new Error(error.message || 'Erro ao criar orçamento.')
+    }
 
-  if (items && items.length > 0) {
-    const subOrdens = computeSubOrdem(items)
-    const itemsToInsert = items.map((i, idx) => ({
-      orcamento_id: data.id,
-      produto_id: sanitizeProdutoId(i.produto_id),
-      descricao: i.descricao || null,
-      quantidade: i.quantidade,
-      preco_unitario: i.preco_unitario,
-      desconto: i.desconto,
-      custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
-      ordem: extractCircuitNumber(i.custom_id),
-      sub_ordem: subOrdens[idx],
-      item_pai_id: i.item_pai_id || null,
-    }))      const { error: itemsError } = await supabase
+    if (items && items.length > 0) {
+      const subOrdens = computeSubOrdem(items)
+      const itemsToInsert = items.map((i, idx) => ({
+        orcamento_id: data.id,
+        produto_id: sanitizeProdutoId(i.produto_id),
+        descricao: i.descricao || null,
+        quantidade: i.quantidade,
+        preco_unitario: i.preco_unitario,
+        desconto: i.desconto,
+        custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
+        ordem: extractCircuitNumber(i.custom_id),
+        sub_ordem: subOrdens[idx],
+        item_pai_id: i.item_pai_id || null,
+      }))
+
+      const { error: itemsError } = await supabase
         .from('orcamento_itens')
         .insert(itemsToInsert)
 
@@ -221,32 +223,32 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   },
 
   updateBudget: async (id, budget, items) => {
-  validateBudgetItems(items)
+    validateBudgetItems(items)
 
-  const { error } = await supabase
-    .from('orcamentos')
-    .update(budget)
-    .eq('id', id)
+    const { error } = await supabase
+      .from('orcamentos')
+      .update(budget)
+      .eq('id', id)
 
-  if (error) {
-    console.error('Error updating budget:', error)
-    throw new Error(error.message || 'Erro ao atualizar orçamento.')
-  }
+    if (error) {
+      console.error('Error updating budget:', error)
+      throw new Error(error.message || 'Erro ao atualizar orçamento.')
+    }
 
-  if (items && items.length > 0) {
-    const subOrdens = computeSubOrdem(items)
-    const itemsPayload = items.map((i, idx) => ({
-      orcamento_id: id,
-      produto_id: sanitizeProdutoId(i.produto_id),
-      descricao: i.descricao || null,
-      quantidade: i.quantidade,
-      preco_unitario: i.preco_unitario,
-      desconto: i.desconto,
-      custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
-      ordem: extractCircuitNumber(i.custom_id),
-      sub_ordem: subOrdens[idx],
-      item_pai_id: i.item_pai_id || null,
-    }))
+    if (items && items.length > 0) {
+      const subOrdens = computeSubOrdem(items)
+      const itemsPayload = items.map((i, idx) => ({
+        orcamento_id: id,
+        produto_id: sanitizeProdutoId(i.produto_id),
+        descricao: i.descricao || null,
+        quantidade: i.quantidade,
+        preco_unitario: i.preco_unitario,
+        desconto: i.desconto,
+        custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
+        ordem: extractCircuitNumber(i.custom_id),
+        sub_ordem: subOrdens[idx],
+        item_pai_id: i.item_pai_id || null,
+      }))
       const { error: rpcError } = await (supabase as any).rpc(
         'replace_orcamento_itens',
         {
