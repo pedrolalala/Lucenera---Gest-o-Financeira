@@ -299,13 +299,11 @@ export function BudgetTableRow({
         <TableCell className="font-semibold text-gray-900">
           {budget.empresa?.nome || '-'}
         </TableCell>
+        <TableCell className="font-mono text-sm text-gray-600">
+          {budget.numero || budget.projeto?.codigo || '-'}
+        </TableCell>
         <TableCell className="text-gray-700">
-          <div className="flex flex-col">
-            <span>{budget.cliente?.nome || '-'}</span>
-            <span className="text-[10px] text-gray-400">
-              #{budget.numero || budgetId.split('-')[0]}
-            </span>
-          </div>
+          {budget.cliente?.razao_social || budget.cliente?.nome || '-'}
         </TableCell>
         <TableCell className="text-gray-500 text-sm">
           {budget.arquiteto?.nome || '-'}

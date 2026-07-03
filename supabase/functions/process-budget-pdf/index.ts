@@ -13,7 +13,8 @@ const corsHeaders = {
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS')
+    return new Response('ok', { headers: corsHeaders })
 
   try {
     let body
@@ -21,7 +22,9 @@ Deno.serve(async (req: Request) => {
       body = await req.json()
     } catch (e) {
       return new Response(
-        JSON.stringify({ error: 'Formato de requisição inválido. Esperado JSON.' }),
+        JSON.stringify({
+          error: 'Formato de requisição inválido. Esperado JSON.',
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -32,7 +35,9 @@ Deno.serve(async (req: Request) => {
     const { quote_id } = body
     if (!quote_id) {
       return new Response(
-        JSON.stringify({ error: 'O ID do orçamento (quote_id) é obrigatório.' }),
+        JSON.stringify({
+          error: 'O ID do orçamento (quote_id) é obrigatório.',
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -46,19 +51,23 @@ Deno.serve(async (req: Request) => {
 
     const { data: budget, error: budgetError } = await supabase
       .from('orcamentos_revenda_ubiqua')
-      .select(`
+      .select(
+        `
         *,
         cliente:informacoes_cliente_ubiqua!orcamentos_revenda_ubiqua_cliente_id_fkey(nome, email, telefone, cpf_cnpj),
         itens:itens_orcamento_ubiqua(
           id, produto_id, quantidade, valor_unitario, valor_total, desconto_item, referencia_snapshot, descricao_snapshot, observacao_item, ordem
         )
-      `)
+      `,
+      )
       .eq('id', quote_id)
       .single()
 
     if (budgetError || !budget) {
       return new Response(
-        JSON.stringify({ error: 'Orçamento não encontrado no banco de dados.' }),
+        JSON.stringify({
+          error: 'Orçamento não encontrado no banco de dados.',
+        }),
         {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -76,19 +85,32 @@ Deno.serve(async (req: Request) => {
 
     // Header
     page.drawText('Ubiqua - Orçamento', { x: 40, y, size: 20, font: boldFont })
-    page.drawText(`Número: ${budget.numero_orcamento || budget.id.split('-')[0].toUpperCase()}`, {
-      x: width - 200,
-      y,
-      size: 12,
-      font,
-    })
+    page.drawText(
+      `Número: ${budget.numero_orcamento || budget.id.split('-')[0].toUpperCase()}`,
+      {
+        x: width - 200,
+        y,
+        size: 12,
+        font,
+      },
+    )
     y -= 40
 
     // Client Info
     page.drawText('Dados do Cliente:', { x: 40, y, size: 14, font: boldFont })
     y -= 20
-    page.drawText(`Nome: ${budget.cliente?.nome || '-'}`, { x: 40, y, size: 10, font })
-    page.drawText(`Email: ${budget.cliente?.email || '-'}`, { x: 40, y: y - 15, size: 10, font })
+    page.drawText(`Nome: ${budget.cliente?.nome || '-'}`, {
+      x: 40,
+      y,
+      size: 10,
+      font,
+    })
+    page.drawText(`Email: ${budget.cliente?.email || '-'}`, {
+      x: 40,
+      y: y - 15,
+      size: 10,
+      font,
+    })
     page.drawText(`Telefone: ${budget.cliente?.telefone || '-'}`, {
       x: 40,
       y: y - 30,
@@ -111,15 +133,26 @@ Deno.serve(async (req: Request) => {
     const headers = ['Ref', 'Descrição', 'Qtd', 'Vl. Unit.', 'Desc.', 'Total']
     const xOffsets = [40, 100, 320, 360, 430, 480]
 
-    headers.forEach((h, i) => page.drawText(h, { x: xOffsets[i], y, size: 10, font: boldFont }))
+    headers.forEach((h, i) =>
+      page.drawText(h, { x: xOffsets[i], y, size: 10, font: boldFont }),
+    )
     y -= 15
-    page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 1 })
+    page.drawLine({
+      start: { x: 40, y },
+      end: { x: width - 40, y },
+      thickness: 1,
+    })
     y -= 15
 
     const formatCurrency = (val: number) =>
-      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
+      new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(val)
 
-    const items = (budget.itens || []).sort((a: any, b: any) => (a.ordem || 0) - (b.ordem || 0))
+    const items = (budget.itens || []).sort(
+      (a: any, b: any) => (a.ordem || 0) - (b.ordem || 0),
+    )
     items.forEach((item: any) => {
       if (y < 60) {
         page = pdfDoc.addPage()
@@ -128,17 +161,42 @@ Deno.serve(async (req: Request) => {
 
       const desc = String(item.descricao_snapshot || '-').substring(0, 35)
 
-      page.drawText(String(item.referencia_snapshot || '-'), { x: xOffsets[0], y, size: 9, font })
-      page.drawText(desc, { x: xOffsets[1], y, size: 9, font })
-      page.drawText(String(item.quantidade), { x: xOffsets[2], y, size: 9, font })
-      page.drawText(formatCurrency(item.valor_unitario), { x: xOffsets[3], y, size: 9, font })
-      page.drawText(formatCurrency(item.desconto_item || 0), { x: xOffsets[4], y, size: 9, font })
-      page.drawText(formatCurrency(item.valor_total || item.quantidade * item.valor_unitario), {
-        x: xOffsets[5],
+      page.drawText(String(item.referencia_snapshot || '-'), {
+        x: xOffsets[0],
         y,
         size: 9,
         font,
       })
+      page.drawText(desc, { x: xOffsets[1], y, size: 9, font })
+      page.drawText(String(item.quantidade), {
+        x: xOffsets[2],
+        y,
+        size: 9,
+        font,
+      })
+      page.drawText(formatCurrency(item.valor_unitario), {
+        x: xOffsets[3],
+        y,
+        size: 9,
+        font,
+      })
+      page.drawText(formatCurrency(item.desconto_item || 0), {
+        x: xOffsets[4],
+        y,
+        size: 9,
+        font,
+      })
+      page.drawText(
+        formatCurrency(
+          item.valor_total || item.quantidade * item.valor_unitario,
+        ),
+        {
+          x: xOffsets[5],
+          y,
+          size: 9,
+          font,
+        },
+      )
 
       y -= 15
     })
@@ -157,9 +215,19 @@ Deno.serve(async (req: Request) => {
     page.drawText(budget.observacoes || '-', { x: 40, y, size: 10, font })
 
     y -= 30
-    page.drawText('Condições de Pagamento:', { x: 40, y, size: 12, font: boldFont })
+    page.drawText('Condições de Pagamento:', {
+      x: 40,
+      y,
+      size: 12,
+      font: boldFont,
+    })
     y -= 15
-    page.drawText(budget.condicoes_pagamento || '-', { x: 40, y, size: 10, font })
+    page.drawText(budget.condicoes_pagamento || '-', {
+      x: 40,
+      y,
+      size: 10,
+      font,
+    })
 
     y -= 30
     page.drawText('Prazo de Entrega:', { x: 40, y, size: 12, font: boldFont })
@@ -184,7 +252,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // Get public URL
-    const { data: publicUrlData } = supabase.storage.from('orcamentos').getPublicUrl(fileName)
+    const { data: publicUrlData } = supabase.storage
+      .from('orcamentos')
+      .getPublicUrl(fileName)
     const fileUrl = publicUrlData.publicUrl
 
     // Send Email

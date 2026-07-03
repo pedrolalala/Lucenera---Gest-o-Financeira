@@ -143,13 +143,15 @@ export function FinancialApprovalTab() {
               <TableHeader>
                 <TableRow className="bg-gray-50">
                   <TableHead className="font-semibold">Emissão</TableHead>
-                  <TableHead className="font-semibold">Cliente</TableHead>
                   <TableHead className="font-semibold">Empresa</TableHead>
-                  <TableHead className="font-semibold text-right">
-                    Valor
-                  </TableHead>
+                  <TableHead className="font-semibold">Código</TableHead>
+                  <TableHead className="font-semibold">Cliente</TableHead>
+                  <TableHead className="font-semibold">Arquiteto</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                   <TableHead className="font-semibold">Validação</TableHead>
+                  <TableHead className="font-semibold text-right">
+                    Valor Total
+                  </TableHead>
                   <TableHead className="font-semibold text-right">
                     Ações
                   </TableHead>

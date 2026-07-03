@@ -124,12 +124,14 @@ export function ClientApprovalTab() {
               <TableHeader>
                 <TableRow className="bg-gray-50">
                   <TableHead className="font-semibold">Emissão</TableHead>
-                  <TableHead className="font-semibold">Cliente</TableHead>
                   <TableHead className="font-semibold">Empresa</TableHead>
-                  <TableHead className="font-semibold text-right">
-                    Valor
-                  </TableHead>
+                  <TableHead className="font-semibold">Código</TableHead>
+                  <TableHead className="font-semibold">Cliente</TableHead>
+                  <TableHead className="font-semibold">Arquiteto</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold text-right">
+                    Valor Total
+                  </TableHead>
                   <TableHead className="font-semibold text-right">
                     Ações
                   </TableHead>
@@ -144,14 +146,19 @@ export function ClientApprovalTab() {
                         ? format(new Date(budget.data_emissao), 'dd/MM/yyyy')
                         : '-'}
                     </TableCell>
-                    <TableCell className="font-medium text-gray-900">
-                      {budget.cliente?.nome || '-'}
-                    </TableCell>
                     <TableCell className="text-gray-700">
                       {budget.empresa?.nome || '-'}
                     </TableCell>
-                    <TableCell className="text-right font-bold text-gray-900">
-                      {fmt(budget.valor_total)}
+                    <TableCell className="font-mono text-sm text-gray-600">
+                      {budget.numero || budget.projeto?.codigo || '-'}
+                    </TableCell>
+                    <TableCell className="font-medium text-gray-900">
+                      {budget.cliente?.razao_social ||
+                        budget.cliente?.nome ||
+                        '-'}
+                    </TableCell>
+                    <TableCell className="text-gray-500 text-sm">
+                      {budget.arquiteto?.nome || '-'}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -160,6 +167,9 @@ export function ClientApprovalTab() {
                       >
                         Aguardando Cliente
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-gray-900">
+                      {fmt(budget.valor_total)}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

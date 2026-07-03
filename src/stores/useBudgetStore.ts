@@ -69,7 +69,7 @@ export interface Budget {
   requer_revisao_financeira: boolean | null
   created_at: string
   empresa?: { nome: string }
-  cliente?: { nome: string }
+  cliente?: { nome: string; razao_social?: string | null }
   arquiteto?: { nome: string }
   vendedor?: { nome: string }
   projeto?: { nome: string; codigo: string }
@@ -122,7 +122,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     let query = supabase.from('orcamentos').select(`
       *,
       empresa:empresas(nome),
-      cliente:contatos!orcamentos_cliente_id_fkey(nome),
+      cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social),
       arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
       projeto:projetos(nome, codigo),
       itens:orcamento_itens(
