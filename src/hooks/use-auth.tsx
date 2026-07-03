@@ -14,6 +14,7 @@ interface AuthContextType {
   user: User | null
   session: Session | null
   role: Role | null
+  canApproveQuotes: boolean
   signUp: (
     email: string,
     password: string,
@@ -38,25 +39,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [role, setRole] = useState<Role | null>(null)
+  const [canApproveQuotes, setCanApproveQuotes] = useState(false)
   const [loading, setLoading] = useState(true)
   const userIdRef = useRef<string | null>(null)
 
-  const fetchRole = async (userId: string): Promise<Role> => {
+  const fetchUserInfo = async (
+    userId: string,
+  ): Promise<{ role: Role; canApproveQuotes: boolean }> => {
     try {
       const { data, error } = await supabase
         .from('usuarios')
-        .select('role')
+        .select('role, can_approve_quotes')
         .eq('id', userId)
         .single()
 
       if (error || !data) {
         console.warn('Error fetching role, defaulting to viewer:', error)
-        return 'viewer'
+        return { role: 'viewer', canApproveQuotes: false }
       }
-      return (data.role as Role) || 'viewer'
+      return {
+        role: (data.role as Role) || 'viewer',
+        canApproveQuotes: (data as any).can_approve_quotes ?? false,
+      }
     } catch (error) {
       console.error('Exception fetching role:', error)
-      return 'viewer'
+      return { role: 'viewer', canApproveQuotes: false }
     }
   }
 
@@ -68,9 +75,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!user) return
 
       try {
-        const userRole = await fetchRole(user.id)
+        const userInfo = await fetchUserInfo(user.id)
         if (mounted) {
-          setRole(userRole)
+          setRole(userInfo.role)
+          setCanApproveQuotes(userInfo.canApproveQuotes)
         }
       } catch (error) {
         console.error('Error in getRole:', error)
@@ -112,6 +120,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (!newUser) {
         // If logged out, clear everything
         setRole(null)
+        setCanApproveQuotes(false)
         setLoading(false)
         userIdRef.current = null
       }
@@ -168,6 +177,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { error } = await supabase.auth.signOut()
     if (!error) {
       setRole(null)
+      setCanApproveQuotes(false)
       setSession(null)
       setUser(null)
       userIdRef.current = null
