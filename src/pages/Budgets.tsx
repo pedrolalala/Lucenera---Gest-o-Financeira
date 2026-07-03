@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
 import { ApprovalsTab } from '@/components/budgets/ApprovalsTab'
+import { FinancialApprovalTab } from '@/components/budgets/FinancialApprovalTab'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
@@ -28,7 +29,7 @@ const STATUS_OPTIONS = [
 
 export default function Budgets() {
   const { budgets, fetchBudgets, loading, initialized } = useBudgetStore()
-  const { role } = useAuth()
+  const { role, canApproveQuotes } = useAuth()
   const navigate = useNavigate()
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -76,6 +77,11 @@ export default function Budgets() {
       <Tabs defaultValue="todos" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="todos">Todos</TabsTrigger>
+          {canApproveQuotes && (
+            <TabsTrigger value="aprovacao-financeira">
+              Aprovação Financeira
+            </TabsTrigger>
+          )}
           <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>
         </TabsList>
 
@@ -117,6 +123,11 @@ export default function Budgets() {
           )}
         </TabsContent>
 
+        {canApproveQuotes && (
+          <TabsContent value="aprovacao-financeira" className="mt-0">
+            <FinancialApprovalTab />
+          </TabsContent>
+        )}
         <TabsContent value="aprovacoes" className="mt-0">
           <ApprovalsTab />
         </TabsContent>

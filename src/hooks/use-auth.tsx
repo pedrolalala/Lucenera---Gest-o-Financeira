@@ -189,6 +189,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     user,
     session,
     role,
+    canApproveQuotes,
     signUp,
     signIn,
     signOut,

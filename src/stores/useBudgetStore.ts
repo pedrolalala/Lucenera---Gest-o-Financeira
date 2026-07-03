@@ -89,6 +89,7 @@ interface BudgetState {
   updateBudgetStatus: (id: string, status: string) => Promise<void>
   deleteBudget: (id: string) => Promise<void>
   approveBudgetAndMigrate: (budget: Budget) => Promise<ApprovalResult>
+  financialApprove: (budget: Budget) => Promise<ApprovalResult>
 }
 
 const useBudgetStore = create<BudgetState>((set, get) => ({
@@ -285,6 +286,50 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       console.error('Error approving budget:', error)
       throw new Error(error.message || 'Erro ao aprovar orçamento.')
     }
+
+    await get().fetchBudgets()
+
+    return data as ApprovalResult
+  },
+
+  financialApprove: async (budget) => {
+    const previousStatus = budget.status
+    const previousReviewFlag = budget.requer_revisao_financeira
+
+    const { data, error } = await (supabase as any).rpc(
+      'aprovar_orcamento_financeiro',
+      { p_orcamento_id: budget.id },
+    )
+
+    if (error) {
+      console.error('Error in financial approval:', error)
+      throw new Error(error.message || 'Erro ao aprovar orçamento.')
+    }
+
+    await supabase
+      .from('orcamentos')
+      .update({ requer_revisao_financeira: false })
+      .eq('id', budget.id)
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const userId = sessionData.session?.user?.id || null
+
+    await supabase.from('logs_auditoria').insert({
+      tabela: 'orcamentos',
+      operacao: 'APROVAÇÃO_FINANCEIRA',
+      registro_id: budget.id,
+      usuario_id: userId,
+      dados_anteriores: {
+        status: previousStatus,
+        requer_revisao_financeira: previousReviewFlag,
+      },
+      dados_novos: {
+        status: 'aprovado',
+        requer_revisao_financeira: false,
+      },
+      observacao:
+        'Aprovação financeira realizada via área de Aprovação Financeira',
+    })
 
     await get().fetchBudgets()
 
