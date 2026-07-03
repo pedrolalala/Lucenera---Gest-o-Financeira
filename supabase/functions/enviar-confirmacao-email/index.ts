@@ -13,7 +13,10 @@ Deno.serve(async (req) => {
     console.log(`Destinatários: ${email_vinicius}, ${email_josi}`)
 
     return new Response(
-      JSON.stringify({ success: true, message: 'Email de confirmação enviado com sucesso.' }),
+      JSON.stringify({
+        success: true,
+        message: 'Email de confirmação enviado com sucesso.',
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,

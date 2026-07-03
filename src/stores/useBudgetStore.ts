@@ -108,6 +108,7 @@ interface BudgetState {
   deleteBudget: (id: string) => Promise<void>
   approveBudgetAndMigrate: (budget: Budget) => Promise<ApprovalResult>
   financialApprove: (budget: Budget) => Promise<ApprovalResult>
+  approveBudgetClient: (budget: Budget) => Promise<any>
 }
 
 const useBudgetStore = create<BudgetState>((set, get) => ({
@@ -356,6 +357,22 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     await get().fetchBudgets()
 
     return data as ApprovalResult
+  },
+
+  approveBudgetClient: async (budget) => {
+    const { data, error } = await (supabase as any).rpc(
+      'aprovar_orcamento_cliente',
+      { p_orcamento_id: budget.id },
+    )
+
+    if (error) {
+      console.error('Error in client approval:', error)
+      throw new Error(error.message || 'Erro ao aprovar orçamento do cliente.')
+    }
+
+    await get().fetchBudgets()
+
+    return data
   },
 }))
 

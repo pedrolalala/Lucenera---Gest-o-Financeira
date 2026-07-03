@@ -319,14 +319,18 @@ export function BudgetTableRow({
                   ? 'bg-green-50 text-green-700 border-green-200'
                   : normalizedStatus === 'aguardando_aprovacao'
                     ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                    : 'bg-gray-50'
+                    : normalizedStatus === 'aguardando_cliente'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-gray-50'
               }
             >
               {normalizedStatus === 'aguardando_aprovacao'
                 ? 'Aguardando Aprovação'
                 : normalizedStatus === 'aprovado'
                   ? 'Aprovado'
-                  : status || 'Rascunho'}
+                  : normalizedStatus === 'aguardando_cliente'
+                    ? 'Aguardando Cliente'
+                    : status || 'Rascunho'}
             </Badge>
             {needsFinancialReview && (
               <Badge

@@ -14,12 +14,14 @@ import {
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
 import { ApprovalsTab } from '@/components/budgets/ApprovalsTab'
 import { FinancialApprovalTab } from '@/components/budgets/FinancialApprovalTab'
+import { ClientApprovalTab } from '@/components/budgets/ClientApprovalTab'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
 
 const STATUS_OPTIONS = [
   'Todos',
+  'Aguardando Cliente',
   'Aguardando Aprovação',
   'Rascunho',
   'Aprovado',
@@ -77,6 +79,9 @@ export default function Budgets() {
       <Tabs defaultValue="todos" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="todos">Todos</TabsTrigger>
+          <TabsTrigger value="aprovacao-cliente">
+            Aprovação do cliente
+          </TabsTrigger>
           {canApproveQuotes && (
             <TabsTrigger value="aprovacao-financeira">
               Aprovação Financeira
@@ -121,6 +126,10 @@ export default function Budgets() {
           ) : (
             <BudgetsTable data={budgets} onEdit={handleEdit} />
           )}
+        </TabsContent>
+
+        <TabsContent value="aprovacao-cliente" className="mt-0">
+          <ClientApprovalTab />
         </TabsContent>
 
         {canApproveQuotes && (
