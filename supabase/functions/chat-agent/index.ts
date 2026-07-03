@@ -15,13 +15,10 @@ Deno.serve(async (req) => {
     // Validate JWT and get user
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing Authorization header' }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        },
-      )
+      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     const supabaseClient = createClient(
@@ -68,9 +65,7 @@ Deno.serve(async (req) => {
     })
 
     if (!n8nResponse.ok) {
-      throw new Error(
-        `Failed to communicate with agent: ${n8nResponse.statusText}`,
-      )
+      throw new Error(`Failed to communicate with agent: ${n8nResponse.statusText}`)
     }
 
     // Process n8n response
