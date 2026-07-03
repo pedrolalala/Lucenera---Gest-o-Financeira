@@ -6,6 +6,24 @@ import {
   formatCircuitId,
   sortItemsByCircuitId,
 } from '@/lib/utils'
+import { sanitizeProdutoId, isValidUUID } from '@/lib/uuid'
+
+function validateBudgetItems(items: BudgetItem[]): void {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    const pid = item.produto_id
+    if (pid && !isValidUUID(pid)) {
+      throw new Error(
+        `Item ${i + 1}: produto_id inválido ("${pid}"). Use um produto cadastrado ou remova o vínculo.`,
+      )
+    }
+    if (!pid && !item.descricao?.trim()) {
+      throw new Error(
+        `Item ${i + 1}: informe um produto cadastrado ou uma descrição para o item avulso.`,
+      )
+    }
+  }
+}
 
 export interface BudgetItem {
   id?: string
@@ -156,37 +174,38 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   },
 
   addBudget: async (budget, items) => {
-    const finalBudget = { ...budget }
-    if (!finalBudget.numero) {
-      delete (finalBudget as any).numero
-    }
+  validateBudgetItems(items)
 
-    const { data, error } = await supabase
-      .from('orcamentos')
-      .insert([finalBudget])
-      .select()
-      .single()
+  const finalBudget = { ...budget }
+  if (!finalBudget.numero) {
+    delete (finalBudget as any).numero
+  }
 
-    if (error) {
-      console.error('Error inserting budget:', error)
-      throw new Error(error.message || 'Erro ao criar orçamento.')
-    }
+  const { data, error } = await supabase
+    .from('orcamentos')
+    .insert([finalBudget])
+    .select()
+    .single()
 
-    if (items && items.length > 0) {
-      const subOrdens = computeSubOrdem(items)
-      const itemsToInsert = items.map((i, idx) => ({
-        orcamento_id: data.id,
-        produto_id: i.produto_id || null,
-        descricao: i.descricao || null,
-        quantidade: i.quantidade,
-        preco_unitario: i.preco_unitario,
-        desconto: i.desconto,
-        custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
-        ordem: extractCircuitNumber(i.custom_id),
-        sub_ordem: subOrdens[idx],
-        item_pai_id: i.item_pai_id || null,
-      }))
-      const { error: itemsError } = await supabase
+  if (error) {
+    console.error('Error inserting budget:', error)
+    throw new Error(error.message || 'Erro ao criar orçamento.')
+  }
+
+  if (items && items.length > 0) {
+    const subOrdens = computeSubOrdem(items)
+    const itemsToInsert = items.map((i, idx) => ({
+      orcamento_id: data.id,
+      produto_id: sanitizeProdutoId(i.produto_id),
+      descricao: i.descricao || null,
+      quantidade: i.quantidade,
+      preco_unitario: i.preco_unitario,
+      desconto: i.desconto,
+      custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
+      ordem: extractCircuitNumber(i.custom_id),
+      sub_ordem: subOrdens[idx],
+      item_pai_id: i.item_pai_id || null,
+    }))      const { error: itemsError } = await supabase
         .from('orcamento_itens')
         .insert(itemsToInsert)
 
@@ -202,31 +221,32 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   },
 
   updateBudget: async (id, budget, items) => {
-    const { error } = await supabase
-      .from('orcamentos')
-      .update(budget)
-      .eq('id', id)
+  validateBudgetItems(items)
 
-    if (error) {
-      console.error('Error updating budget:', error)
-      throw new Error(error.message || 'Erro ao atualizar orçamento.')
-    }
+  const { error } = await supabase
+    .from('orcamentos')
+    .update(budget)
+    .eq('id', id)
 
-    if (items && items.length > 0) {
-      const subOrdens = computeSubOrdem(items)
-      const itemsPayload = items.map((i, idx) => ({
-        orcamento_id: id,
-        produto_id: i.produto_id || null,
-        descricao: i.descricao || null,
-        quantidade: i.quantidade,
-        preco_unitario: i.preco_unitario,
-        desconto: i.desconto,
-        custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
-        ordem: extractCircuitNumber(i.custom_id),
-        sub_ordem: subOrdens[idx],
-        item_pai_id: i.item_pai_id || null,
-      }))
+  if (error) {
+    console.error('Error updating budget:', error)
+    throw new Error(error.message || 'Erro ao atualizar orçamento.')
+  }
 
+  if (items && items.length > 0) {
+    const subOrdens = computeSubOrdem(items)
+    const itemsPayload = items.map((i, idx) => ({
+      orcamento_id: id,
+      produto_id: sanitizeProdutoId(i.produto_id),
+      descricao: i.descricao || null,
+      quantidade: i.quantidade,
+      preco_unitario: i.preco_unitario,
+      desconto: i.desconto,
+      custom_id: i.custom_id ? formatCircuitId(i.custom_id) : null,
+      ordem: extractCircuitNumber(i.custom_id),
+      sub_ordem: subOrdens[idx],
+      item_pai_id: i.item_pai_id || null,
+    }))
       const { error: rpcError } = await (supabase as any).rpc(
         'replace_orcamento_itens',
         {

@@ -22,6 +22,7 @@ import {
   formatCircuitIdInput,
   sortItemsByCircuitId,
 } from '@/lib/utils'
+import { isValidUUID } from '@/lib/uuid'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
@@ -511,6 +512,15 @@ export default function BudgetFormPage() {
     try {
       setIsSubmitting(true)
 
+      const invalidItems = values.itens.filter(
+        (i) => i.produto_id && !isValidUUID(i.produto_id),
+      )
+      if (invalidItems.length > 0) {
+        toast.error(
+          `${invalidItems.length} item(ns) com produto_id inválido. Serão tratados como item avulso.`,
+        )
+      }
+
       const { data: projeto, error: projError } = await supabase
         .from('projetos')
         .select('id, arquivado')
@@ -551,7 +561,9 @@ export default function BudgetFormPage() {
         (_, i) => prazoDias * (i + 1),
       )
 
-      const hasUnregisteredItems = values.itens.some((i) => !i.produto_id)
+      const hasUnregisteredItems = values.itens.some(
+        (i) => !i.produto_id || !isValidUUID(i.produto_id),
+      )
 
       const payload = {
         empresa_id: values.empresa_id,
@@ -618,8 +630,8 @@ export default function BudgetFormPage() {
     const buildNewItem = (p: ProductSearchItem, seq: number) => ({
       uid: crypto.randomUUID(),
       custom_id: formatCircuitId(`L${seq}`),
-      produto_id: p.id,
-      descricao: '',
+      produto_id: p.source === 'produtos' && isValidUUID(p.id) ? p.id : '',
+      descricao: p.source === 'produtos' && isValidUUID(p.id) ? '' : p.nome,
       quantidade: 1,
       preco_unitario: p.preco_venda || p.valor_venda || 0,
       desconto: 0,
@@ -756,7 +768,7 @@ export default function BudgetFormPage() {
                   .toLowerCase()
                   .includes(i.descricao.toLowerCase())),
           )
-          if (found) produtoId = found.id
+          if (found && isValidUUID(found.id)) produtoId = found.id
         }
 
         let displayCustomId = i.custom_id || ''

@@ -3,6 +3,7 @@ import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react'
 import { useDebounce } from '@/hooks/use-debounce'
 import { supabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { isValidUUID } from '@/lib/uuid'
 import { Button } from '@/components/ui/button'
 import {
   Popover,
@@ -57,7 +58,7 @@ export function AsyncProductSelect({
       return
     }
     async function fetchSelected() {
-      const isRevenda = value && !value.includes('-')
+      const isRevenda = value && !isValidUUID(value)
       if (isRevenda) {
         const { data } = await supabase
           .from('revenda_ubiqua')

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ChevronsUpDown, Package } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { isValidUUID } from '@/lib/uuid'
 
 export function ProductSelectButton({
   value,
@@ -23,7 +24,7 @@ export function ProductSelectButton({
     let cancelled = false
 
     async function fetchLabel() {
-      const isRevenda = !value.includes('-')
+      const isRevenda = !isValidUUID(value)
 
       if (isRevenda) {
         const { data } = await supabase
