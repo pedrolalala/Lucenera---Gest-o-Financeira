@@ -88,6 +88,8 @@ const formSchema = z
       .number()
       .min(0, 'O desconto não pode ser negativo')
       .max(100, 'O desconto não pode ser maior que 100%')
+      .nullish()
+      .transform((v) => (v === null || v === undefined ? 0 : v))
       .default(0),
     forma_pagamento: z.string().optional().nullable(),
     parcelas: z.coerce
@@ -308,7 +310,7 @@ export default function BudgetFormPage() {
             arquiteto_id: budget.arquiteto_id || 'none',
             vendedor_id: budget.vendedor_id || 'none',
             status: budget.status || 'Aguardando Aprovação',
-            desconto_global: budget.desconto_global || 0,
+            desconto_global: budget.desconto_global ?? 0,
             forma_pagamento: budget.forma_pagamento || '',
             parcelas: parsedParcelas,
             prazo_inicio_cobranca_dias: budget.prazo_inicio_cobranca_dias ?? 0,
@@ -573,7 +575,7 @@ export default function BudgetFormPage() {
           values.arquiteto_id === 'none' ? null : values.arquiteto_id,
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
         status: values.status,
-        desconto_global: values.desconto_global,
+        desconto_global: values.desconto_global ?? 0,
         forma_pagamento: values.forma_pagamento || null,
         prazo_inicio_cobranca_dias: prazoDias,
         prazo_pagamento_dias: prazoPagamentoDias,
