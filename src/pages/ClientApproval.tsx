@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
-import { CheckCircle, XCircle, Loader2, FileText, AlertCircle } from 'lucide-react'
+import {
+  CheckCircle,
+  XCircle,
+  Loader2,
+  FileText,
+  AlertCircle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +18,14 @@ import {
   type ClientApprovalBudget,
 } from '@/services/clientApprovalService'
 
-type ViewState = 'loading' | 'ready' | 'approving' | 'rejecting' | 'approved' | 'rejected' | 'error'
+type ViewState =
+  | 'loading'
+  | 'ready'
+  | 'approving'
+  | 'rejecting'
+  | 'approved'
+  | 'rejected'
+  | 'error'
 
 export default function ClientApproval() {
   const [searchParams] = useSearchParams()
@@ -49,7 +62,9 @@ export default function ClientApproval() {
         setErrorMessage(err?.message || 'Erro ao carregar orçamento.')
         setViewState('error')
       })
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [orcamentoId, token])
 
   const handleApprove = async () => {
@@ -77,7 +92,10 @@ export default function ClientApproval() {
   }
 
   const fmt = (v: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(v || 0)
 
   if (viewState === 'loading') {
     return (
@@ -93,7 +111,9 @@ export default function ClientApproval() {
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center">
             <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Link Inválido</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              Link Inválido
+            </h2>
             <p className="text-gray-500">{errorMessage}</p>
           </CardContent>
         </Card>
@@ -107,8 +127,13 @@ export default function ClientApproval() {
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center">
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Orçamento Aprovado!</h2>
-            <p className="text-gray-500">Obrigado pela confirmação. Sua proposta foi aprovada e enviada para processamento financeiro.</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              Orçamento Aprovado!
+            </h2>
+            <p className="text-gray-500">
+              Obrigado pela confirmação. Sua proposta foi aprovada e enviada
+              para processamento financeiro.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -121,8 +146,13 @@ export default function ClientApproval() {
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center">
             <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Orçamento Recusado</h2>
-            <p className="text-gray-500">Sua recusa foi registrada. Um de nossos representantes entrará em contato em breve.</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              Orçamento Recusado
+            </h2>
+            <p className="text-gray-500">
+              Sua recusa foi registrada. Um de nossos representantes entrará em
+              contato em breve.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -137,7 +167,9 @@ export default function ClientApproval() {
             <FileText className="h-10 w-10 text-blue-600" />
           </div>
           <CardTitle className="text-2xl">Aprovação de Orçamento</CardTitle>
-          <p className="text-sm text-gray-500 mt-1">Confirme os detalhes abaixo para aprovar ou recusar</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Confirme os detalhes abaixo para aprovar ou recusar
+          </p>
         </CardHeader>
         <CardContent className="space-y-4 pt-6">
           <div className="grid grid-cols-2 gap-4">
@@ -148,32 +180,47 @@ export default function ClientApproval() {
             <div>
               <p className="text-sm font-medium text-gray-500">Emissão</p>
               <p className="font-bold text-gray-900">
-                {budget?.data_emissao && !isNaN(new Date(budget.data_emissao).getTime())
+                {budget?.data_emissao &&
+                !isNaN(new Date(budget.data_emissao).getTime())
                   ? format(new Date(budget.data_emissao), 'dd/MM/yyyy')
                   : '-'}
               </p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Cliente</p>
-              <p className="font-bold text-gray-900">{budget?.cliente_nome || '-'}</p>
+              <p className="font-bold text-gray-900">
+                {budget?.cliente_nome || '-'}
+              </p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Valor Total</p>
-              <p className="font-bold text-blue-600 text-lg">{fmt(budget?.valor_total || 0)}</p>
+              <p className="font-bold text-blue-600 text-lg">
+                {fmt(budget?.valor_total || 0)}
+              </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-500">Cond. Pagamento</p>
-              <p className="font-medium text-gray-900">{budget?.condicoes_pagamento || '-'}</p>
+              <p className="text-sm font-medium text-gray-500">
+                Cond. Pagamento
+              </p>
+              <p className="font-medium text-gray-900">
+                {budget?.condicoes_pagamento || '-'}
+              </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-500">Forma Pagamento</p>
-              <p className="font-medium text-gray-900">{budget?.forma_pagamento || '-'}</p>
+              <p className="text-sm font-medium text-gray-500">
+                Forma Pagamento
+              </p>
+              <p className="font-medium text-gray-900">
+                {budget?.forma_pagamento || '-'}
+              </p>
             </div>
           </div>
 
           {showRejectForm && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Motivo da recusa:</label>
+              <label className="text-sm font-medium text-gray-700">
+                Motivo da recusa:
+              </label>
               <Textarea
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
@@ -191,9 +238,14 @@ export default function ClientApproval() {
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white"
               >
                 {viewState === 'approving' ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Aprovando...</>
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />{' '}
+                    Aprovando...
+                  </>
                 ) : (
-                  <><CheckCircle className="h-4 w-4 mr-2" /> Aprovar Orçamento</>
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" /> Aprovar Orçamento
+                  </>
                 )}
               </Button>
               <Button
@@ -212,13 +264,19 @@ export default function ClientApproval() {
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
               >
                 {viewState === 'rejecting' ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enviando...</>
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />{' '}
+                    Enviando...
+                  </>
                 ) : (
-                  'Confirmar Recusa</>
+                  <>Confirmar Recusa</>
                 )}
               </Button>
               <Button
-                onClick={() => { setShowRejectForm(false); setMotivo('') }}
+                onClick={() => {
+                  setShowRejectForm(false)
+                  setMotivo('')
+                }}
                 variant="outline"
                 className="flex-1"
               >
