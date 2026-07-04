@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ShieldAlert, ShieldCheck } from 'lucide-react'
+import { ShieldAlert, ShieldCheck, UserCheck } from 'lucide-react'
 import {
   Table,
   TableHeader,
@@ -28,10 +28,7 @@ export function FinancialApprovalTab() {
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const pendingBudgets = useMemo(
-    () =>
-      budgets.filter(
-        (b: Budget) => normalizeStatus(b.status) === 'aguardando_aprovacao',
-      ),
+    () => budgets.filter((b: Budget) => b.status === 'aprovado_cliente'),
     [budgets],
   )
 
@@ -126,12 +123,13 @@ export function FinancialApprovalTab() {
 
       {pendingBudgets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <ShieldCheck className="h-12 w-12 text-green-500 mb-3" />
+          <UserCheck className="h-12 w-12 text-green-500 mb-3" />
           <p className="text-lg font-semibold text-gray-700">
-            Nenhum orçamento pendente de aprovação
+            Nenhum orçamento aprovado pelo cliente aguardando aprovação
+            financeira
           </p>
           <p className="text-sm text-gray-500">
-            Todos os orçamentos foram revisados.
+            Orçamentos aprovados pelo cliente aparecerão aqui.
           </p>
         </div>
       ) : (

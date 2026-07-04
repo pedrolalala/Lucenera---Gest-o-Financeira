@@ -1,7 +1,16 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { UserCheck, Edit, Loader2, FileSignature } from 'lucide-react'
+import {
+  Send,
+  Edit,
+  Loader2,
+  FileSignature,
+  Copy,
+  UserCheck,
+  RefreshCw,
+  AlertTriangle,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,51 +29,85 @@ import {
 } from '@/components/ui/tooltip'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
-import { normalizeStatus } from '@/lib/utils'
+import {
+  getStatusLabel,
+  getStatusBadgeClass,
+  buildClientApprovalLink,
+} from '@/lib/budget-status'
+import { cn } from '@/lib/utils'
 
 const APPROVAL_ROLES = ['admin', 'gerente', 'operador']
 
 export function ClientApprovalTab() {
-  const { budgets, loading, initialized, approveBudgetClient } =
-    useBudgetStore()
+  const {
+    budgets,
+    loading,
+    initialized,
+    enviarOrcamentoCliente,
+    aprovarManualmenteCliente,
+  } = useBudgetStore()
   const { role } = useAuth()
   const navigate = useNavigate()
-  const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [actionId, setActionId] = useState<string | null>(null)
 
-  const canApprove = role !== null && APPROVAL_ROLES.includes(role)
+  const canManage = role !== null && APPROVAL_ROLES.includes(role)
 
-  const clientPendingBudgets = useMemo(
+  const clientBudgets = useMemo(
     () =>
-      budgets.filter((b) => {
-        const ns = normalizeStatus(b.status)
-        return ns === 'aguardando_cliente' || b.status === 'aguardando_cliente'
-      }),
+      budgets.filter(
+        (b) =>
+          b.status === 'enviado_cliente' || b.status === 'recusado_cliente',
+      ),
     [budgets],
   )
 
   const handleEdit = (budget: Budget) => navigate(`/budgets/${budget.id}`)
 
-  const handleApprove = async (budget: Budget) => {
-    if (!canApprove) {
-      toast.error('Permissão negada', {
-        description: 'Apenas admin, gerente ou operador podem aprovar.',
-        duration: 6000,
-      })
-      return
-    }
-    setApprovingId(budget.id)
+  const handleEnviar = async (budget: Budget) => {
+    setActionId(budget.id)
     try {
-      await approveBudgetClient(budget)
-      toast.success(
-        'Orçamento aprovado pelo cliente! Enviado para aprovação financeira.',
-      )
-    } catch (error: any) {
-      toast.error('Falha ao aprovar orçamento', {
-        description: error?.message || 'Erro desconhecido.',
+      const result = await enviarOrcamentoCliente(budget.id)
+      const link = buildClientApprovalLink(budget.id, result.token)
+      await navigator.clipboard.writeText(link)
+      toast.success('Orçamento enviado ao cliente! Link copiado.', {
+        description: link,
         duration: 8000,
       })
+    } catch (error: any) {
+      toast.error('Falha ao enviar orçamento', { description: error?.message })
     } finally {
-      setApprovingId(null)
+      setActionId(null)
+    }
+  }
+
+  const handleCopyLink = async (budget: Budget) => {
+    if (!budget.token_aprovacao_cliente) {
+      toast.error('Token não disponível. Reenvie o orçamento.')
+      return
+    }
+    const link = buildClientApprovalLink(
+      budget.id,
+      budget.token_aprovacao_cliente,
+    )
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success('Link copiado!', { description: link, duration: 8000 })
+    } catch {
+      toast.error('Não foi possível copiar o link.')
+    }
+  }
+
+  const handleAprovarManual = async (budget: Budget) => {
+    setActionId(budget.id)
+    try {
+      await aprovarManualmenteCliente(budget.id)
+      toast.success('Orçamento aprovado manualmente pelo cliente.')
+    } catch (error: any) {
+      toast.error('Falha ao aprovar manualmente', {
+        description: error?.message,
+      })
+    } finally {
+      setActionId(null)
     }
   }
 
@@ -94,27 +137,21 @@ export function ClientApprovalTab() {
               Aprovação do Cliente
             </h3>
             <p className="text-sm text-blue-700 mt-1">
-              Aguarde a finalização do contrato com o cliente antes de enviar
-              para aprovação financeira.
+              Envie o link de aprovação ao cliente ou registre a aprovação
+              manualmente. Orçamentos recusados podem ser reenviados.
             </p>
-            {!canApprove && (
-              <p className="text-xs text-blue-600 mt-2 font-medium">
-                ⚠ Seu usuário não possui permissão para aprovar orçamentos nesta
-                etapa.
-              </p>
-            )}
           </div>
         </div>
       </div>
 
-      {clientPendingBudgets.length === 0 ? (
+      {clientBudgets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <UserCheck className="h-12 w-12 text-gray-300 mb-3" />
+          <Send className="h-12 w-12 text-gray-300 mb-3" />
           <p className="text-lg font-semibold text-gray-700">
-            Nenhum orçamento aguardando aprovação do cliente
+            Nenhum orçamento pendente de aprovação do cliente
           </p>
           <p className="text-sm text-gray-500">
-            Todos os orçamentos foram enviados para o cliente.
+            Envie orçamentos ao cliente a partir da aba "Todos".
           </p>
         </div>
       ) : (
@@ -138,7 +175,7 @@ export function ClientApprovalTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clientPendingBudgets.map((budget) => (
+                {clientBudgets.map((budget) => (
                   <TableRow key={budget.id}>
                     <TableCell className="text-sm text-gray-600">
                       {budget.data_emissao &&
@@ -161,12 +198,24 @@ export function ClientApprovalTab() {
                       {budget.arquiteto?.nome || '-'}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className="bg-blue-50 text-blue-700 border-blue-200"
-                      >
-                        Aguardando Cliente
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge
+                          variant="outline"
+                          className={cn(getStatusBadgeClass(budget.status))}
+                        >
+                          {getStatusLabel(budget.status)}
+                        </Badge>
+                        {budget.status === 'recusado_cliente' &&
+                          budget.motivo_recusa_cliente && (
+                            <span
+                              className="text-[10px] text-red-600 truncate max-w-[150px]"
+                              title={budget.motivo_recusa_cliente}
+                            >
+                              <AlertTriangle className="w-3 h-3 inline mr-1" />
+                              {budget.motivo_recusa_cliente}
+                            </span>
+                          )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-bold text-gray-900">
                       {fmt(budget.valor_total)}
@@ -181,21 +230,50 @@ export function ClientApprovalTab() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        {canApprove ? (
+                        {budget.status === 'enviado_cliente' && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                              title="Copiar Link"
+                              onClick={() => handleCopyLink(budget)}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            {canManage && (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => handleAprovarManual(budget)}
+                                disabled={actionId === budget.id}
+                              >
+                                {actionId === budget.id ? (
+                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                ) : (
+                                  <UserCheck className="h-4 w-4 mr-1" />
+                                )}
+                                Aprovar Manualmente
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        {budget.status === 'recusado_cliente' && canManage && (
                           <Button
                             size="sm"
                             className="bg-blue-600 hover:bg-blue-700 text-white"
-                            onClick={() => handleApprove(budget)}
-                            disabled={approvingId === budget.id}
+                            onClick={() => handleEnviar(budget)}
+                            disabled={actionId === budget.id}
                           >
-                            {approvingId === budget.id ? (
+                            {actionId === budget.id ? (
                               <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                             ) : (
-                              <UserCheck className="h-4 w-4 mr-1" />
+                              <RefreshCw className="h-4 w-4 mr-1" />
                             )}
-                            Aprovar
+                            Reenviar
                           </Button>
-                        ) : (
+                        )}
+                        {!canManage && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span>
@@ -208,7 +286,7 @@ export function ClientApprovalTab() {
                                 </Button>
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
+                            <TooltipContent>
                               <p className="text-xs">
                                 Apenas admin, gerente ou operador podem aprovar.
                               </p>

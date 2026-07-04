@@ -20,26 +20,24 @@ import {
   Printer,
   Loader2,
   CheckCircle,
-  FileText,
   RefreshCw,
   AlertTriangle,
+  Send,
+  Copy,
   UserCheck,
 } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
-import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { normalizeStatus, cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
-import logoImg from '@/assets/lucenera-vertical-527dd.png'
+import { supabase } from '@/lib/supabase/client'
+import { FiscalSummaryDialog } from './FiscalSummaryDialog'
+import { FinanceResultModal } from './FinanceResultModal'
+import {
+  buildClientApprovalLink,
+  getStatusLabel,
+  getStatusBadgeClass,
+} from '@/lib/budget-status'
 
 interface BudgetTableRowProps {
   budgetId: string
@@ -54,8 +52,12 @@ export function BudgetTableRow({
   budget,
   onEdit,
 }: BudgetTableRowProps) {
-  const { deleteBudget, approveBudgetAndMigrate, approveBudgetClient } =
-    useBudgetStore()
+  const {
+    deleteBudget,
+    approveBudgetAndMigrate,
+    enviarOrcamentoCliente,
+    aprovarManualmenteCliente,
+  } = useBudgetStore()
   const { canApproveQuotes, role } = useAuth()
   const [isApproving, setIsApproving] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
@@ -63,172 +65,157 @@ export function BudgetTableRow({
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
     null,
   )
-  const [isClientApproving, setIsClientApproving] = useState(false)
+  const [isSending, setIsSending] = useState(false)
 
   const normalizedStatus = normalizeStatus(status)
-
-  const canApproveClient =
+  const canManageClient =
     role !== null && ['admin', 'gerente', 'operador'].includes(role)
 
   const hasSpecialItemsWithoutPrice = budget.itens?.some(
     (i) => Number(i.preco_unitario) === 0,
   )
-
   const hasUnregisteredItems = budget.itens?.some((i) => !i.produto_id)
   const needsFinancialReview =
     budget.requer_revisao_financeira || hasUnregisteredItems
 
-  const canAccessFinanceiro = canApproveQuotes
-
-  const subtotalItens =
-    budget.itens?.reduce((acc, item) => {
-      return (
-        acc +
-        item.quantidade * item.preco_unitario * (1 - (item.desconto || 0) / 100)
+  const handleEnviarCliente = async () => {
+    try {
+      setIsSending(true)
+      const result = await enviarOrcamentoCliente(budgetId)
+      const link = buildClientApprovalLink(budgetId, result.token)
+      await navigator.clipboard.writeText(link)
+      toast.success(
+        'Orçamento enviado ao cliente! Link copiado para a área de transferência.',
+        {
+          description: link,
+          duration: 8000,
+        },
       )
-    }, 0) || 0
-  const valorLiquido = subtotalItens * (1 - (budget.desconto_global || 0) / 100)
+    } catch (error: any) {
+      toast.error('Falha ao enviar orçamento', { description: error?.message })
+    } finally {
+      setIsSending(false)
+    }
+  }
 
-  const cfopItems =
-    budget.itens?.map((item) => {
-      const isST = (item.produto?.porc_st || 0) > 0
-      const cfop = isST ? '5405' : '5102'
-      const sub =
-        item.quantidade * item.preco_unitario * (1 - (item.desconto || 0) / 100)
-      return {
-        nome: item.produto?.nome || item.descricao || item.custom_id || 'Item',
-        cfop,
-        subtotal: sub * (1 - (budget.desconto_global || 0) / 100),
-      }
-    }) || []
-  const hasNoInterpretablePrazo =
-    !Array.isArray(budget.prazo_pagamento_dias) ||
-    budget.prazo_pagamento_dias.length === 0
+  const handleCopyLink = async () => {
+    if (!budget.token_aprovacao_cliente) {
+      toast.error('Token não disponível. Reenvie o orçamento ao cliente.')
+      return
+    }
+    const link = buildClientApprovalLink(
+      budgetId,
+      budget.token_aprovacao_cliente,
+    )
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success('Link copiado!', { description: link, duration: 8000 })
+    } catch {
+      toast.error('Não foi possível copiar o link.')
+    }
+  }
 
-  const hasNoFreteEstruturado = !budget.frete_tipo
-
-  const handleClientApprove = async () => {
-    if (!canApproveClient) {
+  const handleAprovarManualmente = async () => {
+    if (!canManageClient) {
       toast.error('Permissão negada', {
         description:
-          'Apenas admin, gerente ou operador podem aprovar orçamentos do cliente.',
-        duration: 6000,
+          'Apenas admin, gerente ou operador podem aprovar manualmente.',
       })
       return
     }
     try {
-      setIsClientApproving(true)
-      await approveBudgetClient(budget)
-      toast.success(
-        'Orçamento aprovado pelo cliente! Enviado para aprovação financeira.',
-      )
+      setIsSending(true)
+      await aprovarManualmenteCliente(budgetId)
+      toast.success('Orçamento aprovado manualmente pelo cliente.')
     } catch (error: any) {
-      toast.error('Falha ao aprovar orçamento do cliente', {
-        description: error?.message || 'Erro desconhecido.',
+      toast.error('Falha ao aprovar manualmente', {
+        description: error?.message,
       })
     } finally {
-      setIsClientApproving(false)
+      setIsSending(false)
     }
   }
 
   const handleApprove = async () => {
-    if (needsFinancialReview && !canAccessFinanceiro) {
-      toast.error(
-        'Este orçamento contém itens não cadastrados e requer revisão financeira. Apenas um aprovador autorizado pode aprová-lo.',
-        {
-          duration: 8000,
-        },
-      )
-      return
-    }
-
     if (hasSpecialItemsWithoutPrice) {
       toast.error(
-        'Atenção: Peças especiais detectadas sem preço. Solicite a precificação manual para Débora ou Vinícius antes de prosseguir.',
-        {
-          duration: 8000,
-        },
+        'Atenção: Peças especiais detectadas sem preço. Solicite a precificação manual antes de prosseguir.',
+        { duration: 8000 },
       )
       return
     }
-
-    if (hasNoInterpretablePrazo) {
+    if (
+      !Array.isArray(budget.prazo_pagamento_dias) ||
+      budget.prazo_pagamento_dias.length === 0
+    ) {
       toast.error(
-        'Este orçamento ainda não tem o "Prazo para Início da Cobrança" preenchido. Edite o orçamento e informe o prazo antes de aprovar.',
-        {
-          duration: 8000,
-        },
+        'Este orçamento não tem o "Prazo para Início da Cobrança" preenchido.',
+        { duration: 8000 },
       )
       return
     }
-
-    if (hasNoFreteEstruturado) {
-      toast.error(
-        'Este orçamento ainda não tem o frete estruturado. Edite o orçamento e informe "Com Frete" ou "Sem Frete" antes de aprovar.',
-        {
-          duration: 8000,
-        },
-      )
+    if (!budget.frete_tipo) {
+      toast.error('Este orçamento não tem o frete estruturado.', {
+        duration: 8000,
+      })
       return
     }
-
     try {
       setIsApproving(true)
       const result = await approveBudgetAndMigrate(budget)
       setApprovalResult(result)
-      if (canAccessFinanceiro) {
+      if (canApproveQuotes) {
         setShowFinanceModal(true)
         toast.success('Orçamento aprovado e enviado para o Financeiro.')
-      } else {
-        toast.success(
-          'Orçamento aprovado e enviado para Administração Bancária.',
-        )
       }
-
       window.open(
         'https://retorno-bancario-bradesco-5392a.goskip.app/notas-fiscais',
         '_blank',
         'noopener,noreferrer',
       )
     } catch (error: any) {
-      toast.error('Erro ao aprovar orçamento', { description: error.message })
+      const isP0003 =
+        error?.code === 'P0003' || error?.message?.includes('P0003')
+      toast.error(
+        isP0003 ? 'Aprovação bloqueada' : 'Erro ao aprovar orçamento',
+        {
+          description: isP0003
+            ? 'O orçamento deve estar aprovado pelo cliente antes da aprovação financeira.'
+            : error.message,
+          duration: 8000,
+        },
+      )
     } finally {
       setIsApproving(false)
     }
   }
 
   const handleSync = async () => {
-    if (hasNoInterpretablePrazo) {
+    if (
+      !Array.isArray(budget.prazo_pagamento_dias) ||
+      budget.prazo_pagamento_dias.length === 0
+    ) {
       toast.error(
-        'Este orçamento ainda não tem o "Prazo para Início da Cobrança" preenchido. Edite o orçamento e informe o prazo antes de sincronizar.',
-        {
-          duration: 8000,
-        },
+        'Preencha o "Prazo para Início da Cobrança" antes de sincronizar.',
+        { duration: 8000 },
       )
       return
     }
-
-    if (hasNoFreteEstruturado) {
-      toast.error(
-        'Este orçamento ainda não tem o frete estruturado. Edite o orçamento e informe "Com Frete" ou "Sem Frete" antes de sincronizar.',
-        {
-          duration: 8000,
-        },
-      )
+    if (!budget.frete_tipo) {
+      toast.error('Informe "Com Frete" ou "Sem Frete" antes de sincronizar.', {
+        duration: 8000,
+      })
       return
     }
-
     try {
       setIsApproving(true)
       const result = await approveBudgetAndMigrate(budget)
       setApprovalResult(result)
-      if (canAccessFinanceiro) {
-        setShowFinanceModal(true)
-      }
+      if (canApproveQuotes) setShowFinanceModal(true)
       toast.success(
         result.ja_processado
           ? 'Orçamento já estava sincronizado.'
-          : 'Sincronização concluída com sucesso.',
+          : 'Sincronização concluída.',
       )
     } catch (error: any) {
       toast.error('Erro ao sincronizar', { description: error.message })
@@ -240,21 +227,6 @@ export function BudgetTableRow({
   const handleDownloadPdf = async () => {
     try {
       setIsPrinting(true)
-      let logoBase64 = null
-      try {
-        const res = await fetch(logoImg)
-        if (res.ok) {
-          const blob = await res.blob()
-          logoBase64 = await new Promise((resolve) => {
-            const reader = new FileReader()
-            reader.onloadend = () => resolve(reader.result as string)
-            reader.readAsDataURL(blob)
-          })
-        }
-      } catch (e) {
-        console.warn('Não foi possível carregar a logo', e)
-      }
-
       const { data: sessionData } = await supabase.auth.getSession()
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-report`,
@@ -267,22 +239,11 @@ export function BudgetTableRow({
           body: JSON.stringify({
             reportType: 'orcamento',
             format: 'pdf',
-            filters: { id: budgetId, logoBase64 },
+            filters: { id: budgetId },
           }),
         },
       )
-
-      if (!response.ok) {
-        let errorMessage = 'Erro ao gerar o PDF.'
-        try {
-          const errData = await response.json()
-          errorMessage = errData.error || errorMessage
-        } catch {
-          /* ignore */
-        }
-        throw new Error(errorMessage)
-      }
-
+      if (!response.ok) throw new Error('Erro ao gerar o PDF.')
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -292,30 +253,19 @@ export function BudgetTableRow({
       a.click()
       a.remove()
       window.URL.revokeObjectURL(url)
-
       toast.success('Orçamento baixado com sucesso!')
     } catch (error: any) {
-      console.error(error)
       toast.error('Falha ao gerar o PDF', { description: error.message })
     } finally {
       setIsPrinting(false)
     }
   }
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
+  const fmt = (v: number) =>
+    new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
-    }).format(value || 0)
-  }
-
-  const openFinanceRoute = (path: 'boletos' | 'notas-fiscais') => {
-    window.open(
-      'https://retorno-bancario-bradesco-5392a.goskip.app/notas-fiscais',
-      '_blank',
-      'noopener,noreferrer',
-    )
-  }
+    }).format(v || 0)
 
   return (
     <>
@@ -342,23 +292,13 @@ export function BudgetTableRow({
           <div className="flex flex-col gap-1">
             <Badge
               variant="outline"
-              className={
-                normalizedStatus === 'aprovado'
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : normalizedStatus === 'aguardando_aprovacao'
-                    ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                    : normalizedStatus === 'aguardando_cliente'
-                      ? 'bg-blue-50 text-blue-700 border-blue-200'
-                      : 'bg-gray-50'
-              }
+              className={cn(getStatusBadgeClass(status))}
             >
-              {normalizedStatus === 'aguardando_aprovacao'
-                ? 'Aguardando Aprovação'
-                : normalizedStatus === 'aprovado'
-                  ? 'Aprovado'
-                  : normalizedStatus === 'aguardando_cliente'
-                    ? 'Aguardando Cliente'
-                    : status || 'Rascunho'}
+              {getStatusLabel(
+                normalizedStatus === 'aguardando_aprovacao'
+                  ? 'aguardando_aprovacao'
+                  : status,
+              )}
             </Badge>
             {needsFinancialReview && (
               <Badge
@@ -369,140 +309,117 @@ export function BudgetTableRow({
                 Revisão Financeira Pendente
               </Badge>
             )}
+            {status === 'recusado_cliente' && budget.motivo_recusa_cliente && (
+              <span
+                className="text-[10px] text-red-600 truncate max-w-[150px]"
+                title={budget.motivo_recusa_cliente}
+              >
+                {budget.motivo_recusa_cliente}
+              </span>
+            )}
           </div>
         </TableCell>
         <TableCell className="text-right font-bold text-gray-900">
-          {formatCurrency(budget.valor_total)}
+          {fmt(budget.valor_total)}
         </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
-            <Dialog>
-              <DialogTrigger asChild>
+            <FiscalSummaryDialog budget={budget} />
+
+            {(normalizedStatus === 'rascunho' ||
+              normalizedStatus === 'aguardando_cliente') &&
+              canManageClient && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
-                  title="Resumo Fiscal (NF 4740)"
+                  className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                  title="Enviar ao Cliente"
+                  onClick={handleEnviarCliente}
+                  disabled={isSending}
                 >
-                  <FileText className="h-4 w-4" />
+                  {isSending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>
-                    Resumo Fiscal (NF 4740 - Roberta Lucchesi)
-                  </DialogTitle>
-                  <DialogDescription>
-                    Consolidação de dados para emissão de nota fiscal.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">
-                        Valor Bruto dos Itens
-                      </p>
-                      <p className="text-lg font-semibold">
-                        {formatCurrency(subtotalItens)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">
-                        Valor Líquido (com Desconto Global)
-                      </p>
-                      <p className="text-lg font-semibold text-green-600">
-                        {formatCurrency(valorLiquido)}
-                      </p>
-                    </div>
-                  </div>
+              )}
 
-                  <div className="border rounded-md">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-100 text-gray-600 text-left">
-                        <tr>
-                          <th className="p-2 font-medium">Item</th>
-                          <th className="p-2 font-medium">CFOP</th>
-                          <th className="p-2 font-medium text-right">
-                            Subtotal Líquido
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cfopItems.map((ci, idx) => (
-                          <tr key={idx} className="border-t">
-                            <td className="p-2">{ci.nome}</td>
-                            <td className="p-2 font-mono">
-                              <span
-                                className={cn(
-                                  'px-2 py-1 rounded text-xs font-semibold',
-                                  ci.cfop === '5405'
-                                    ? 'bg-orange-100 text-orange-800'
-                                    : 'bg-blue-100 text-blue-800',
-                                )}
-                              >
-                                {ci.cfop}
-                              </span>
-                            </td>
-                            <td className="p-2 text-right">
-                              {formatCurrency(ci.subtotal)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            {normalizedStatus === 'enviado_cliente' && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                  title="Copiar Link de Aprovação"
+                  onClick={handleCopyLink}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+                {canManageClient && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                    title="Aprovar Manualmente"
+                    onClick={handleAprovarManualmente}
+                    disabled={isSending}
+                  >
+                    {isSending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <UserCheck className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+              </>
+            )}
 
-            {normalizedStatus === 'aguardando_cliente' && (
+            {normalizedStatus === 'recusado_cliente' && canManageClient && (
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                title="Enviar para Aprovação do Cliente"
-                onClick={handleClientApprove}
-                disabled={isClientApproving}
+                title="Reenviar ao Cliente"
+                onClick={handleEnviarCliente}
+                disabled={isSending}
               >
-                {isClientApproving ? (
+                {isSending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <UserCheck className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
                 )}
-                <span className="sr-only">Aprovar Cliente</span>
               </Button>
             )}
 
-            {normalizedStatus === 'aguardando_aprovacao' &&
-              canApproveQuotes && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    'h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50',
-                    (hasSpecialItemsWithoutPrice || needsFinancialReview) &&
-                      'text-amber-500 hover:text-amber-600 hover:bg-amber-50',
-                  )}
-                  title={
-                    needsFinancialReview
-                      ? 'Requer Revisão Financeira'
-                      : hasSpecialItemsWithoutPrice
-                        ? 'Atenção: Peças sem preço'
-                        : 'Aprovar'
-                  }
-                  onClick={handleApprove}
-                  disabled={isApproving}
-                >
-                  {isApproving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : hasSpecialItemsWithoutPrice ? (
-                    <AlertTriangle className="h-4 w-4" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4" />
-                  )}
-                  <span className="sr-only">Aprovar</span>
-                </Button>
-              )}
+            {normalizedStatus === 'aprovado_cliente' && canApproveQuotes && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  'h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50',
+                  (hasSpecialItemsWithoutPrice || needsFinancialReview) &&
+                    'text-amber-500 hover:text-amber-600 hover:bg-amber-50',
+                )}
+                title={
+                  needsFinancialReview
+                    ? 'Requer Revisão Financeira'
+                    : hasSpecialItemsWithoutPrice
+                      ? 'Atenção: Peças sem preço'
+                      : 'Aprovar Financeiramente'
+                }
+                onClick={handleApprove}
+                disabled={isApproving}
+              >
+                {isApproving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : hasSpecialItemsWithoutPrice ? (
+                  <AlertTriangle className="h-4 w-4" />
+                ) : (
+                  <CheckCircle className="h-4 w-4" />
+                )}
+              </Button>
+            )}
 
             {normalizedStatus === 'aprovado' && (
               <Button
@@ -523,7 +440,7 @@ export function BudgetTableRow({
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-              title="Baixar PDF do Orçamento"
+              title="Baixar PDF"
               onClick={handleDownloadPdf}
               disabled={isPrinting}
             >
@@ -532,7 +449,6 @@ export function BudgetTableRow({
               ) : (
                 <Printer className="h-4 w-4" />
               )}
-              <span className="sr-only">Download PDF</span>
             </Button>
 
             <Button
@@ -542,7 +458,6 @@ export function BudgetTableRow({
               onClick={() => onEdit(budget)}
             >
               <Edit className="h-4 w-4" />
-              <span className="sr-only">Editar</span>
             </Button>
 
             <AlertDialog>
@@ -553,7 +468,6 @@ export function BudgetTableRow({
                   className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
                 >
                   <Trash2 className="h-4 w-4" />
-                  <span className="sr-only">Excluir</span>
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -578,54 +492,12 @@ export function BudgetTableRow({
           </div>
         </TableCell>
       </TableRow>
-      <Dialog open={showFinanceModal} onOpenChange={setShowFinanceModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Enviar para Administração Bancária</DialogTitle>
-            <DialogDescription>
-              O orçamento foi aprovado com vínculo por orçamento. Abra os
-              boletos pendentes ou a nota fiscal para validação financeira.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-700 space-y-1">
-            <p>
-              <span className="font-medium">Orçamento:</span>{' '}
-              {budget.numero || budget.id.split('-')[0].toUpperCase()}
-            </p>
-            <p>
-              <span className="font-medium">Itens criados:</span>{' '}
-              {approvalResult?.projeto_itens_criados ?? 0}
-            </p>
-            <p>
-              <span className="font-medium">Parcelas:</span>{' '}
-              {approvalResult?.parcelas_criadas ?? 0}
-            </p>
-            <p>
-              <span className="font-medium">Boletos:</span>{' '}
-              {approvalResult?.boletos_criados ?? 0}
-            </p>
-            {approvalResult?.ja_processado && (
-              <p className="text-xs text-blue-700">
-                Este orçamento já estava processado; nada foi duplicado.
-              </p>
-            )}
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => openFinanceRoute('notas-fiscais')}
-            >
-              Abrir Nota Fiscal
-            </Button>
-            <Button type="button" onClick={() => openFinanceRoute('boletos')}>
-              Abrir Boletos
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <FinanceResultModal
+        budget={budget}
+        result={approvalResult}
+        open={showFinanceModal}
+        onOpenChange={setShowFinanceModal}
+      />
     </>
   )
 }

@@ -67,6 +67,12 @@ export interface Budget {
   observacoes: string | null
   valor_total: number
   requer_revisao_financeira: boolean | null
+  enviado_cliente_em: string | null
+  enviado_cliente_por: string | null
+  aprovado_cliente_em: string | null
+  recusado_cliente_em: string | null
+  motivo_recusa_cliente: string | null
+  token_aprovacao_cliente: string | null
   created_at: string
   empresa?: { nome: string }
   cliente?: { nome: string; razao_social?: string | null }
@@ -109,6 +115,8 @@ interface BudgetState {
   approveBudgetAndMigrate: (budget: Budget) => Promise<ApprovalResult>
   financialApprove: (budget: Budget) => Promise<ApprovalResult>
   approveBudgetClient: (budget: Budget) => Promise<any>
+  enviarOrcamentoCliente: (budgetId: string) => Promise<{ token: string }>
+  aprovarManualmenteCliente: (budgetId: string) => Promise<void>
 }
 
 const useBudgetStore = create<BudgetState>((set, get) => ({
@@ -373,6 +381,36 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     await get().fetchBudgets()
 
     return data
+  },
+
+  enviarOrcamentoCliente: async (budgetId) => {
+    const { data, error } = await (supabase as any).rpc(
+      'enviar_orcamento_cliente',
+      { p_orcamento_id: budgetId },
+    )
+
+    if (error) {
+      console.error('Error sending budget to client:', error)
+      throw new Error(error.message || 'Erro ao enviar orçamento ao cliente.')
+    }
+
+    await get().fetchBudgets()
+
+    return data as { token: string }
+  },
+
+  aprovarManualmenteCliente: async (budgetId) => {
+    const { error } = await (supabase as any).rpc(
+      'aprovar_orcamento_cliente_manual',
+      { p_orcamento_id: budgetId },
+    )
+
+    if (error) {
+      console.error('Error in manual client approval:', error)
+      throw new Error(error.message || 'Erro ao aprovar orçamento manualmente.')
+    }
+
+    await get().fetchBudgets()
   },
 }))
 

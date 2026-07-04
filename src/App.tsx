@@ -9,6 +9,7 @@ import SignUp from './pages/SignUp'
 import Budgets from './pages/Budgets'
 import BudgetFormPage from './pages/BudgetFormPage'
 import ApprovalSettings from './pages/ApprovalSettings'
+import ClientApproval from './pages/ClientApproval'
 import { TransactionProvider } from '@/stores/useTransactionStore'
 import { AuthProvider } from '@/hooks/use-auth'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -25,6 +26,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
+            <Route path="/aprovacao" element={<ClientApproval />} />
 
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>

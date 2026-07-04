@@ -17,6 +17,8 @@ import {
 import { Budget } from '@/stores/useBudgetStore'
 import { isValidUUID } from '@/lib/uuid'
 import { validateBudget } from '@/services/budgetApprovalService'
+import { getStatusLabel, getStatusBadgeClass } from '@/lib/budget-status'
+import { cn } from '@/lib/utils'
 
 interface FinancialApprovalRowProps {
   budget: Budget
@@ -43,8 +45,7 @@ export function FinancialApprovalRow({
   let disabledReason = ''
   if (!canApproveQuotes)
     disabledReason = 'Você não tem permissão para aprovar orçamentos.'
-  else if (!isValidUUID(budget.id))
-    disabledReason = 'ID do orçamento inválido (não é um UUID válido).'
+  else if (!isValidUUID(budget.id)) disabledReason = 'ID do orçamento inválido.'
   else if (!validation.ready) disabledReason = validation.issues.join('; ')
 
   return (
@@ -69,15 +70,15 @@ export function FinancialApprovalRow({
       <TableCell>
         <Badge
           variant="outline"
-          className={
+          className={cn(
             budget.requer_revisao_financeira
               ? 'bg-orange-50 text-orange-700 border-orange-200'
-              : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-          }
+              : getStatusBadgeClass(budget.status),
+          )}
         >
           {budget.requer_revisao_financeira
             ? 'Revisão Pendente'
-            : 'Aguardando Aprovação'}
+            : getStatusLabel(budget.status)}
         </Badge>
       </TableCell>
       <TableCell>

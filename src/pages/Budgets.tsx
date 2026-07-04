@@ -20,13 +20,14 @@ import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
 
 const STATUS_OPTIONS = [
-  'Todos',
-  'Aguardando Cliente',
-  'Aguardando Aprovação',
-  'Rascunho',
-  'Aprovado',
-  'Recusado',
-  'Expirado',
+  { label: 'Todos', value: 'all' },
+  { label: 'Rascunho', value: 'rascunho' },
+  { label: 'Enviado ao Cliente', value: 'enviado_cliente' },
+  { label: 'Aprovado pelo Cliente', value: 'aprovado_cliente' },
+  { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
+  { label: 'Aprovado', value: 'aprovado' },
+  { label: 'Recusado', value: 'recusado' },
+  { label: 'Expirado', value: 'expirado' },
 ]
 
 export default function Budgets() {
@@ -107,12 +108,9 @@ export default function Budgets() {
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                {STATUS_OPTIONS.map((status) => (
-                  <SelectItem
-                    key={status}
-                    value={status === 'Todos' ? 'all' : status}
-                  >
-                    {status}
+                {STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
                   </SelectItem>
                 ))}
               </SelectContent>
