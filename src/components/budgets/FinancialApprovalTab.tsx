@@ -30,9 +30,7 @@ export function FinancialApprovalTab() {
   const pendingBudgets = useMemo(
     () =>
       budgets.filter(
-        (b: Budget) =>
-          b.requer_revisao_financeira === true ||
-          normalizeStatus(b.status) === 'aguardando_aprovacao',
+        (b: Budget) => normalizeStatus(b.status) === 'aguardando_aprovacao',
       ),
     [budgets],
   )

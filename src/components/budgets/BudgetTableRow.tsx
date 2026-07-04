@@ -23,6 +23,7 @@ import {
   FileText,
   RefreshCw,
   AlertTriangle,
+  UserCheck,
 } from 'lucide-react'
 import {
   Dialog,
@@ -53,16 +54,21 @@ export function BudgetTableRow({
   budget,
   onEdit,
 }: BudgetTableRowProps) {
-  const { deleteBudget, approveBudgetAndMigrate } = useBudgetStore()
-  const { canApproveQuotes } = useAuth()
+  const { deleteBudget, approveBudgetAndMigrate, approveBudgetClient } =
+    useBudgetStore()
+  const { canApproveQuotes, role } = useAuth()
   const [isApproving, setIsApproving] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
   const [showFinanceModal, setShowFinanceModal] = useState(false)
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
     null,
   )
+  const [isClientApproving, setIsClientApproving] = useState(false)
 
   const normalizedStatus = normalizeStatus(status)
+
+  const canApproveClient =
+    role !== null && ['admin', 'gerente', 'operador'].includes(role)
 
   const hasSpecialItemsWithoutPrice = budget.itens?.some(
     (i) => Number(i.preco_unitario) === 0,
@@ -100,6 +106,30 @@ export function BudgetTableRow({
     budget.prazo_pagamento_dias.length === 0
 
   const hasNoFreteEstruturado = !budget.frete_tipo
+
+  const handleClientApprove = async () => {
+    if (!canApproveClient) {
+      toast.error('Permissão negada', {
+        description:
+          'Apenas admin, gerente ou operador podem aprovar orçamentos do cliente.',
+        duration: 6000,
+      })
+      return
+    }
+    try {
+      setIsClientApproving(true)
+      await approveBudgetClient(budget)
+      toast.success(
+        'Orçamento aprovado pelo cliente! Enviado para aprovação financeira.',
+      )
+    } catch (error: any) {
+      toast.error('Falha ao aprovar orçamento do cliente', {
+        description: error?.message || 'Erro desconhecido.',
+      })
+    } finally {
+      setIsClientApproving(false)
+    }
+  }
 
   const handleApprove = async () => {
     if (needsFinancialReview && !canAccessFinanceiro) {
@@ -424,6 +454,24 @@ export function BudgetTableRow({
                 </div>
               </DialogContent>
             </Dialog>
+
+            {normalizedStatus === 'aguardando_cliente' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                title="Enviar para Aprovação do Cliente"
+                onClick={handleClientApprove}
+                disabled={isClientApproving}
+              >
+                {isClientApproving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <UserCheck className="h-4 w-4" />
+                )}
+                <span className="sr-only">Aprovar Cliente</span>
+              </Button>
+            )}
 
             {normalizedStatus === 'aguardando_aprovacao' &&
               canApproveQuotes && (
