@@ -27,11 +27,13 @@ export function FinancialApprovalDialog({
 }: FinancialApprovalDialogProps) {
   const [verifyText, setVerifyText] = useState('')
   const [isApproving, setIsApproving] = useState(false)
+  const [itemsReviewed, setItemsReviewed] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setVerifyText('')
       setIsApproving(false)
+      setItemsReviewed(false)
     }
   }, [open])
 
@@ -44,7 +46,8 @@ export function FinancialApprovalDialog({
     }).format(value || 0)
 
   const itemCount = budget.itens?.length || 0
-  const canConfirm = verifyText.trim().toUpperCase() === 'APROVAR'
+  const canConfirm =
+    verifyText.trim().toUpperCase() === 'APROVAR' && itemsReviewed
 
   const handleConfirm = async () => {
     if (!canConfirm) return
@@ -111,6 +114,16 @@ export function FinancialApprovalDialog({
           </div>
 
           <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={itemsReviewed}
+                onChange={(e) => setItemsReviewed(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Confirmo que revisei todos os itens e dados financeiros do
+              orçamento.
+            </label>
             <label className="text-sm font-medium text-gray-700">
               Para confirmar, digite{' '}
               <span className="font-bold text-red-600">APROVAR</span> no campo

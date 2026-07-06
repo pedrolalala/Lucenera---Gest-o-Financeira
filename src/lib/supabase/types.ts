@@ -7369,6 +7369,10 @@ export type Database = {
         Args: { p_orcamento_id: string }
         Returns: Json
       }
+      aprovar_projeto_financeiro: {
+        Args: { p_project_id: string }
+        Returns: Json
+      }
       can_user_approve_quotes: { Args: never; Returns: boolean }
       cancelar_orcamento: {
         Args: { p_motivo?: string; p_orcamento_id: string }
@@ -7526,6 +7530,8 @@ export type Database = {
         | 'Contrato de Projeto'
         | 'Ajustes Finais'
         | 'Emissão Projeto Executivo'
+        | 'Aprovação Financeira'
+        | 'Orçamento Aprovado'
       separacao_status:
         | 'Rascunho'
         | 'Pendente'
@@ -7743,6 +7749,8 @@ export const Constants = {
         'Contrato de Projeto',
         'Ajustes Finais',
         'Emissão Projeto Executivo',
+        'Aprovação Financeira',
+        'Orçamento Aprovado',
       ],
       separacao_status: [
         'Rascunho',

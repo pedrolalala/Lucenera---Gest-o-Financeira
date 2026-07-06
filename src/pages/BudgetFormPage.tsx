@@ -14,6 +14,7 @@ import {
   Save,
   Upload,
   PackageSearch,
+  ShieldAlert,
 } from 'lucide-react'
 
 import {
@@ -61,6 +62,14 @@ import {
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useOptions } from '@/hooks/use-options'
+import { useAuth } from '@/hooks/use-auth'
+import {
+  approveBudgetFinancial,
+  type ApprovalResult,
+} from '@/services/budgetApprovalService'
+import { approveProjectFinancial } from '@/services/projectFinancialApprovalService'
+import { FinancialApprovalDialog } from '@/components/budgets/FinancialApprovalDialog'
+import { FinanceResultModal } from '@/components/budgets/FinanceResultModal'
 import { supabase } from '@/lib/supabase/client'
 import {
   ProductSearchModal,
@@ -203,6 +212,12 @@ export default function BudgetFormPage() {
     empresa_nome?: string
     isLoading?: boolean
   } | null>(null)
+  const [projectStatus, setProjectStatus] = useState<string | null>(null)
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false)
+  const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
+    null,
+  )
+  const { role } = useAuth()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -294,10 +309,13 @@ export default function BudgetFormPage() {
           if (budget.projeto_id) {
             const { data: pData } = await supabase
               .from('projetos')
-              .select('codigo')
+              .select('codigo, status')
               .eq('id', budget.projeto_id)
               .single()
-            if (pData) projetoCodigo = pData.codigo
+            if (pData) {
+              projetoCodigo = pData.codigo
+              setProjectStatus(pData.status)
+            }
           }
 
           const parsedParcelas = Array.isArray(budget.prazo_pagamento_dias)
@@ -831,6 +849,34 @@ export default function BudgetFormPage() {
     )
   }
 
+  const handleFinancialApproval = async () => {
+    if (!budgetToEdit) return
+    try {
+      const result = await approveBudgetFinancial(budgetToEdit.id)
+      if (budgetToEdit.projeto_id) {
+        try {
+          await approveProjectFinancial(budgetToEdit.projeto_id)
+          setProjectStatus('Orçamento Aprovado')
+        } catch (projErr: any) {
+          console.warn('Project status update failed:', projErr?.message)
+          toast.info('Status do projeto não foi atualizado automaticamente', {
+            description: projErr?.message,
+          })
+        }
+      }
+      setApprovalResult(result)
+      form.setValue('status', 'aprovado', { shouldDirty: false })
+      toast.success('Orçamento aprovado financeiramente!', {
+        description: `Itens: ${result.projeto_itens_criados}, Parcelas: ${result.parcelas_criadas}, Boletos: ${result.boletos_criados}`,
+      })
+    } catch (error: any) {
+      toast.error('Falha na aprovação financeira', {
+        description: error?.message,
+      })
+      throw error
+    }
+  }
+
   if (isLoadingBudget || optionsLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-64">
@@ -861,6 +907,18 @@ export default function BudgetFormPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {isEditing &&
+            projectStatus === 'Aprovação Financeira' &&
+            (role === 'admin' || role === 'gerente') && (
+              <Button
+                variant="default"
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={() => setShowApprovalDialog(true)}
+              >
+                <ShieldAlert className="w-4 h-4 mr-2" />
+                Aprovar Financeiro
+              </Button>
+            )}
           <Button variant="outline" asChild>
             <Link to="/budgets">Cancelar</Link>
           </Button>
@@ -1938,6 +1996,26 @@ export default function BudgetFormPage() {
           </div>
         </form>
       </Form>
+
+      {budgetToEdit && (
+        <FinancialApprovalDialog
+          budget={budgetToEdit}
+          open={showApprovalDialog}
+          onOpenChange={setShowApprovalDialog}
+          onConfirm={handleFinancialApproval}
+        />
+      )}
+
+      {budgetToEdit && (
+        <FinanceResultModal
+          budget={budgetToEdit}
+          result={approvalResult}
+          open={!!approvalResult}
+          onOpenChange={(open) => {
+            if (!open) setApprovalResult(null)
+          }}
+        />
+      )}
     </div>
   )
 }
