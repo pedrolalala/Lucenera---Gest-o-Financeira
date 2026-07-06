@@ -169,8 +169,11 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       filtered = filtered.filter(
         (b) =>
           b.cliente?.nome?.toLowerCase().includes(s) ||
+          b.cliente?.razao_social?.toLowerCase().includes(s) ||
           b.empresa?.nome?.toLowerCase().includes(s) ||
-          b.numero?.toLowerCase().includes(s),
+          b.numero?.toLowerCase().includes(s) ||
+          b.projeto?.codigo?.toLowerCase().includes(s) ||
+          b.projeto?.nome?.toLowerCase().includes(s),
       )
     }
 

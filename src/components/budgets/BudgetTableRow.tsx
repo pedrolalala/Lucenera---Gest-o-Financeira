@@ -279,7 +279,7 @@ export function BudgetTableRow({
           {budget.empresa?.nome || '-'}
         </TableCell>
         <TableCell className="font-mono text-sm text-gray-600">
-          {budget.numero || budget.projeto?.codigo || '-'}
+          {budget.projeto?.codigo || budget.numero || '-'}
         </TableCell>
         <TableCell className="text-gray-700">
           {budget.cliente?.razao_social || budget.cliente?.nome || '-'}
