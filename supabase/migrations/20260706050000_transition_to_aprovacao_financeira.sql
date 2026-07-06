@@ -74,7 +74,7 @@ BEGIN
     'sucesso', true
   );
 END;
-$;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.aprovar_orcamento_cliente(uuid) TO authenticated;
 
@@ -132,7 +132,7 @@ BEGIN
     'sucesso', true
   );
 END;
-$;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.aprovar_orcamento_cliente_publico(uuid, text) TO anon, authenticated;
 
@@ -195,7 +195,7 @@ BEGIN
     'sucesso', true
   );
 END;
-$;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.aprovar_orcamento_cliente_manual(uuid) TO authenticated;
 
@@ -256,7 +256,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS trg_orcamento_workflow ON public.orcamentos;
 CREATE TRIGGER trg_orcamento_workflow
@@ -423,6 +423,6 @@ BEGIN
     'sucesso', true
   );
 END;
-$;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.aprovar_orcamento_financeiro(uuid) TO authenticated;
