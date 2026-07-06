@@ -175,6 +175,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         (b) =>
           b.cliente?.nome?.toLowerCase().includes(s) ||
           b.cliente?.razao_social?.toLowerCase().includes(s) ||
+          b.cliente?.email?.toLowerCase().includes(s) ||
+          b.cliente?.nome_empresa?.toLowerCase().includes(s) ||
           b.empresa?.nome?.toLowerCase().includes(s) ||
           b.numero?.toLowerCase().includes(s) ||
           b.projeto?.codigo?.toLowerCase().includes(s) ||

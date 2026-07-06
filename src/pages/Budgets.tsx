@@ -24,7 +24,11 @@ const STATUS_OPTIONS = [
   { label: 'Rascunho', value: 'rascunho' },
   { label: 'Enviado ao Cliente', value: 'enviado_cliente' },
   { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
-  { label: 'Aprovado', value: 'aprovado' },
+  { label: 'Aprovado pelo Cliente', value: 'aprovado' },
+  { label: 'Aprovação Financeira', value: 'Aprovação Financeira' },
+  { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
+  { label: 'Finalizado', value: 'Finalizado' },
+  { label: 'Obra Finalizada', value: 'Obra Finalizada' },
   { label: 'Recusado', value: 'recusado' },
   { label: 'Expirado', value: 'expirado' },
 ]

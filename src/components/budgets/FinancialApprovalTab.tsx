@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useAuth } from '@/hooks/use-auth'
+import useBudgetStore from '@/stores/useBudgetStore'
 import {
   fetchProjectsForFinancialApproval,
   searchProjects,
@@ -27,6 +28,7 @@ import { ProjectFinancialReviewDialog } from '@/components/budgets/ProjectFinanc
 
 export function FinancialApprovalTab() {
   const { role } = useAuth()
+  const { fetchBudgets } = useBudgetStore()
   const [projects, setProjects] = useState<ProjectForApproval[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -66,6 +68,7 @@ export function FinancialApprovalTab() {
     setDialogOpen(false)
     setSelectedProject(null)
     loadProjects()
+    fetchBudgets()
   }
 
   if (loading) {

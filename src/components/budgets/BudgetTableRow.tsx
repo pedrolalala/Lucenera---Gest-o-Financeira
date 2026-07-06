@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { normalizeStatus, cn } from '@/lib/utils'
+import { isApprovedStatus } from '@/lib/budget-status'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
 import { FiscalSummaryDialog } from './FiscalSummaryDialog'
@@ -384,36 +385,38 @@ export function BudgetTableRow({
               </Button>
             )}
 
-            {normalizedStatus === 'aprovado' && canApproveQuotes && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  'h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50',
-                  (hasSpecialItemsWithoutPrice || needsFinancialReview) &&
-                    'text-amber-500 hover:text-amber-600 hover:bg-amber-50',
-                )}
-                title={
-                  needsFinancialReview
-                    ? 'Requer Revisão Financeira'
-                    : hasSpecialItemsWithoutPrice
-                      ? 'Atenção: Peças sem preço'
-                      : 'Aprovar Financeiramente'
-                }
-                onClick={handleApprove}
-                disabled={isApproving}
-              >
-                {isApproving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : hasSpecialItemsWithoutPrice ? (
-                  <AlertTriangle className="h-4 w-4" />
-                ) : (
-                  <CheckCircle className="h-4 w-4" />
-                )}
-              </Button>
-            )}
+            {normalizedStatus === 'aprovado' &&
+              !isApprovedStatus(status) &&
+              canApproveQuotes && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    'h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50',
+                    (hasSpecialItemsWithoutPrice || needsFinancialReview) &&
+                      'text-amber-500 hover:text-amber-600 hover:bg-amber-50',
+                  )}
+                  title={
+                    needsFinancialReview
+                      ? 'Requer Revisão Financeira'
+                      : hasSpecialItemsWithoutPrice
+                        ? 'Atenção: Peças sem preço'
+                        : 'Aprovar Financeiramente'
+                  }
+                  onClick={handleApprove}
+                  disabled={isApproving}
+                >
+                  {isApproving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : hasSpecialItemsWithoutPrice ? (
+                    <AlertTriangle className="h-4 w-4" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
 
-            {normalizedStatus === 'aprovado' && (
+            {normalizedStatus === 'aprovado' && !isApprovedStatus(status) && (
               <Button
                 variant="ghost"
                 size="icon"
