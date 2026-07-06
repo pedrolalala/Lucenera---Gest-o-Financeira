@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -23,7 +23,6 @@ const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
   { label: 'Rascunho', value: 'rascunho' },
   { label: 'Enviado ao Cliente', value: 'enviado_cliente' },
-  { label: 'Aprovado pelo Cliente', value: 'aprovado_cliente' },
   { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
   { label: 'Aprovado', value: 'aprovado' },
   { label: 'Recusado', value: 'recusado' },
@@ -40,10 +39,15 @@ export default function Budgets() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchBudgets({ search: searchTerm, status: statusFilter })
+      fetchBudgets({ search: searchTerm })
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchTerm, statusFilter, fetchBudgets])
+  }, [searchTerm, fetchBudgets])
+
+  const filteredBudgets = useMemo(() => {
+    if (statusFilter === 'all') return budgets
+    return budgets.filter((b) => b.status === statusFilter)
+  }, [budgets, statusFilter])
 
   const handleCreate = () => {
     navigate('/budgets/new')
@@ -88,7 +92,7 @@ export default function Budgets() {
               Aprovação Financeira
             </TabsTrigger>
           )}
-          <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>
+          <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
         </TabsList>
 
         <TabsContent value="todos" className="flex flex-col gap-4 mt-0">
@@ -96,7 +100,7 @@ export default function Budgets() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="Buscar por cliente ou empresa..."
+                placeholder="Pesquisar por projeto, código ou cliente..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9"
@@ -122,7 +126,7 @@ export default function Budgets() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : (
-            <BudgetsTable data={budgets} onEdit={handleEdit} />
+            <BudgetsTable data={filteredBudgets} onEdit={handleEdit} />
           )}
         </TabsContent>
 
@@ -135,7 +139,7 @@ export default function Budgets() {
             <FinancialApprovalTab />
           </TabsContent>
         )}
-        <TabsContent value="aprovacoes" className="mt-0">
+        <TabsContent value="aprovados" className="mt-0">
           <ApprovalsTab />
         </TabsContent>
       </Tabs>

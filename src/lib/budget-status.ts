@@ -11,10 +11,7 @@ export function buildClientApprovalLink(
 export function getStatusLabel(status: string | null | undefined): string {
   const labels: Record<string, string> = {
     enviado_cliente: 'Enviado ao Cliente',
-    aprovado_cliente: 'Aprovado pelo Cliente',
     recusado_cliente: 'Recusado pelo Cliente',
-    aguardando_aprovacao: 'Aguardando Aprovação',
-    aguardando_cliente: 'Aguardando Cliente',
     aprovado: 'Aprovado',
     rascunho: 'Rascunho',
     recusado: 'Recusado',
@@ -26,10 +23,7 @@ export function getStatusLabel(status: string | null | undefined): string {
 export function getStatusBadgeClass(status: string | null | undefined): string {
   const classes: Record<string, string> = {
     aprovado: 'bg-green-50 text-green-700 border-green-200',
-    aprovado_cliente: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     enviado_cliente: 'bg-blue-50 text-blue-700 border-blue-200',
-    aguardando_aprovacao: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-    aguardando_cliente: 'bg-blue-50 text-blue-700 border-blue-200',
     recusado_cliente: 'bg-red-50 text-red-700 border-red-200',
     recusado: 'bg-red-50 text-red-700 border-red-200',
     rascunho: 'bg-gray-50 text-gray-700 border-gray-200',

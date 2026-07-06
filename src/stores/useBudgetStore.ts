@@ -75,7 +75,12 @@ export interface Budget {
   token_aprovacao_cliente: string | null
   created_at: string
   empresa?: { nome: string }
-  cliente?: { nome: string; razao_social?: string | null }
+  cliente?: {
+    nome: string
+    razao_social?: string | null
+    email?: string | null
+    nome_empresa?: string | null
+  }
   arquiteto?: { nome: string }
   vendedor?: { nome: string }
   projeto?: { nome: string; codigo: string }
@@ -104,7 +109,7 @@ interface BudgetState {
       'id' | 'created_at' | 'empresa' | 'cliente' | 'arquiteto' | 'itens'
     >,
     items: BudgetItem[],
-  ) => Promise<void>
+  ) => Promise<string>
   updateBudget: (
     id: string,
     budget: Partial<Budget>,
@@ -130,7 +135,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     let query = supabase.from('orcamentos').select(`
       *,
       empresa:empresas(nome),
-      cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social),
+      cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social, email, nome_empresa),
       arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
       projeto:projetos(nome, codigo),
       itens:orcamento_itens(
@@ -169,8 +174,11 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       filtered = filtered.filter(
         (b) =>
           b.cliente?.nome?.toLowerCase().includes(s) ||
+          b.cliente?.razao_social?.toLowerCase().includes(s) ||
           b.empresa?.nome?.toLowerCase().includes(s) ||
-          b.numero?.toLowerCase().includes(s),
+          b.numero?.toLowerCase().includes(s) ||
+          b.projeto?.codigo?.toLowerCase().includes(s) ||
+          b.projeto?.nome?.toLowerCase().includes(s),
       )
     }
 
@@ -188,6 +196,12 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     const finalBudget = { ...budget }
     if (!finalBudget.numero) {
       delete (finalBudget as any).numero
+    }
+
+    if (finalBudget.status === 'enviado_cliente') {
+      const { data: userData } = await supabase.auth.getUser()
+      finalBudget.enviado_cliente_em = new Date().toISOString()
+      finalBudget.enviado_cliente_por = userData?.user?.id || null
     }
 
     const { data, error } = await supabase
@@ -229,6 +243,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     }
 
     await get().fetchBudgets()
+
+    return data.id
   },
 
   updateBudget: async (id, budget, items) => {

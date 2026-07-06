@@ -22,7 +22,6 @@ import {
   CheckCircle,
   RefreshCw,
   AlertTriangle,
-  Send,
   Copy,
   UserCheck,
 } from 'lucide-react'
@@ -180,7 +179,7 @@ export function BudgetTableRow({
         isP0003 ? 'Aprovação bloqueada' : 'Erro ao aprovar orçamento',
         {
           description: isP0003
-            ? 'O orçamento deve estar aprovado pelo cliente antes da aprovação financeira.'
+            ? 'O orçamento deve estar aprovado pelo cliente antes do processamento financeiro.'
             : error.message,
           duration: 8000,
         },
@@ -280,7 +279,7 @@ export function BudgetTableRow({
           {budget.empresa?.nome || '-'}
         </TableCell>
         <TableCell className="font-mono text-sm text-gray-600">
-          {budget.numero || budget.projeto?.codigo || '-'}
+          {budget.projeto?.codigo || budget.numero || '-'}
         </TableCell>
         <TableCell className="text-gray-700">
           {budget.cliente?.razao_social || budget.cliente?.nome || '-'}
@@ -294,11 +293,7 @@ export function BudgetTableRow({
               variant="outline"
               className={cn(getStatusBadgeClass(status))}
             >
-              {getStatusLabel(
-                normalizedStatus === 'aguardando_aprovacao'
-                  ? 'aguardando_aprovacao'
-                  : status,
-              )}
+              {getStatusLabel(status)}
             </Badge>
             {needsFinancialReview && (
               <Badge
@@ -326,25 +321,6 @@ export function BudgetTableRow({
           <div className="flex items-center justify-end gap-1">
             <FiscalSummaryDialog budget={budget} />
 
-            {(normalizedStatus === 'rascunho' ||
-              normalizedStatus === 'aguardando_cliente') &&
-              canManageClient && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                  title="Enviar ao Cliente"
-                  onClick={handleEnviarCliente}
-                  disabled={isSending}
-                >
-                  {isSending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
-
             {normalizedStatus === 'enviado_cliente' && (
               <>
                 <Button
@@ -356,6 +332,22 @@ export function BudgetTableRow({
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
+                {canManageClient && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                    title="Reenviar ao Cliente (regenerar token)"
+                    onClick={handleEnviarCliente}
+                    disabled={isSending}
+                  >
+                    {isSending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
                 {canManageClient && (
                   <Button
                     variant="ghost"
@@ -392,7 +384,7 @@ export function BudgetTableRow({
               </Button>
             )}
 
-            {normalizedStatus === 'aprovado_cliente' && canApproveQuotes && (
+            {normalizedStatus === 'aprovado' && canApproveQuotes && (
               <Button
                 variant="ghost"
                 size="icon"

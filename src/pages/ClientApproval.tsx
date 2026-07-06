@@ -49,7 +49,7 @@ export default function ClientApproval() {
       .then((data) => {
         if (!mounted) return
         setBudget(data)
-        if (data.status === 'aprovado_cliente') {
+        if (data.status === 'aprovado') {
           setViewState('approved')
         } else if (data.status === 'recusado_cliente') {
           setViewState('rejected')

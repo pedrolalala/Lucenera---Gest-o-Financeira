@@ -2538,6 +2538,7 @@ export type Database = {
       }
       orcamentos: {
         Row: {
+          aprovado_cliente_em: string | null
           arquiteto_id: string | null
           cliente_id: string | null
           condicoes_pagamento: string | null
@@ -2546,23 +2547,29 @@ export type Database = {
           data_emissao: string | null
           desconto_global: number | null
           empresa_id: string
+          enviado_cliente_em: string | null
+          enviado_cliente_por: string | null
           forma_pagamento: Database['public']['Enums']['pagamento_forma'] | null
           frete_tipo: string | null
           frete_valor: number | null
           id: string
           informacoes_cliente_id: string | null
+          motivo_recusa_cliente: string | null
           numero: string | null
           observacoes: string | null
           prazo_inicio_cobranca_dias: number | null
           prazo_pagamento_dias: number[] | null
           projeto_id: string | null
+          recusado_cliente_em: string | null
           requer_revisao_financeira: boolean | null
           status: string | null
+          token_aprovacao_cliente: string | null
           validade: string | null
           valor_total: number | null
           vendedor_id: string | null
         }
         Insert: {
+          aprovado_cliente_em?: string | null
           arquiteto_id?: string | null
           cliente_id?: string | null
           condicoes_pagamento?: string | null
@@ -2571,6 +2578,8 @@ export type Database = {
           data_emissao?: string | null
           desconto_global?: number | null
           empresa_id: string
+          enviado_cliente_em?: string | null
+          enviado_cliente_por?: string | null
           forma_pagamento?:
             | Database['public']['Enums']['pagamento_forma']
             | null
@@ -2578,18 +2587,22 @@ export type Database = {
           frete_valor?: number | null
           id?: string
           informacoes_cliente_id?: string | null
+          motivo_recusa_cliente?: string | null
           numero?: string | null
           observacoes?: string | null
           prazo_inicio_cobranca_dias?: number | null
           prazo_pagamento_dias?: number[] | null
           projeto_id?: string | null
+          recusado_cliente_em?: string | null
           requer_revisao_financeira?: boolean | null
           status?: string | null
+          token_aprovacao_cliente?: string | null
           validade?: string | null
           valor_total?: number | null
           vendedor_id?: string | null
         }
         Update: {
+          aprovado_cliente_em?: string | null
           arquiteto_id?: string | null
           cliente_id?: string | null
           condicoes_pagamento?: string | null
@@ -2598,6 +2611,8 @@ export type Database = {
           data_emissao?: string | null
           desconto_global?: number | null
           empresa_id?: string
+          enviado_cliente_em?: string | null
+          enviado_cliente_por?: string | null
           forma_pagamento?:
             | Database['public']['Enums']['pagamento_forma']
             | null
@@ -2605,13 +2620,16 @@ export type Database = {
           frete_valor?: number | null
           id?: string
           informacoes_cliente_id?: string | null
+          motivo_recusa_cliente?: string | null
           numero?: string | null
           observacoes?: string | null
           prazo_inicio_cobranca_dias?: number | null
           prazo_pagamento_dias?: number[] | null
           projeto_id?: string | null
+          recusado_cliente_em?: string | null
           requer_revisao_financeira?: boolean | null
           status?: string | null
+          token_aprovacao_cliente?: string | null
           validade?: string | null
           valor_total?: number | null
           vendedor_id?: string | null
@@ -7315,6 +7333,10 @@ export type Database = {
         }
         Returns: number[]
       }
+      adm_aprovar_pelo_cliente: {
+        Args: { p_observacao?: string; p_orcamento_id: string }
+        Returns: Json
+      }
       admin_update_user_password: {
         Args: { p_new_password: string; p_user_id: string }
         Returns: undefined
@@ -7331,6 +7353,14 @@ export type Database = {
         Args: { p_orcamento_id: string }
         Returns: Json
       }
+      aprovar_orcamento_cliente_manual: {
+        Args: { p_orcamento_id: string }
+        Returns: Json
+      }
+      aprovar_orcamento_cliente_publico: {
+        Args: { p_orcamento_id: string; p_token: string }
+        Returns: Json
+      }
       aprovar_orcamento_financeiro: {
         Args: { p_orcamento_id: string }
         Returns: Json
@@ -7344,6 +7374,14 @@ export type Database = {
         Args: { p_motivo?: string; p_orcamento_id: string }
         Returns: Json
       }
+      cliente_aprovar_orcamento: {
+        Args: { p_orcamento_id: string; p_token: string }
+        Returns: Json
+      }
+      cliente_recusar_orcamento: {
+        Args: { p_motivo?: string; p_orcamento_id: string; p_token: string }
+        Returns: Json
+      }
       criar_usuario: {
         Args: {
           p_email: string
@@ -7353,7 +7391,12 @@ export type Database = {
         }
         Returns: string
       }
+      enviar_orcamento_para_cliente: {
+        Args: { p_orcamento_id: string }
+        Returns: Json
+      }
       fn_gerar_numero_orcamento: { Args: never; Returns: string }
+      gen_token_hex: { Args: never; Returns: string }
       generate_product_slug: {
         Args: { nome: string; preco: number }
         Returns: string

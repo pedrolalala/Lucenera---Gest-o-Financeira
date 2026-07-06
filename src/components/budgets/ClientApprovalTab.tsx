@@ -10,10 +10,14 @@ import {
   UserCheck,
   RefreshCw,
   AlertTriangle,
+  Search,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { searchBudgetsByContactsAndProjects } from '@/lib/budget-search'
 import {
   Table,
   TableHeader,
@@ -49,6 +53,7 @@ export function ClientApprovalTab() {
   const { role } = useAuth()
   const navigate = useNavigate()
   const [actionId, setActionId] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const canManage = role !== null && APPROVAL_ROLES.includes(role)
 
@@ -59,6 +64,11 @@ export function ClientApprovalTab() {
           b.status === 'enviado_cliente' || b.status === 'recusado_cliente',
       ),
     [budgets],
+  )
+
+  const filteredBudgets = useMemo(
+    () => searchBudgetsByContactsAndProjects(clientBudgets, searchTerm),
+    [clientBudgets, searchTerm],
   )
 
   const handleEdit = (budget: Budget) => navigate(`/budgets/${budget.id}`)
@@ -144,14 +154,44 @@ export function ClientApprovalTab() {
         </div>
       </div>
 
-      {clientBudgets.length === 0 ? (
+      <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder="Pesquisar por cliente, email, empresa, projeto ou código..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {filteredBudgets.length > 0 && (
+          <span className="text-sm text-gray-500 self-center whitespace-nowrap">
+            {filteredBudgets.length}{' '}
+            {filteredBudgets.length === 1 ? 'orçamento' : 'orçamentos'}
+          </span>
+        )}
+      </div>
+
+      {filteredBudgets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Send className="h-12 w-12 text-gray-300 mb-3" />
           <p className="text-lg font-semibold text-gray-700">
-            Nenhum orçamento pendente de aprovação do cliente
+            {searchTerm
+              ? 'Nenhum orçamento encontrado para a busca.'
+              : 'Nenhum orçamento pendente de aprovação do cliente'}
           </p>
           <p className="text-sm text-gray-500">
-            Envie orçamentos ao cliente a partir da aba "Todos".
+            {searchTerm
+              ? 'Tente buscar com outros termos.'
+              : 'Orçamentos completos aparecerão aqui automaticamente.'}
           </p>
         </div>
       ) : (
@@ -162,7 +202,9 @@ export function ClientApprovalTab() {
                 <TableRow className="bg-gray-50">
                   <TableHead className="font-semibold">Emissão</TableHead>
                   <TableHead className="font-semibold">Empresa</TableHead>
-                  <TableHead className="font-semibold">Código</TableHead>
+                  <TableHead className="font-semibold">
+                    Código do Projeto
+                  </TableHead>
                   <TableHead className="font-semibold">Cliente</TableHead>
                   <TableHead className="font-semibold">Arquiteto</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
@@ -175,7 +217,7 @@ export function ClientApprovalTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clientBudgets.map((budget) => (
+                {filteredBudgets.map((budget) => (
                   <TableRow key={budget.id}>
                     <TableCell className="text-sm text-gray-600">
                       {budget.data_emissao &&
@@ -187,7 +229,7 @@ export function ClientApprovalTab() {
                       {budget.empresa?.nome || '-'}
                     </TableCell>
                     <TableCell className="font-mono text-sm text-gray-600">
-                      {budget.numero || budget.projeto?.codigo || '-'}
+                      {budget.projeto?.codigo || budget.numero || '-'}
                     </TableCell>
                     <TableCell className="font-medium text-gray-900">
                       {budget.cliente?.razao_social ||

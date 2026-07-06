@@ -23,6 +23,7 @@ import {
   sortItemsByCircuitId,
 } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
+import { buildClientApprovalLink } from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
@@ -82,7 +83,7 @@ const formSchema = z
       .min(1, 'Selecione um cliente'),
     arquiteto_id: z.string().optional().nullable(),
     vendedor_id: z.string().optional().nullable(),
-    status: z.string().default('Aguardando Aprovação'),
+    status: z.string().default('rascunho'),
     data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
     desconto_global: z.coerce
       .number()
@@ -155,11 +156,12 @@ const formSchema = z
   })
 
 const STATUS_OPTIONS = [
-  'Aguardando Aprovação',
-  'Rascunho',
-  'Aprovado',
-  'Recusado',
-  'Expirado',
+  { value: 'rascunho', label: 'Rascunho' },
+  { value: 'enviado_cliente', label: 'Enviado ao Cliente' },
+  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'recusado_cliente', label: 'Recusado pelo Cliente' },
+  { value: 'recusado', label: 'Recusado' },
+  { value: 'expirado', label: 'Expirado' },
 ]
 
 export default function BudgetFormPage() {
@@ -210,7 +212,7 @@ export default function BudgetFormPage() {
       cliente_id: '',
       arquiteto_id: 'none',
       vendedor_id: 'none',
-      status: 'Aguardando Aprovação',
+      status: 'rascunho',
       data_emissao: new Date(),
       desconto_global: 0,
       forma_pagamento: '',
@@ -309,7 +311,7 @@ export default function BudgetFormPage() {
             cliente_id: budget.cliente_id || '',
             arquiteto_id: budget.arquiteto_id || 'none',
             vendedor_id: budget.vendedor_id || 'none',
-            status: budget.status || 'Aguardando Aprovação',
+            status: budget.status || 'enviado_cliente',
             desconto_global: budget.desconto_global ?? 0,
             forma_pagamento: budget.forma_pagamento || '',
             parcelas: parsedParcelas,
@@ -574,7 +576,7 @@ export default function BudgetFormPage() {
         arquiteto_id:
           values.arquiteto_id === 'none' ? null : values.arquiteto_id,
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
-        status: values.status,
+        status: isEditing ? values.status : 'rascunho',
         desconto_global: values.desconto_global ?? 0,
         forma_pagamento: values.forma_pagamento || null,
         prazo_inicio_cobranca_dias: prazoDias,
@@ -595,8 +597,39 @@ export default function BudgetFormPage() {
         await updateBudget(budgetToEdit.id, payload, values.itens)
         toast.success('Orçamento atualizado com sucesso')
       } else {
-        await addBudget(payload, values.itens)
-        toast.success('Orçamento criado com sucesso')
+        const newBudgetId = await addBudget(payload, values.itens)
+        try {
+          const { data: newBudget } = await supabase
+            .from('orcamentos')
+            .select('token_aprovacao_cliente, status')
+            .eq('id', newBudgetId)
+            .single()
+          if (
+            newBudget?.status === 'enviado_cliente' &&
+            newBudget?.token_aprovacao_cliente
+          ) {
+            const link = buildClientApprovalLink(
+              newBudgetId,
+              newBudget.token_aprovacao_cliente,
+            )
+            await navigator.clipboard.writeText(link)
+            toast.success(
+              'Orçamento criado e enviado para aprovação do cliente! Link copiado.',
+              {
+                description: link,
+                duration: 8000,
+              },
+            )
+          } else {
+            toast.info('Orçamento salvo como rascunho.', {
+              description:
+                'Preencha a forma de pagamento e os campos obrigatórios para enviá-lo ao cliente.',
+              duration: 6000,
+            })
+          }
+        } catch (err: any) {
+          toast.success('Orçamento criado com sucesso!')
+        }
       }
 
       // Update store budgets list so table is updated without hard refresh
@@ -747,7 +780,7 @@ export default function BudgetFormPage() {
       cliente_id: clienteId,
       arquiteto_id: arquitetoId || 'none',
       vendedor_id: vendedorId || 'none',
-      status: results.find((r) => r.status)?.status || 'Aguardando Aprovação',
+      status: results.find((r) => r.status)?.status || 'enviado_cliente',
       desconto_global:
         results.find((r) => r.desconto_global)?.desconto_global || 0,
       forma_pagamento: formaPgto,
@@ -999,34 +1032,43 @@ export default function BudgetFormPage() {
                   </div>
                 )}
 
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {STATUS_OPTIONS.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {isEditing ? (
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((s) => (
+                              <SelectItem key={s.value} value={s.value}>
+                                {s.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <div className="flex items-center h-10 px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">
+                      Rascunho (definido automaticamente)
+                    </div>
+                  </FormItem>
+                )}
 
                 <FormField
                   control={form.control}
@@ -1042,8 +1084,13 @@ export default function BudgetFormPage() {
                             <SearchableSelect
                               options={clientes.map((c) => ({
                                 value: c.id,
-                                label: c.nome,
-                                searchTerms: [c.nome_empresa].filter(Boolean),
+                                label:
+                                  (c as any).razao_social?.trim() || c.nome,
+                                searchTerms: [
+                                  (c as any).razao_social,
+                                  c.nome,
+                                  c.nome_empresa,
+                                ].filter(Boolean) as string[],
                               }))}
                               value={field.value}
                               onChange={field.onChange}
