@@ -1,94 +1,74 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ShieldAlert, ShieldCheck, UserCheck } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Search, X, ShieldAlert, ShieldCheck, Eye, Lock } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableHeader,
   TableBody,
   TableHead,
   TableRow,
+  TableCell,
 } from '@/components/ui/table'
-import { toast } from 'sonner'
-import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
-import { FinancialApprovalDialog } from '@/components/budgets/FinancialApprovalDialog'
-import { FinancialApprovalRow } from '@/components/budgets/FinancialApprovalRow'
-import { normalizeStatus } from '@/lib/utils'
-import { useAuth } from '@/hooks/use-auth'
-import { isValidUUID } from '@/lib/uuid'
 import {
-  approveBudgetFinancial,
-  validateBudget,
-} from '@/services/budgetApprovalService'
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { useAuth } from '@/hooks/use-auth'
+import {
+  fetchProjectsForFinancialApproval,
+  searchProjects,
+  validateProjectForApproval,
+  ProjectForApproval,
+} from '@/services/projectFinancialApprovalService'
+import { ProjectFinancialReviewDialog } from '@/components/budgets/ProjectFinancialReviewDialog'
 
 export function FinancialApprovalTab() {
-  const { budgets, loading, initialized, financialApprove } = useBudgetStore()
-  const { canApproveQuotes } = useAuth()
-  const navigate = useNavigate()
-  const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null)
+  const { role } = useAuth()
+  const [projects, setProjects] = useState<ProjectForApproval[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedProject, setSelectedProject] =
+    useState<ProjectForApproval | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const pendingBudgets = useMemo(
-    () => budgets.filter((b: Budget) => b.status === 'aprovado'),
-    [budgets],
+  const canManage = role === 'admin' || role === 'gerente'
+
+  const loadProjects = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchProjectsForFinancialApproval()
+      setProjects(data)
+    } catch (error: any) {
+      toast.error('Erro ao carregar projetos', { description: error?.message })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadProjects()
+  }, [loadProjects])
+
+  const filteredProjects = useMemo(
+    () => searchProjects(projects, searchTerm),
+    [projects, searchTerm],
   )
 
-  const handleEdit = (budget: Budget) => navigate(`/budgets/${budget.id}`)
-
-  const handleApproveClick = (budget: Budget) => {
-    if (!canApproveQuotes) {
-      toast.error('Permissão negada', {
-        description:
-          'Você não tem permissão para aprovar orçamentos financeiros.',
-        duration: 6000,
-      })
-      return
-    }
-    if (!isValidUUID(budget.id)) {
-      toast.error('ID inválido', {
-        description: 'O identificador do orçamento não é um UUID válido.',
-        duration: 6000,
-      })
-      return
-    }
-    const validation = validateBudget(budget)
-    if (!validation.ready) {
-      toast.error('Orçamento não está pronto para aprovação', {
-        description: validation.issues.join('; '),
-        duration: 8000,
-      })
-      return
-    }
-    setSelectedBudget(budget)
+  const handleReview = (project: ProjectForApproval) => {
+    setSelectedProject(project)
     setDialogOpen(true)
   }
 
-  const handleConfirmApproval = async () => {
-    if (!selectedBudget) return
-    try {
-      const result = await approveBudgetFinancial(selectedBudget.id)
-      if (result.ja_processado) {
-        toast.info('Orçamento já havia sido processado anteriormente.')
-      } else {
-        toast.success(
-          'Orçamento aprovado com sucesso! Registros financeiros foram gerados.',
-        )
-      }
-    } catch (error: any) {
-      toast.error('Falha ao aprovar orçamento', {
-        description:
-          error?.message || 'Erro desconhecido ao processar aprovação.',
-        duration: 8000,
-      })
-      throw error
-    }
-    try {
-      await financialApprove(selectedBudget)
-    } catch {
-      // Non-critical: RPC already succeeded; store sync failure is safe to ignore
-    }
+  const handleApproved = () => {
+    setDialogOpen(false)
+    setSelectedProject(null)
+    loadProjects()
   }
 
-  if (loading && !initialized) {
+  if (loading) {
     return (
       <div className="flex justify-center py-10">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -105,31 +85,60 @@ export function FinancialApprovalTab() {
           </div>
           <div>
             <h3 className="font-bold text-red-800 text-sm uppercase tracking-wide">
-              Área de Aprovação Financeira
+              Aprovação Financeira de Projetos
             </h3>
             <p className="text-sm text-red-700 mt-1">
-              As ações realizadas aqui são irreversíveis e disparam integrações
-              com o sistema financeiro.
+              Revise os detalhes financeiros e itens vinculados antes de
+              aprovar. Esta ação é irreversível.
             </p>
-            {!canApproveQuotes && (
+            {!canManage && (
               <p className="text-xs text-red-600 mt-2 font-medium">
-                ⚠ Seu usuário não possui permissão para aprovar orçamentos.
-                Apenas visualização permitida.
+                ⚠ Apenas administradores e gerentes podem aprovar projetos
+                financeiramente.
               </p>
             )}
           </div>
         </div>
       </div>
 
-      {pendingBudgets.length === 0 ? (
+      <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder="Pesquisar por código, nome, cliente, arquiteto ou email..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {filteredProjects.length > 0 && (
+          <span className="text-sm text-gray-500 self-center whitespace-nowrap">
+            {filteredProjects.length}{' '}
+            {filteredProjects.length === 1 ? 'projeto' : 'projetos'}
+          </span>
+        )}
+      </div>
+
+      {filteredProjects.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <UserCheck className="h-12 w-12 text-green-500 mb-3" />
+          <ShieldCheck className="h-12 w-12 text-green-500 mb-3" />
           <p className="text-lg font-semibold text-gray-700">
-            Nenhum orçamento aprovado pelo cliente aguardando aprovação
-            financeira
+            {searchTerm
+              ? 'Nenhum projeto encontrado.'
+              : 'Nenhum projeto aguardando aprovação financeira'}
           </p>
           <p className="text-sm text-gray-500">
-            Orçamentos aprovados pelo cliente aparecerão aqui.
+            {searchTerm
+              ? 'Tente buscar com outros termos.'
+              : 'Projetos em "Aprovação Financeira" aparecerão aqui.'}
           </p>
         </div>
       ) : (
@@ -138,42 +147,98 @@ export function FinancialApprovalTab() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-50">
-                  <TableHead className="font-semibold">Emissão</TableHead>
-                  <TableHead className="font-semibold">Empresa</TableHead>
                   <TableHead className="font-semibold">Código</TableHead>
+                  <TableHead className="font-semibold">Projeto</TableHead>
                   <TableHead className="font-semibold">Cliente</TableHead>
                   <TableHead className="font-semibold">Arquiteto</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold">Local</TableHead>
+                  <TableHead className="font-semibold">Entrada</TableHead>
                   <TableHead className="font-semibold">Validação</TableHead>
-                  <TableHead className="font-semibold text-right">
-                    Valor Total
-                  </TableHead>
                   <TableHead className="font-semibold text-right">
                     Ações
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pendingBudgets.map((budget: Budget) => (
-                  <FinancialApprovalRow
-                    key={budget.id}
-                    budget={budget}
-                    canApproveQuotes={canApproveQuotes}
-                    onEdit={handleEdit}
-                    onApprove={handleApproveClick}
-                  />
-                ))}
+                {filteredProjects.map((project) => {
+                  const validation = validateProjectForApproval(project)
+                  return (
+                    <TableRow key={project.id}>
+                      <TableCell className="font-mono text-sm font-bold text-gray-900">
+                        {project.codigo || '—'}
+                      </TableCell>
+                      <TableCell className="font-medium text-gray-900">
+                        {project.nome || '—'}
+                      </TableCell>
+                      <TableCell className="text-gray-700">
+                        {project.cliente?.razao_social ||
+                          project.cliente?.nome ||
+                          project.cliente?.nome_empresa ||
+                          '—'}
+                      </TableCell>
+                      <TableCell className="text-gray-500 text-sm">
+                        {project.arquiteto?.nome || '—'}
+                      </TableCell>
+                      <TableCell className="text-gray-500 text-sm">
+                        {project.cidade && project.estado
+                          ? `${project.cidade}/${project.estado}`
+                          : project.cidade || project.estado || '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {project.data_entrada
+                          ? new Date(project.data_entrada).toLocaleDateString(
+                              'pt-BR',
+                            )
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {validation.ready ? (
+                          <span className="flex items-center gap-1 text-sm text-green-600">
+                            <ShieldCheck className="h-4 w-4" /> Pronto
+                          </span>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="flex items-center gap-1 text-sm text-red-600 cursor-help">
+                                <Lock className="h-4 w-4" />{' '}
+                                {validation.issues.length} pendência(s)
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <ul className="list-disc list-inside text-xs space-y-1">
+                                {validation.issues.map((issue, i) => (
+                                  <li key={i}>{issue}</li>
+                                ))}
+                              </ul>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                          onClick={() => handleReview(project)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" /> Revisar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>
         </div>
       )}
 
-      <FinancialApprovalDialog
-        budget={selectedBudget}
+      <ProjectFinancialReviewDialog
+        project={selectedProject}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onConfirm={handleConfirmApproval}
+        canManage={canManage}
+        onApproved={handleApproved}
       />
     </div>
   )

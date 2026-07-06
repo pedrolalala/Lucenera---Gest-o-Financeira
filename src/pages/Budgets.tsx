@@ -87,7 +87,7 @@ export default function Budgets() {
           <TabsTrigger value="aprovacao-cliente">
             Aprovação do cliente
           </TabsTrigger>
-          {canApproveQuotes && (
+          {(role === 'admin' || role === 'gerente') && (
             <TabsTrigger value="aprovacao-financeira">
               Aprovação Financeira
             </TabsTrigger>
@@ -134,7 +134,7 @@ export default function Budgets() {
           <ClientApprovalTab />
         </TabsContent>
 
-        {canApproveQuotes && (
+        {(role === 'admin' || role === 'gerente') && (
           <TabsContent value="aprovacao-financeira" className="mt-0">
             <FinancialApprovalTab />
           </TabsContent>
