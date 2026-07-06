@@ -6,6 +6,7 @@ export interface ProdutoInfo {
   codigo_produto: number | null
   referencia: string | null
   nome: string | null
+  sku: string | null
 }
 
 export interface EditableProjectData {
@@ -58,7 +59,7 @@ export async function fetchEditableProjectBudget(
         orcamento_itens(
           id, produto_id, descricao, quantidade, preco_unitario, desconto,
           custom_id, ordem, peca_nova,
-          produto:produtos(codigo_produto, referencia, nome)
+          produto:produtos(codigo_produto, referencia, nome, sku)
         )
       )
     `,

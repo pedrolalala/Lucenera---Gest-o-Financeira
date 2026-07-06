@@ -22,6 +22,7 @@ interface ProdutoMeta {
   codigo_produto: number | null
   referencia: string | null
   nome: string | null
+  sku: string | null
 }
 
 const FORMA_PAGAMENTO_OPTIONS = [
@@ -57,7 +58,7 @@ export function EditableBudgetItemsTable({
     supabase
       .from('orcamento_itens')
       .select(
-        'id, produto_id, produto:produtos(codigo_produto, referencia, nome)',
+        'id, produto_id, produto:produtos(codigo_produto, referencia, nome, sku)',
       )
       .in('id', allItemIds)
       .then(({ data }) => {
@@ -69,6 +70,7 @@ export function EditableBudgetItemsTable({
               codigo_produto: item.produto.codigo_produto ?? null,
               referencia: item.produto.referencia ?? null,
               nome: item.produto.nome ?? null,
+              sku: item.produto.sku ?? null,
             })
           }
         })
@@ -108,9 +110,9 @@ export function EditableBudgetItemsTable({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full">
       {orcamentos.map((orc) => (
-        <div key={orc.id} className="rounded-lg border p-3 space-y-3">
+        <div key={orc.id} className="w-full rounded-lg border p-3 space-y-3">
           <div className="flex flex-col sm:flex-row justify-between gap-2">
             <span className="font-medium text-sm text-gray-900">
               Orçamento {orc.numero || orc.id.slice(0, 8)}
@@ -143,14 +145,15 @@ export function EditableBudgetItemsTable({
               </Select>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto w-full">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-500 border-b">
                   <th className="py-2 pr-2 w-16">Circuito</th>
                   <th className="py-2 px-1 w-20">Código</th>
-                  <th className="py-2 px-1 w-28">Referência</th>
-                  <th className="py-2 px-1 min-w-[180px]">Descrição</th>
+                  <th className="py-2 px-1 w-24">SKU</th>
+                  <th className="py-2 px-1 w-24">Referência</th>
+                  <th className="py-2 px-1 min-w-[200px]">Descrição</th>
                   <th className="py-2 px-1 w-20">Qtd</th>
                   <th className="py-2 px-1 w-28">Preço Unit.</th>
                   <th className="py-2 px-1 w-28">Subtotal</th>
@@ -193,8 +196,17 @@ export function EditableBudgetItemsTable({
                       </td>
                       <td className="py-2 px-1">
                         {meta?.codigo_produto != null ? (
-                          <span className="font-mono font-bold text-primary text-sm">
+                          <span className="font-mono font-bold text-primary text-sm bg-primary/5 px-1.5 py-0.5 rounded">
                             {meta.codigo_produto}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-1">
+                        {meta?.sku ? (
+                          <span className="font-mono text-sm text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                            {meta.sku}
                           </span>
                         ) : (
                           <span className="text-gray-400">—</span>
@@ -220,7 +232,7 @@ export function EditableBudgetItemsTable({
                               e.target.value,
                             )
                           }
-                          className="h-8 min-w-[160px]"
+                          className="h-8 min-w-[180px]"
                           placeholder="Descrição..."
                         />
                       </td>
@@ -239,7 +251,7 @@ export function EditableBudgetItemsTable({
                               Math.min(1000, parseInt(e.target.value) || 0),
                             )
                           }
-                          className="h-8 w-16"
+                          className="h-8 w-16 text-center"
                         />
                       </td>
                       <td className="py-2 px-1">
@@ -256,7 +268,7 @@ export function EditableBudgetItemsTable({
                               parseFloat(e.target.value) || 0,
                             )
                           }
-                          className="h-8 w-24"
+                          className="h-8 w-24 text-right"
                         />
                       </td>
                       <td className="py-2 px-1 font-medium text-gray-900">

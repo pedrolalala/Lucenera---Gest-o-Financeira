@@ -926,7 +926,7 @@ export default function BudgetFormPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in pb-20 max-w-5xl mx-auto">
+    <div className="flex flex-col gap-6 animate-fade-in pb-20 w-full max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild className="rounded-full">
