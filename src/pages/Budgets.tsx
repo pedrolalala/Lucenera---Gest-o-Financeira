@@ -93,7 +93,7 @@ export default function Budgets() {
               Aprovação Financeira
             </TabsTrigger>
           )}
-          <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>
+          <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
         </TabsList>
 
         <TabsContent value="todos" className="flex flex-col gap-4 mt-0">
@@ -140,7 +140,7 @@ export default function Budgets() {
             <FinancialApprovalTab />
           </TabsContent>
         )}
-        <TabsContent value="aprovacoes" className="mt-0">
+        <TabsContent value="aprovados" className="mt-0">
           <ApprovalsTab />
         </TabsContent>
       </Tabs>

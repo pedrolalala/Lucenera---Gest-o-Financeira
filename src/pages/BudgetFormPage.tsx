@@ -170,13 +170,7 @@ export default function BudgetFormPage() {
   const navigate = useNavigate()
   const isEditing = Boolean(id)
 
-  const {
-    addBudget,
-    updateBudget,
-    budgets,
-    fetchBudgets,
-    enviarOrcamentoCliente,
-  } = useBudgetStore()
+  const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
   const [isBatchImportOpen, setIsBatchImportOpen] = useState(false)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
@@ -606,24 +600,29 @@ export default function BudgetFormPage() {
       } else {
         const newBudgetId = await addBudget(payload, values.itens)
         try {
-          const result = await enviarOrcamentoCliente(newBudgetId)
-          const link = buildClientApprovalLink(newBudgetId, result.token)
-          await navigator.clipboard.writeText(link)
-          toast.success(
-            'Orçamento criado e enviado ao cliente! Link copiado.',
-            {
-              description: link,
-              duration: 8000,
-            },
-          )
+          const { data: newBudget } = await supabase
+            .from('orcamentos')
+            .select('token_aprovacao_cliente')
+            .eq('id', newBudgetId)
+            .single()
+          if (newBudget?.token_aprovacao_cliente) {
+            const link = buildClientApprovalLink(
+              newBudgetId,
+              newBudget.token_aprovacao_cliente,
+            )
+            await navigator.clipboard.writeText(link)
+            toast.success(
+              'Orçamento criado e enviado para aprovação do cliente! Link copiado.',
+              {
+                description: link,
+                duration: 8000,
+              },
+            )
+          } else {
+            toast.success('Orçamento criado com sucesso!')
+          }
         } catch (err: any) {
-          toast.warning(
-            'Orçamento criado, mas falha ao gerar link de aprovação.',
-            {
-              description:
-                err?.message || 'Você pode reenviar pelo painel de orçamentos.',
-            },
-          )
+          toast.success('Orçamento criado com sucesso!')
         }
       }
 

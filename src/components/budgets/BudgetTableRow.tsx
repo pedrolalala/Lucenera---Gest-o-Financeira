@@ -22,7 +22,6 @@ import {
   CheckCircle,
   RefreshCw,
   AlertTriangle,
-  Send,
   Copy,
   UserCheck,
 } from 'lucide-react'
@@ -325,25 +324,6 @@ export function BudgetTableRow({
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
             <FiscalSummaryDialog budget={budget} />
-
-            {(normalizedStatus === 'rascunho' ||
-              normalizedStatus === 'aguardando_cliente') &&
-              canManageClient && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                  title="Enviar ao Cliente"
-                  onClick={handleEnviarCliente}
-                  disabled={isSending}
-                >
-                  {isSending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
 
             {normalizedStatus === 'enviado_cliente' && (
               <>

@@ -151,7 +151,7 @@ export function ClientApprovalTab() {
             Nenhum orçamento pendente de aprovação do cliente
           </p>
           <p className="text-sm text-gray-500">
-            Envie orçamentos ao cliente a partir da aba "Todos".
+            Orçamentos completos aparecerão aqui automaticamente.
           </p>
         </div>
       ) : (
