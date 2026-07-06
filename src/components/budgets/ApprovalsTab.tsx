@@ -5,7 +5,7 @@ import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
-import { normalizeStatus, cn } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 export function ApprovalsTab() {
   const { budgets, loading, initialized, approveBudgetAndMigrate } =
@@ -14,7 +14,7 @@ export function ApprovalsTab() {
   const [isSyncing, setIsSyncing] = useState(false)
 
   const approvedBudgets = useMemo(() => {
-    return budgets.filter((b) => normalizeStatus(b.status) === 'aprovado')
+    return budgets.filter((b) => b.status === 'aprovado')
   }, [budgets])
 
   const handleEdit = (budget: Budget) => {

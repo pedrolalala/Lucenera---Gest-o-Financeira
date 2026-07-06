@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -40,10 +40,15 @@ export default function Budgets() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchBudgets({ search: searchTerm, status: statusFilter })
+      fetchBudgets({ search: searchTerm })
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchTerm, statusFilter, fetchBudgets])
+  }, [searchTerm, fetchBudgets])
+
+  const filteredBudgets = useMemo(() => {
+    if (statusFilter === 'all') return budgets
+    return budgets.filter((b) => b.status === statusFilter)
+  }, [budgets, statusFilter])
 
   const handleCreate = () => {
     navigate('/budgets/new')
@@ -122,7 +127,7 @@ export default function Budgets() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : (
-            <BudgetsTable data={budgets} onEdit={handleEdit} />
+            <BudgetsTable data={filteredBudgets} onEdit={handleEdit} />
           )}
         </TabsContent>
 

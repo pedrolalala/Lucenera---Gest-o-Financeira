@@ -190,6 +190,12 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       delete (finalBudget as any).numero
     }
 
+    if (finalBudget.status === 'enviado_cliente') {
+      const { data: userData } = await supabase.auth.getUser()
+      finalBudget.enviado_cliente_em = new Date().toISOString()
+      finalBudget.enviado_cliente_por = userData?.user?.id || null
+    }
+
     const { data, error } = await supabase
       .from('orcamentos')
       .insert([finalBudget])
