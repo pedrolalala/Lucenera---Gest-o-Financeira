@@ -3,6 +3,9 @@
 -- aprovado_cliente → aprovado
 -- Also update aguardando_cliente → enviado_cliente for safety
 
+-- 0. Ensure pgcrypto extension is available for gen_random_bytes
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- 1. Data migration: update existing records
 UPDATE public.orcamentos SET status = 'enviado_cliente' WHERE status = 'aguardando_aprovacao';
 UPDATE public.orcamentos SET status = 'enviado_cliente' WHERE status = 'aguardando_cliente';
