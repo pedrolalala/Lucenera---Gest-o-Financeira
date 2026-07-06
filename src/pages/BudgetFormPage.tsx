@@ -76,6 +76,10 @@ import {
   type ProductSearchItem,
 } from '@/components/budgets/ProductSearchModal'
 import { BatchPdfImport } from '@/components/budgets/BatchPdfImport'
+import {
+  BudgetItemCard,
+  type ProductMeta,
+} from '@/components/budgets/BudgetItemCard'
 import type { ParsedPdfResult } from '@/lib/pdf-import'
 
 const formSchema = z
@@ -217,6 +221,9 @@ export default function BudgetFormPage() {
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
     null,
   )
+  const [productMetaMap, setProductMetaMap] = useState<
+    Map<string, ProductMeta>
+  >(new Map())
   const { role } = useAuth()
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -267,6 +274,24 @@ export default function BudgetFormPage() {
     return a.nome.localeCompare(b.nome)
   })
 
+  const getProductInfo = (
+    produtoId: string | null | undefined,
+  ): ProductMeta | null => {
+    if (!produtoId || !isValidUUID(produtoId)) return null
+    const fromMeta = productMetaMap.get(produtoId)
+    if (fromMeta) return fromMeta
+    const fromList = produtos.find((p) => p.id === produtoId)
+    if (fromList) {
+      return {
+        codigo_produto: (fromList as any).codigo_produto ?? null,
+        referencia: fromList.referencia ?? null,
+        nome: ((fromList as any).originalNome || fromList.nome) ?? null,
+        sku: fromList.sku ?? null,
+      }
+    }
+    return null
+  }
+
   useEffect(() => {
     async function loadBudget() {
       if (!isEditing || !id) return
@@ -284,7 +309,9 @@ export default function BudgetFormPage() {
               `
               *,
               itens:orcamento_itens(
-                id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem
+                id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem,
+                descricao,
+                produto:produtos(codigo_produto, referencia, nome, sku)
               )
             `,
             )
@@ -322,6 +349,18 @@ export default function BudgetFormPage() {
             ? Math.max(1, budget.prazo_pagamento_dias.length)
             : 1
 
+          const metaMap = new Map<string, ProductMeta>()
+          budget.itens?.forEach((i: any) => {
+            if (i.produto_id && i.produto) {
+              metaMap.set(i.produto_id, {
+                codigo_produto: i.produto.codigo_produto ?? null,
+                referencia: i.produto.referencia ?? null,
+                nome: i.produto.nome ?? null,
+                sku: i.produto.sku ?? null,
+              })
+            }
+          })
+          setProductMetaMap(metaMap)
           setBudgetToEdit(budget)
           form.reset({
             empresa_id: budget.empresa_id,
@@ -1443,223 +1482,18 @@ export default function BudgetFormPage() {
 
               <div className="space-y-4">
                 {fields.map((field, index) => {
-                  const itemValues = watchItens[index] || {}
-                  const q = Number(itemValues.quantidade) || 0
-                  const p = Number(itemValues.preco_unitario) || 0
-                  const d = Math.round(Number(itemValues.desconto) || 0)
-                  const itemSubtotal = q * p * (1 - d / 100)
-                  const currentCircuit = formatCircuitId(
-                    itemValues.custom_id || '',
-                  )
-                  const prevCircuit = formatCircuitId(
-                    watchItens[index - 1]?.custom_id || '',
-                  )
-                  const isNewGroup =
-                    index === 0 || currentCircuit !== prevCircuit
-
                   return (
-                    <div key={field.uid || field.id || `item-${index}`}>
-                      {isNewGroup && currentCircuit && (
-                        <div className="flex items-center gap-2 mt-4 mb-2 first:mt-0 animate-fade-in">
-                          <div className="h-px bg-primary/20 flex-1" />
-                          <span className="text-xs font-bold uppercase text-primary px-3 py-0.5 rounded-full bg-primary/10">
-                            {currentCircuit}
-                          </span>
-                          <div className="h-px bg-primary/20 flex-1" />
-                        </div>
-                      )}
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-white p-4 rounded-xl border shadow-sm relative group">
-                        <div className="md:col-span-2">
-                          <FormField
-                            control={form.control}
-                            name={`itens.${index}.custom_id`}
-                            render={({ field: f }) => (
-                              <FormItem>
-                                <FormLabel className="text-xs text-gray-500 font-medium">
-                                  Circuito (L)
-                                </FormLabel>
-                                <FormControl>
-                                  <Input
-                                    placeholder="L01"
-                                    value={f.value || ''}
-                                    onChange={(e) =>
-                                      f.onChange(
-                                        formatCircuitIdInput(e.target.value),
-                                      )
-                                    }
-                                    onBlur={() => {
-                                      const current = f.value || ''
-                                      if (current) {
-                                        f.onChange(formatCircuitId(current))
-                                      }
-                                    }}
-                                    onFocus={() => {
-                                      if (!f.value) f.onChange('L')
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        <div className="md:col-span-4">
-                          <FormField
-                            control={form.control}
-                            name={`itens.${index}.produto_id`}
-                            render={({ field: f }) => (
-                              <FormItem>
-                                <FormLabel className="text-xs text-gray-500 font-medium">
-                                  {f.value ? 'Produto' : 'Produto / Descrição'}
-                                </FormLabel>
-                                <FormControl>
-                                  {f.value ? (
-                                    <ProductSelectButton
-                                      value={f.value}
-                                      onClick={() => {
-                                        setProductSearchRowIndex(index)
-                                        setIsProductSearchOpen(true)
-                                      }}
-                                      placeholder="Buscar produto..."
-                                    />
-                                  ) : (
-                                    <div className="flex gap-2">
-                                      <Input
-                                        placeholder="Descrição do item não cadastrado..."
-                                        value={
-                                          watchItens[index]?.descricao || ''
-                                        }
-                                        onChange={(e) =>
-                                          form.setValue(
-                                            `itens.${index}.descricao`,
-                                            e.target.value,
-                                            {
-                                              shouldValidate: true,
-                                              shouldDirty: true,
-                                            },
-                                          )
-                                        }
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        onClick={() => {
-                                          setProductSearchRowIndex(index)
-                                          setIsProductSearchOpen(true)
-                                        }}
-                                        title="Buscar produto cadastrado"
-                                        className="shrink-0"
-                                      >
-                                        <PackageSearch className="w-4 h-4" />
-                                      </Button>
-                                    </div>
-                                  )}
-                                </FormControl>{' '}
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:col-span-5">
-                          <FormField
-                            control={form.control}
-                            name={`itens.${index}.quantidade`}
-                            render={({ field: f }) => (
-                              <FormItem>
-                                <FormLabel className="text-xs text-gray-500 font-medium">
-                                  Qtd (Unid)
-                                </FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="1"
-                                    min="1"
-                                    {...f}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      f.onChange(
-                                        val ? Math.floor(Number(val)) : '',
-                                      )
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name={`itens.${index}.preco_unitario`}
-                            render={({ field: f }) => (
-                              <FormItem className="col-span-1 md:col-span-2">
-                                <FormLabel className="text-xs text-gray-500 font-medium">
-                                  Preço Unit. (R$)
-                                </FormLabel>
-                                <FormControl>
-                                  <Input type="number" step="0.01" {...f} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name={`itens.${index}.desconto`}
-                            render={({ field: f }) => (
-                              <FormItem>
-                                <FormLabel className="text-xs text-gray-500 font-medium">
-                                  Desc (%)
-                                </FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="1"
-                                    min="0"
-                                    max="100"
-                                    {...f}
-                                    onChange={(e) =>
-                                      f.onChange(
-                                        Math.round(Number(e.target.value) || 0),
-                                      )
-                                    }
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        <div className="md:col-span-1 flex flex-row md:flex-col items-center md:items-end justify-between md:justify-end h-full pt-6 md:pt-0">
-                          <div className="flex flex-col md:text-right">
-                            <span className="text-[10px] uppercase font-bold text-gray-400 mb-1">
-                              Subtotal
-                            </span>
-                            <span className="text-sm font-semibold text-gray-900">
-                              {new Intl.NumberFormat('pt-BR', {
-                                style: 'currency',
-                                currency: 'BRL',
-                              }).format(itemSubtotal)}
-                            </span>
-                          </div>
-
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="md:absolute md:-right-2 md:-top-2 h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50 bg-white rounded-full shadow-sm md:opacity-0 md:group-hover:opacity-100 transition-all border"
-                            onClick={() => remove(index)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+                    <BudgetItemCard
+                      key={field.uid || field.id || `item-${index}`}
+                      index={index}
+                      fieldId={field.uid || field.id || `item-${index}`}
+                      onRemove={remove}
+                      onSearchProduct={(idx) => {
+                        setProductSearchRowIndex(idx)
+                        setIsProductSearchOpen(true)
+                      }}
+                      getProductInfo={getProductInfo}
+                    />
                   )
                 })}
               </div>

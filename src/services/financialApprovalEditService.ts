@@ -1,9 +1,12 @@
 import { supabase } from '@/lib/supabase/client'
-import { isValidUUID } from '@/lib/uuid'
-import {
-  fetchProjectFinancialDetails,
-  ProjectFinancialDetail,
-} from '@/services/projectFinancialApprovalService'
+import { ProjectFinancialDetail } from '@/services/projectFinancialApprovalService'
+import { formatCircuitId } from '@/lib/utils'
+
+export interface ProdutoInfo {
+  codigo_produto: number | null
+  referencia: string | null
+  nome: string | null
+}
 
 export interface EditableProjectData {
   valor_total: number
@@ -14,6 +17,7 @@ export interface EditableProjectData {
 
 export interface EditableItemData {
   id: string
+  produto_id?: string | null
   descricao: string | null
   quantidade: number
   preco_unitario: number
@@ -21,6 +25,7 @@ export interface EditableItemData {
   custom_id: string | null
   ordem: number | null
   peca_nova: boolean
+  produto_info?: ProdutoInfo | null
 }
 
 export interface EditableOrcamentoData {
@@ -41,7 +46,28 @@ export interface FinalizeResult {
 export async function fetchEditableProjectBudget(
   projectId: string,
 ): Promise<ProjectFinancialDetail> {
-  return fetchProjectFinancialDetails(projectId)
+  const { data, error } = await supabase
+    .from('projetos')
+    .select(
+      `
+      id, codigo, nome, status, cidade, estado, data_entrada, valor_total, nivel_estrategico,
+      cliente:contatos!projetos_cliente_id_fkey(nome, email, nome_empresa, razao_social),
+      arquiteto:contatos!projetos_arquiteto_id_fkey(nome, email, nome_empresa, razao_social),
+      orcamentos(
+        id, numero, valor_total, status, condicoes_pagamento, forma_pagamento,
+        orcamento_itens(
+          id, produto_id, descricao, quantidade, preco_unitario, desconto,
+          custom_id, ordem, peca_nova,
+          produto:produtos(codigo_produto, referencia, nome)
+        )
+      )
+    `,
+    )
+    .eq('id', projectId)
+    .single()
+
+  if (error) throw error
+  return data as unknown as ProjectFinancialDetail
 }
 
 export async function finalizeValidation(
@@ -49,26 +75,59 @@ export async function finalizeValidation(
   projectData: EditableProjectData,
   orcamentos: EditableOrcamentoData[],
 ): Promise<FinalizeResult> {
-  if (!isValidUUID(projectId)) {
-    throw new Error('ID do projeto inválido.')
+  const { data: project } = await supabase
+    .from('projetos')
+    .select('status')
+    .eq('id', projectId)
+    .single()
+
+  const statusAnterior = project?.status || ''
+
+  const { error: projUpdateError } = await supabase
+    .from('projetos')
+    .update({
+      valor_total: projectData.valor_total,
+      nivel_estrategico: projectData.nivel_estrategico,
+      cidade: projectData.cidade,
+      estado: projectData.estado,
+    })
+    .eq('id', projectId)
+
+  if (projUpdateError) throw projUpdateError
+
+  for (const orc of orcamentos) {
+    const valorTotal = orc.itens.reduce(
+      (s, i) => s + (i.quantidade || 0) * (i.preco_unitario || 0),
+      0,
+    )
+
+    await supabase
+      .from('orcamentos')
+      .update({
+        forma_pagamento: orc.forma_pagamento,
+        valor_total: valorTotal,
+      })
+      .eq('id', orc.id)
+
+    for (const item of orc.itens) {
+      await supabase
+        .from('orcamento_itens')
+        .update({
+          quantidade: item.quantidade,
+          preco_unitario: item.preco_unitario,
+          desconto: item.desconto,
+          custom_id: item.custom_id ? formatCircuitId(item.custom_id) : null,
+          descricao: item.descricao,
+          peca_nova: item.peca_nova,
+        })
+        .eq('id', item.id)
+    }
   }
 
-  if (!projectData.valor_total || projectData.valor_total <= 0) {
-    throw new Error('Valor total do projeto deve ser maior que zero.')
+  return {
+    success: true,
+    project_id: projectId,
+    status_anterior: statusAnterior,
+    status_novo: 'Orçamento Aprovado',
   }
-
-  const { data, error } = await supabase.rpc('finalizar_validacao_financeira', {
-    p_project_id: projectId,
-    p_project_data: projectData,
-    p_orcamentos: orcamentos,
-  })
-
-  if (error) {
-    throw new Error(error.message || 'Erro ao finalizar validação financeira.')
-  }
-  if (!data) {
-    throw new Error('Resposta vazia do servidor ao finalizar validação.')
-  }
-
-  return data as unknown as FinalizeResult
 }

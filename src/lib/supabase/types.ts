@@ -2451,6 +2451,7 @@ export type Database = {
           item_pai_id: string | null
           orcamento_id: string
           ordem: number | null
+          peca_nova: boolean | null
           preco_unitario: number | null
           produto_id: string | null
           quantidade: number | null
@@ -2465,6 +2466,7 @@ export type Database = {
           item_pai_id?: string | null
           orcamento_id: string
           ordem?: number | null
+          peca_nova?: boolean | null
           preco_unitario?: number | null
           produto_id?: string | null
           quantidade?: number | null
@@ -2479,6 +2481,7 @@ export type Database = {
           item_pai_id?: string | null
           orcamento_id?: string
           ordem?: number | null
+          peca_nova?: boolean | null
           preco_unitario?: number | null
           produto_id?: string | null
           quantidade?: number | null
@@ -7397,6 +7400,10 @@ export type Database = {
       }
       enviar_orcamento_para_cliente: {
         Args: { p_orcamento_id: string }
+        Returns: Json
+      }
+      finalizar_validacao_financeira: {
+        Args: { p_orcamentos: Json; p_project_data: Json; p_project_id: string }
         Returns: Json
       }
       fn_gerar_numero_orcamento: { Args: never; Returns: string }

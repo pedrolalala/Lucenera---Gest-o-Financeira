@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -8,11 +9,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { supabase } from '@/lib/supabase/client'
 import { EditableOrcamentoData } from '@/services/financialApprovalEditService'
+import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 
 interface EditableBudgetItemsTableProps {
   orcamentos: EditableOrcamentoData[]
   onChange: (orcamentos: EditableOrcamentoData[]) => void
+}
+
+interface ProdutoMeta {
+  codigo_produto: number | null
+  referencia: string | null
+  nome: string | null
 }
 
 const FORMA_PAGAMENTO_OPTIONS = [
@@ -26,19 +35,56 @@ const FORMA_PAGAMENTO_OPTIONS = [
 ]
 
 const fmt = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-    v || 0,
-  )
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(v || 0)
 
 export function EditableBudgetItemsTable({
   orcamentos,
   onChange,
 }: EditableBudgetItemsTableProps) {
+  const [produtoMetaMap, setProdutoMetaMap] = useState<
+    Map<string, ProdutoMeta>
+  >(new Map())
+
+  const allItemIds = orcamentos.flatMap((o) => o.itens.map((i) => i.id))
+  const itemIdsKey = allItemIds.join(',')
+
+  useEffect(() => {
+    if (allItemIds.length === 0) return
+    let cancelled = false
+    supabase
+      .from('orcamento_itens')
+      .select(
+        'id, produto_id, produto:produtos(codigo_produto, referencia, nome)',
+      )
+      .in('id', allItemIds)
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        const map = new Map<string, ProdutoMeta>()
+        data.forEach((item: any) => {
+          if (item.produto) {
+            map.set(item.id, {
+              codigo_produto: item.produto.codigo_produto ?? null,
+              referencia: item.produto.referencia ?? null,
+              nome: item.produto.nome ?? null,
+            })
+          }
+        })
+        setProdutoMetaMap(map)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemIdsKey])
+
   const updateItem = (
     orcId: string,
     itemId: string,
     field: string,
-    value: string | number | boolean,
+    value: any,
   ) => {
     onChange(
       orcamentos.map((o) => {
@@ -60,8 +106,6 @@ export function EditableBudgetItemsTable({
       orcamentos.map((o) => (o.id === orcId ? { ...o, [field]: value } : o)),
     )
   }
-
-  const calcSubtotal = (q: number, p: number) => (q || 0) * (p || 0)
 
   return (
     <div className="space-y-4">
@@ -103,36 +147,96 @@ export function EditableBudgetItemsTable({
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-500 border-b">
-                  <th className="py-2 pr-2">Item</th>
+                  <th className="py-2 pr-2 w-16">Circuito</th>
+                  <th className="py-2 px-1 w-20">Código</th>
+                  <th className="py-2 px-1 w-28">Referência</th>
+                  <th className="py-2 px-1 min-w-[180px]">Descrição</th>
                   <th className="py-2 px-1 w-20">Qtd</th>
                   <th className="py-2 px-1 w-28">Preço Unit.</th>
                   <th className="py-2 px-1 w-28">Subtotal</th>
                   <th className="py-2 px-1 w-20">Peça Nova</th>
-                  <th className="py-2 px-1">Observação</th>
                 </tr>
               </thead>
               <tbody>
                 {orc.itens.map((item) => {
-                  const subtotal = calcSubtotal(
-                    item.quantidade,
-                    item.preco_unitario,
-                  )
+                  const subtotal =
+                    (item.quantidade || 0) * (item.preco_unitario || 0)
+                  const meta = produtoMetaMap.get(item.id)
                   return (
                     <tr key={item.id} className="border-b last:border-0">
-                      <td className="py-2 pr-2 text-gray-700 max-w-[200px] truncate">
-                        {item.descricao || item.custom_id || '—'}
+                      <td className="py-2 pr-2">
+                        <Input
+                          type="text"
+                          maxLength={4}
+                          value={item.custom_id || ''}
+                          onChange={(e) =>
+                            updateItem(
+                              orc.id,
+                              item.id,
+                              'custom_id',
+                              formatCircuitIdInput(e.target.value),
+                            )
+                          }
+                          onBlur={(e) => {
+                            if (e.target.value) {
+                              updateItem(
+                                orc.id,
+                                item.id,
+                                'custom_id',
+                                formatCircuitId(e.target.value),
+                              )
+                            }
+                          }}
+                          className="h-8 w-14 text-center font-mono text-sm"
+                          placeholder="L01"
+                        />
+                      </td>
+                      <td className="py-2 px-1">
+                        {meta?.codigo_produto != null ? (
+                          <span className="font-mono font-bold text-primary text-sm">
+                            {meta.codigo_produto}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-1">
+                        {meta?.referencia ? (
+                          <span className="text-sm text-gray-600">
+                            {meta.referencia}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-1">
+                        <Input
+                          value={item.descricao || ''}
+                          onChange={(e) =>
+                            updateItem(
+                              orc.id,
+                              item.id,
+                              'descricao',
+                              e.target.value,
+                            )
+                          }
+                          className="h-8 min-w-[160px]"
+                          placeholder="Descrição..."
+                        />
                       </td>
                       <td className="py-2 px-1">
                         <Input
                           type="number"
-                          step="0.01"
+                          step="1"
+                          min="1"
+                          max="1000"
                           value={item.quantidade}
                           onChange={(e) =>
                             updateItem(
                               orc.id,
                               item.id,
                               'quantidade',
-                              parseFloat(e.target.value) || 0,
+                              Math.min(1000, parseInt(e.target.value) || 0),
                             )
                           }
                           className="h-8 w-16"
@@ -142,6 +246,7 @@ export function EditableBudgetItemsTable({
                         <Input
                           type="number"
                           step="0.01"
+                          min="0"
                           value={item.preco_unitario}
                           onChange={(e) =>
                             updateItem(
@@ -163,21 +268,6 @@ export function EditableBudgetItemsTable({
                           onCheckedChange={(v) =>
                             updateItem(orc.id, item.id, 'peca_nova', v === true)
                           }
-                        />
-                      </td>
-                      <td className="py-2 px-1">
-                        <Input
-                          value={item.descricao || ''}
-                          onChange={(e) =>
-                            updateItem(
-                              orc.id,
-                              item.id,
-                              'descricao',
-                              e.target.value,
-                            )
-                          }
-                          className="h-8"
-                          placeholder="Observação..."
                         />
                       </td>
                     </tr>
