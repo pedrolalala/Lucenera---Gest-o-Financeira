@@ -114,6 +114,7 @@ export async function finalizeValidation(
       await supabase
         .from('orcamento_itens')
         .update({
+          produto_id: item.produto_id || null,
           quantidade: item.quantidade,
           preco_unitario: item.preco_unitario,
           desconto: item.desconto,

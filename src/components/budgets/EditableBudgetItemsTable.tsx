@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react'
-import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
+import { useState } from 'react'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -9,20 +7,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { supabase } from '@/lib/supabase/client'
 import { EditableOrcamentoData } from '@/services/financialApprovalEditService'
-import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
+import { EditableItemCard } from '@/components/budgets/EditableItemCard'
+import {
+  ProductSearchModal,
+  type ProductSearchItem,
+} from '@/components/budgets/ProductSearchModal'
+import { isValidUUID } from '@/lib/uuid'
+import { sortItemsByCircuitId } from '@/lib/utils'
+import { toast } from 'sonner'
 
 interface EditableBudgetItemsTableProps {
   orcamentos: EditableOrcamentoData[]
   onChange: (orcamentos: EditableOrcamentoData[]) => void
-}
-
-interface ProdutoMeta {
-  codigo_produto: number | null
-  referencia: string | null
-  nome: string | null
-  sku: string | null
 }
 
 const FORMA_PAGAMENTO_OPTIONS = [
@@ -36,51 +33,19 @@ const FORMA_PAGAMENTO_OPTIONS = [
 ]
 
 const fmt = (v: number) =>
-  new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(v || 0)
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+    v || 0,
+  )
 
 export function EditableBudgetItemsTable({
   orcamentos,
   onChange,
 }: EditableBudgetItemsTableProps) {
-  const [produtoMetaMap, setProdutoMetaMap] = useState<
-    Map<string, ProdutoMeta>
-  >(new Map())
-
-  const allItemIds = orcamentos.flatMap((o) => o.itens.map((i) => i.id))
-  const itemIdsKey = allItemIds.join(',')
-
-  useEffect(() => {
-    if (allItemIds.length === 0) return
-    let cancelled = false
-    supabase
-      .from('orcamento_itens')
-      .select(
-        'id, produto_id, produto:produtos(codigo_produto, referencia, nome, sku)',
-      )
-      .in('id', allItemIds)
-      .then(({ data }) => {
-        if (cancelled || !data) return
-        const map = new Map<string, ProdutoMeta>()
-        data.forEach((item: any) => {
-          if (item.produto) {
-            map.set(item.id, {
-              codigo_produto: item.produto.codigo_produto ?? null,
-              referencia: item.produto.referencia ?? null,
-              nome: item.produto.nome ?? null,
-              sku: item.produto.sku ?? null,
-            })
-          }
-        })
-        setProdutoMetaMap(map)
-      })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemIdsKey])
+  const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
+  const [searchTarget, setSearchTarget] = useState<{
+    orcId: string
+    itemId: string
+  } | null>(null)
 
   const updateItem = (
     orcId: string,
@@ -107,6 +72,60 @@ export function EditableBudgetItemsTable({
     onChange(
       orcamentos.map((o) => (o.id === orcId ? { ...o, [field]: value } : o)),
     )
+  }
+
+  const handleSearchProduct = (orcId: string, itemId: string) => {
+    setSearchTarget({ orcId, itemId })
+    setIsProductSearchOpen(true)
+  }
+
+  const handleProductConfirm = (products: ProductSearchItem[]) => {
+    if (products.length === 0 || !searchTarget) {
+      setIsProductSearchOpen(false)
+      setSearchTarget(null)
+      return
+    }
+
+    const p = products[0]
+    const { orcId, itemId } = searchTarget
+    const isProduto = p.source === 'produtos' && isValidUUID(p.id)
+
+    onChange(
+      orcamentos.map((o) => {
+        if (o.id !== orcId) return o
+        const itens = o.itens.map((i) => {
+          if (i.id !== itemId) return i
+          return {
+            ...i,
+            produto_id: isProduto ? p.id : null,
+            produto_info: isProduto
+              ? {
+                  codigo_produto: p.codigo_produto,
+                  referencia: p.referencia,
+                  nome: p.nome,
+                  sku: p.sku,
+                }
+              : null,
+            preco_unitario: p.preco_venda || p.valor_venda || i.preco_unitario,
+            descricao: isProduto ? '' : p.nome,
+          }
+        })
+        const valor_total = itens.reduce(
+          (s, i) => s + (i.quantidade || 0) * (i.preco_unitario || 0),
+          0,
+        )
+        return { ...o, itens, valor_total }
+      }),
+    )
+
+    if (products.length > 1) {
+      toast.info(
+        `${products.length - 1} produto(s) adicional(is) não foram adicionados.`,
+      )
+    }
+
+    setIsProductSearchOpen(false)
+    setSearchTarget(null)
   }
 
   return (
@@ -145,148 +164,17 @@ export function EditableBudgetItemsTable({
               </Select>
             </div>
           </div>
-          <div className="overflow-x-auto w-full">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-gray-500 border-b">
-                  <th className="py-2 pr-2 w-16">Circuito</th>
-                  <th className="py-2 px-1 w-20">Código</th>
-                  <th className="py-2 px-1 w-24">SKU</th>
-                  <th className="py-2 px-1 w-24">Referência</th>
-                  <th className="py-2 px-1 min-w-[200px]">Descrição</th>
-                  <th className="py-2 px-1 w-20">Qtd</th>
-                  <th className="py-2 px-1 w-28">Preço Unit.</th>
-                  <th className="py-2 px-1 w-28">Subtotal</th>
-                  <th className="py-2 px-1 w-20">Peça Nova</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orc.itens.map((item) => {
-                  const subtotal =
-                    (item.quantidade || 0) * (item.preco_unitario || 0)
-                  const meta = produtoMetaMap.get(item.id)
-                  return (
-                    <tr key={item.id} className="border-b last:border-0">
-                      <td className="py-2 pr-2">
-                        <Input
-                          type="text"
-                          maxLength={4}
-                          value={item.custom_id || ''}
-                          onChange={(e) =>
-                            updateItem(
-                              orc.id,
-                              item.id,
-                              'custom_id',
-                              formatCircuitIdInput(e.target.value),
-                            )
-                          }
-                          onBlur={(e) => {
-                            if (e.target.value) {
-                              updateItem(
-                                orc.id,
-                                item.id,
-                                'custom_id',
-                                formatCircuitId(e.target.value),
-                              )
-                            }
-                          }}
-                          className="h-8 w-14 text-center font-mono text-sm"
-                          placeholder="L01"
-                        />
-                      </td>
-                      <td className="py-2 px-1">
-                        {meta?.codigo_produto != null ? (
-                          <span className="font-mono font-bold text-primary text-sm bg-primary/5 px-1.5 py-0.5 rounded">
-                            {meta.codigo_produto}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-1">
-                        {meta?.sku ? (
-                          <span className="font-mono text-sm text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
-                            {meta.sku}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-1">
-                        {meta?.referencia ? (
-                          <span className="text-sm text-gray-600">
-                            {meta.referencia}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-1">
-                        <Input
-                          value={item.descricao || ''}
-                          onChange={(e) =>
-                            updateItem(
-                              orc.id,
-                              item.id,
-                              'descricao',
-                              e.target.value,
-                            )
-                          }
-                          className="h-8 min-w-[180px]"
-                          placeholder="Descrição..."
-                        />
-                      </td>
-                      <td className="py-2 px-1">
-                        <Input
-                          type="number"
-                          step="1"
-                          min="1"
-                          max="1000"
-                          value={item.quantidade}
-                          onChange={(e) =>
-                            updateItem(
-                              orc.id,
-                              item.id,
-                              'quantidade',
-                              Math.min(1000, parseInt(e.target.value) || 0),
-                            )
-                          }
-                          className="h-8 w-16 text-center"
-                        />
-                      </td>
-                      <td className="py-2 px-1">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.preco_unitario}
-                          onChange={(e) =>
-                            updateItem(
-                              orc.id,
-                              item.id,
-                              'preco_unitario',
-                              parseFloat(e.target.value) || 0,
-                            )
-                          }
-                          className="h-8 w-24 text-right"
-                        />
-                      </td>
-                      <td className="py-2 px-1 font-medium text-gray-900">
-                        {fmt(subtotal)}
-                      </td>
-                      <td className="py-2 px-1">
-                        <Checkbox
-                          checked={item.peca_nova}
-                          onCheckedChange={(v) =>
-                            updateItem(orc.id, item.id, 'peca_nova', v === true)
-                          }
-                        />
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {sortItemsByCircuitId(orc.itens).map((item, idx, arr) => (
+              <EditableItemCard
+                key={item.id}
+                item={item}
+                orcId={orc.id}
+                prevCustomId={idx > 0 ? arr[idx - 1].custom_id : null}
+                onUpdate={updateItem}
+                onSearchProduct={handleSearchProduct}
+              />
+            ))}
           </div>
           <div className="text-right">
             <span className="text-sm font-bold text-green-700">
@@ -295,6 +183,15 @@ export function EditableBudgetItemsTable({
           </div>
         </div>
       ))}
+
+      <ProductSearchModal
+        open={isProductSearchOpen}
+        onOpenChange={(v) => {
+          setIsProductSearchOpen(v)
+          if (!v) setSearchTarget(null)
+        }}
+        onConfirm={handleProductConfirm}
+      />
     </div>
   )
 }

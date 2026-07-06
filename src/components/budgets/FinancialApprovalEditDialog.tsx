@@ -76,15 +76,24 @@ export function FinancialApprovalEditDialog({
             numero: o.numero,
             forma_pagamento: o.forma_pagamento,
             valor_total: o.valor_total || 0,
-            itens: (o.orcamento_itens || []).map((i) => ({
+            itens: (o.orcamento_itens || []).map((i: any) => ({
               id: i.id,
+              produto_id: i.produto_id || null,
               descricao: i.descricao,
               quantidade: i.quantidade || 0,
               preco_unitario: i.preco_unitario || 0,
               desconto: i.desconto,
               custom_id: i.custom_id,
               ordem: i.ordem,
-              peca_nova: (i as any).peca_nova || false,
+              peca_nova: i.peca_nova || false,
+              produto_info: i.produto
+                ? {
+                    codigo_produto: i.produto.codigo_produto ?? null,
+                    referencia: i.produto.referencia ?? null,
+                    nome: i.produto.nome ?? null,
+                    sku: i.produto.sku ?? null,
+                  }
+                : null,
             })),
           })),
         )
@@ -142,7 +151,7 @@ export function FinancialApprovalEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="!max-w-none w-full max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-gray-900">
             <Pencil className="h-5 w-5 text-amber-600" />
@@ -235,7 +244,7 @@ export function FinancialApprovalEditDialog({
               </div>
             </div>
 
-            <div>
+            <div className="w-full !max-w-none">
               <p className="text-sm font-semibold text-gray-700 mb-2">
                 Itens do Orçamento
               </p>

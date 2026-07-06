@@ -83,8 +83,8 @@ export function BudgetItemCard({
 
       <div className="w-full bg-white p-3 rounded-xl border shadow-sm relative group transition-all hover:shadow-md">
         <div className="w-full flex flex-col lg:flex-row items-stretch lg:items-end gap-2">
-          {/* Circuito - Fixed 65px, max 4 chars */}
-          <div className="shrink-0 lg:w-[65px]">
+          {/* Circuito - Fixed 60px, max 4 chars */}
+          <div className="shrink-0 lg:w-[60px]">
             <FormField
               control={control}
               name={`itens.${index}.custom_id`}
@@ -209,8 +209,8 @@ export function BudgetItemCard({
             )}
           </div>
 
-          {/* Quantidade - Fixed 85px, max 4 digits */}
-          <div className="shrink-0 lg:w-[85px]">
+          {/* Quantidade - Fixed 80px, max 4 digits */}
+          <div className="shrink-0 lg:w-[80px]">
             <FormField
               control={control}
               name={`itens.${index}.quantidade`}
@@ -242,8 +242,8 @@ export function BudgetItemCard({
             />
           </div>
 
-          {/* Preço Unitário - Fixed 130px */}
-          <div className="shrink-0 lg:w-[130px]">
+          {/* Preço Unitário - Fixed 120px */}
+          <div className="shrink-0 lg:w-[120px]">
             <FormField
               control={control}
               name={`itens.${index}.preco_unitario`}
