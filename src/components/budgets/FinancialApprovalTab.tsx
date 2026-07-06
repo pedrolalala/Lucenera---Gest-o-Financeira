@@ -28,7 +28,7 @@ export function FinancialApprovalTab() {
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const pendingBudgets = useMemo(
-    () => budgets.filter((b: Budget) => b.status === 'aprovado_cliente'),
+    () => budgets.filter((b: Budget) => b.status === 'aprovado'),
     [budgets],
   )
 

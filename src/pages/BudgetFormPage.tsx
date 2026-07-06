@@ -158,7 +158,6 @@ const formSchema = z
 const STATUS_OPTIONS = [
   { value: 'enviado_cliente', label: 'Enviado ao Cliente' },
   { value: 'rascunho', label: 'Rascunho' },
-  { value: 'aprovado_cliente', label: 'Aprovado pelo Cliente' },
   { value: 'aprovado', label: 'Aprovado' },
   { value: 'recusado_cliente', label: 'Recusado pelo Cliente' },
   { value: 'recusado', label: 'Recusado' },

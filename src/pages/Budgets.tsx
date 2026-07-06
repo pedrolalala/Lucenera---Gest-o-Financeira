@@ -23,7 +23,6 @@ const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
   { label: 'Rascunho', value: 'rascunho' },
   { label: 'Enviado ao Cliente', value: 'enviado_cliente' },
-  { label: 'Aprovado pelo Cliente', value: 'aprovado_cliente' },
   { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
   { label: 'Aprovado', value: 'aprovado' },
   { label: 'Recusado', value: 'recusado' },

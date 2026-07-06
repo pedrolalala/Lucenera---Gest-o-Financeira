@@ -179,7 +179,7 @@ export function BudgetTableRow({
         isP0003 ? 'Aprovação bloqueada' : 'Erro ao aprovar orçamento',
         {
           description: isP0003
-            ? 'O orçamento deve estar aprovado pelo cliente antes da aprovação financeira.'
+            ? 'O orçamento deve estar aprovado pelo cliente antes do processamento financeiro.'
             : error.message,
           duration: 8000,
         },
@@ -293,11 +293,7 @@ export function BudgetTableRow({
               variant="outline"
               className={cn(getStatusBadgeClass(status))}
             >
-              {getStatusLabel(
-                normalizedStatus === 'aguardando_aprovacao'
-                  ? 'aguardando_aprovacao'
-                  : status,
-              )}
+              {getStatusLabel(status)}
             </Badge>
             {needsFinancialReview && (
               <Badge
@@ -388,7 +384,7 @@ export function BudgetTableRow({
               </Button>
             )}
 
-            {normalizedStatus === 'aprovado_cliente' && canApproveQuotes && (
+            {normalizedStatus === 'aprovado' && canApproveQuotes && (
               <Button
                 variant="ghost"
                 size="icon"
