@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, ShieldAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
@@ -13,8 +13,8 @@ export function ApprovalsTab() {
   const navigate = useNavigate()
   const [isSyncing, setIsSyncing] = useState(false)
 
-  const approvedBudgets = useMemo(() => {
-    return budgets.filter((b) => b.status === 'aprovado')
+  const financialApprovalBudgets = useMemo(() => {
+    return budgets.filter((b) => b.status === 'Aprovação Financeira')
   }, [budgets])
 
   const handleEdit = (budget: Budget) => {
@@ -28,7 +28,7 @@ export function ApprovalsTab() {
     let semFrete = 0
     let comErro = 0
     try {
-      for (const b of approvedBudgets) {
+      for (const b of financialApprovalBudgets) {
         if (!b.projeto_id) continue
         if (
           !Array.isArray(b.prazo_pagamento_dias) ||
@@ -89,6 +89,22 @@ export function ApprovalsTab() {
 
   return (
     <div className="animate-fade-in space-y-4">
+      <div className="rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 p-4 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="rounded-lg bg-amber-100 p-2 flex-shrink-0">
+            <ShieldAlert className="h-6 w-6 text-amber-600" />
+          </div>
+          <div>
+            <h3 className="font-bold text-amber-800 text-sm uppercase tracking-wide">
+              Aprovação Financeira
+            </h3>
+            <p className="text-sm text-amber-700 mt-1">
+              Orçamentos aprovados pelo cliente aguardando revisão financeira.
+              Sincronize para gerar itens, parcelas e boletos do projeto.
+            </p>
+          </div>
+        </div>
+      </div>
       <div className="flex justify-end">
         <Button
           onClick={handleSyncAll}
@@ -102,7 +118,7 @@ export function ApprovalsTab() {
           Sincronizar Pendências
         </Button>
       </div>
-      <BudgetsTable data={approvedBudgets} onEdit={handleEdit} />
+      <BudgetsTable data={financialApprovalBudgets} onEdit={handleEdit} />
     </div>
   )
 }
