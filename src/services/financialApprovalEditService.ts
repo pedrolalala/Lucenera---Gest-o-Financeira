@@ -110,19 +110,32 @@ export async function finalizeValidation(
       })
       .eq('id', orc.id)
 
+    const { data: existingItems } = await supabase
+      .from('orcamento_itens')
+      .select('id')
+      .eq('orcamento_id', orc.id)
+
+    const uiItemIds = new Set(orc.itens.map((i) => i.id))
+    const toDelete = (existingItems || [])
+      .filter((i: any) => !uiItemIds.has(i.id))
+      .map((i: any) => i.id)
+
+    if (toDelete.length > 0) {
+      await supabase.from('orcamento_itens').delete().in('id', toDelete)
+    }
+
     for (const item of orc.itens) {
-      await supabase
-        .from('orcamento_itens')
-        .update({
-          produto_id: item.produto_id || null,
-          quantidade: item.quantidade,
-          preco_unitario: item.preco_unitario,
-          desconto: item.desconto,
-          custom_id: item.custom_id ? formatCircuitId(item.custom_id) : null,
-          descricao: item.descricao,
-          peca_nova: item.peca_nova,
-        })
-        .eq('id', item.id)
+      await supabase.from('orcamento_itens').upsert({
+        id: item.id,
+        orcamento_id: orc.id,
+        produto_id: item.produto_id || null,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario,
+        desconto: item.desconto,
+        custom_id: item.custom_id ? formatCircuitId(item.custom_id) : null,
+        descricao: item.descricao,
+        peca_nova: item.peca_nova,
+      })
     }
   }
 

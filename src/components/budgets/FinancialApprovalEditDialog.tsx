@@ -18,6 +18,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2, AlertTriangle, Save, Pencil } from 'lucide-react'
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from '@/components/ui/card'
 import { toast } from 'sonner'
 import {
   fetchEditableProjectBudget,
@@ -244,15 +251,20 @@ export function FinancialApprovalEditDialog({
               </div>
             </div>
 
-            <div className="w-full !max-w-none">
-              <p className="text-sm font-semibold text-gray-700 mb-2">
-                Itens do Orçamento
-              </p>
-              <EditableBudgetItemsTable
-                orcamentos={orcamentos}
-                onChange={setOrcamentos}
-              />
-            </div>
+            <Card className="w-full !max-w-none">
+              <CardHeader>
+                <CardTitle>Itens do Orçamento</CardTitle>
+                <CardDescription>
+                  Produtos e quantidades que compõem o orçamento.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <EditableBudgetItemsTable
+                  orcamentos={orcamentos}
+                  onChange={setOrcamentos}
+                />
+              </CardContent>
+            </Card>
 
             {projectData.valor_total <= 0 && (
               <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">

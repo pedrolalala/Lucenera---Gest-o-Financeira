@@ -3,7 +3,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { ProductSelectButton } from '@/components/ProductSelectButton'
-import { PackageSearch } from 'lucide-react'
+import { PackageSearch, Trash2 } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 import type { EditableItemData } from '@/services/financialApprovalEditService'
@@ -19,6 +19,7 @@ interface EditableItemCardProps {
   prevCustomId?: string | null
   onUpdate: (orcId: string, itemId: string, field: string, value: any) => void
   onSearchProduct: (orcId: string, itemId: string) => void
+  onRemove?: (orcId: string, itemId: string) => void
 }
 
 export function EditableItemCard({
@@ -27,6 +28,7 @@ export function EditableItemCard({
   prevCustomId,
   onUpdate,
   onSearchProduct,
+  onRemove,
 }: EditableItemCardProps) {
   const q = Number(item.quantidade) || 0
   const p = Number(item.preco_unitario) || 0
@@ -232,6 +234,20 @@ export function EditableItemCard({
               />
             </div>
           </div>
+
+          {onRemove && (
+            <div className="shrink-0 flex items-end pb-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                onClick={() => onRemove(orcId, item.id)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

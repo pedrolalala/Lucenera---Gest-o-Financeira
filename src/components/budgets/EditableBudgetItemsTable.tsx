@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -46,6 +48,7 @@ export function EditableBudgetItemsTable({
     orcId: string
     itemId: string
   } | null>(null)
+  const [addTargetOrc, setAddTargetOrc] = useState<string | null>(null)
 
   const updateItem = (
     orcId: string,
@@ -76,40 +79,21 @@ export function EditableBudgetItemsTable({
 
   const handleSearchProduct = (orcId: string, itemId: string) => {
     setSearchTarget({ orcId, itemId })
+    setAddTargetOrc(null)
     setIsProductSearchOpen(true)
   }
 
-  const handleProductConfirm = (products: ProductSearchItem[]) => {
-    if (products.length === 0 || !searchTarget) {
-      setIsProductSearchOpen(false)
-      setSearchTarget(null)
-      return
-    }
+  const handleAddItem = (orcId: string) => {
+    setAddTargetOrc(orcId)
+    setSearchTarget(null)
+    setIsProductSearchOpen(true)
+  }
 
-    const p = products[0]
-    const { orcId, itemId } = searchTarget
-    const isProduto = p.source === 'produtos' && isValidUUID(p.id)
-
+  const handleRemoveItem = (orcId: string, itemId: string) => {
     onChange(
       orcamentos.map((o) => {
         if (o.id !== orcId) return o
-        const itens = o.itens.map((i) => {
-          if (i.id !== itemId) return i
-          return {
-            ...i,
-            produto_id: isProduto ? p.id : null,
-            produto_info: isProduto
-              ? {
-                  codigo_produto: p.codigo_produto,
-                  referencia: p.referencia,
-                  nome: p.nome,
-                  sku: p.sku,
-                }
-              : null,
-            preco_unitario: p.preco_venda || p.valor_venda || i.preco_unitario,
-            descricao: isProduto ? '' : p.nome,
-          }
-        })
+        const itens = o.itens.filter((i) => i.id !== itemId)
         const valor_total = itens.reduce(
           (s, i) => s + (i.quantidade || 0) * (i.preco_unitario || 0),
           0,
@@ -117,6 +101,76 @@ export function EditableBudgetItemsTable({
         return { ...o, itens, valor_total }
       }),
     )
+  }
+
+  const handleProductConfirm = (products: ProductSearchItem[]) => {
+    if (products.length === 0 || (!searchTarget && !addTargetOrc)) {
+      setIsProductSearchOpen(false)
+      setSearchTarget(null)
+      setAddTargetOrc(null)
+      return
+    }
+
+    const p = products[0]
+    const isProduto = p.source === 'produtos' && isValidUUID(p.id)
+    const preco = p.preco_venda || p.valor_venda || 0
+    const produtoInfo = isProduto
+      ? {
+          codigo_produto: p.codigo_produto,
+          referencia: p.referencia,
+          nome: p.nome,
+          sku: p.sku,
+        }
+      : null
+
+    if (searchTarget) {
+      const { orcId, itemId } = searchTarget
+      onChange(
+        orcamentos.map((o) => {
+          if (o.id !== orcId) return o
+          const itens = o.itens.map((i) =>
+            i.id === itemId
+              ? {
+                  ...i,
+                  produto_id: isProduto ? p.id : null,
+                  produto_info: produtoInfo,
+                  preco_unitario: preco || i.preco_unitario,
+                  descricao: isProduto ? '' : p.nome,
+                }
+              : i,
+          )
+          const valor_total = itens.reduce(
+            (s, i) => s + (i.quantidade || 0) * (i.preco_unitario || 0),
+            0,
+          )
+          return { ...o, itens, valor_total }
+        }),
+      )
+    } else if (addTargetOrc) {
+      const newItem = {
+        id: crypto.randomUUID(),
+        produto_id: isProduto ? p.id : null,
+        descricao: isProduto ? '' : p.nome,
+        quantidade: 1,
+        preco_unitario: preco,
+        desconto: 0,
+        custom_id: '',
+        ordem: null,
+        peca_nova: false,
+        produto_info: produtoInfo,
+      }
+      onChange(
+        orcamentos.map((o) => {
+          if (o.id !== addTargetOrc) return o
+          const itens = [...o.itens, newItem]
+          const valor_total = itens.reduce(
+            (s, i) => s + (i.quantidade || 0) * (i.preco_unitario || 0),
+            0,
+          )
+          return { ...o, itens, valor_total }
+        }),
+      )
+    }
 
     if (products.length > 1) {
       toast.info(
@@ -126,6 +180,7 @@ export function EditableBudgetItemsTable({
 
     setIsProductSearchOpen(false)
     setSearchTarget(null)
+    setAddTargetOrc(null)
   }
 
   return (
@@ -173,10 +228,19 @@ export function EditableBudgetItemsTable({
                 prevCustomId={idx > 0 ? arr[idx - 1].custom_id : null}
                 onUpdate={updateItem}
                 onSearchProduct={handleSearchProduct}
+                onRemove={handleRemoveItem}
               />
             ))}
           </div>
-          <div className="text-right">
+          <div className="flex items-center justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleAddItem(orc.id)}
+            >
+              <Plus className="w-4 h-4 mr-1" /> Adicionar Item
+            </Button>
             <span className="text-sm font-bold text-green-700">
               Total: {fmt(orc.valor_total)}
             </span>
@@ -188,7 +252,10 @@ export function EditableBudgetItemsTable({
         open={isProductSearchOpen}
         onOpenChange={(v) => {
           setIsProductSearchOpen(v)
-          if (!v) setSearchTarget(null)
+          if (!v) {
+            setSearchTarget(null)
+            setAddTargetOrc(null)
+          }
         }}
         onConfirm={handleProductConfirm}
       />
