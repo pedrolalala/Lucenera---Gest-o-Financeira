@@ -83,7 +83,7 @@ const formSchema = z
       .min(1, 'Selecione um cliente'),
     arquiteto_id: z.string().optional().nullable(),
     vendedor_id: z.string().optional().nullable(),
-    status: z.string().default('enviado_cliente'),
+    status: z.string().default('rascunho'),
     data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
     desconto_global: z.coerce
       .number()
@@ -156,8 +156,8 @@ const formSchema = z
   })
 
 const STATUS_OPTIONS = [
-  { value: 'enviado_cliente', label: 'Enviado ao Cliente' },
   { value: 'rascunho', label: 'Rascunho' },
+  { value: 'enviado_cliente', label: 'Enviado ao Cliente' },
   { value: 'aprovado', label: 'Aprovado' },
   { value: 'recusado_cliente', label: 'Recusado pelo Cliente' },
   { value: 'recusado', label: 'Recusado' },
@@ -212,7 +212,7 @@ export default function BudgetFormPage() {
       cliente_id: '',
       arquiteto_id: 'none',
       vendedor_id: 'none',
-      status: 'enviado_cliente',
+      status: 'rascunho',
       data_emissao: new Date(),
       desconto_global: 0,
       forma_pagamento: '',
@@ -576,7 +576,7 @@ export default function BudgetFormPage() {
         arquiteto_id:
           values.arquiteto_id === 'none' ? null : values.arquiteto_id,
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
-        status: values.status,
+        status: isEditing ? values.status : 'rascunho',
         desconto_global: values.desconto_global ?? 0,
         forma_pagamento: values.forma_pagamento || null,
         prazo_inicio_cobranca_dias: prazoDias,
@@ -601,10 +601,13 @@ export default function BudgetFormPage() {
         try {
           const { data: newBudget } = await supabase
             .from('orcamentos')
-            .select('token_aprovacao_cliente')
+            .select('token_aprovacao_cliente, status')
             .eq('id', newBudgetId)
             .single()
-          if (newBudget?.token_aprovacao_cliente) {
+          if (
+            newBudget?.status === 'enviado_cliente' &&
+            newBudget?.token_aprovacao_cliente
+          ) {
             const link = buildClientApprovalLink(
               newBudgetId,
               newBudget.token_aprovacao_cliente,
@@ -618,7 +621,11 @@ export default function BudgetFormPage() {
               },
             )
           } else {
-            toast.success('Orçamento criado com sucesso!')
+            toast.info('Orçamento salvo como rascunho.', {
+              description:
+                'Preencha a forma de pagamento e os campos obrigatórios para enviá-lo ao cliente.',
+              duration: 6000,
+            })
           }
         } catch (err: any) {
           toast.success('Orçamento criado com sucesso!')
@@ -1025,34 +1032,43 @@ export default function BudgetFormPage() {
                   </div>
                 )}
 
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {STATUS_OPTIONS.map((s) => (
-                            <SelectItem key={s.value} value={s.value}>
-                              {s.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {isEditing ? (
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((s) => (
+                              <SelectItem key={s.value} value={s.value}>
+                                {s.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <div className="flex items-center h-10 px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">
+                      Rascunho (definido automaticamente)
+                    </div>
+                  </FormItem>
+                )}
 
                 <FormField
                   control={form.control}
