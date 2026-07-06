@@ -75,7 +75,12 @@ export interface Budget {
   token_aprovacao_cliente: string | null
   created_at: string
   empresa?: { nome: string }
-  cliente?: { nome: string; razao_social?: string | null }
+  cliente?: {
+    nome: string
+    razao_social?: string | null
+    email?: string | null
+    nome_empresa?: string | null
+  }
   arquiteto?: { nome: string }
   vendedor?: { nome: string }
   projeto?: { nome: string; codigo: string }
@@ -130,7 +135,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     let query = supabase.from('orcamentos').select(`
       *,
       empresa:empresas(nome),
-      cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social),
+      cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social, email, nome_empresa),
       arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
       projeto:projetos(nome, codigo),
       itens:orcamento_itens(
