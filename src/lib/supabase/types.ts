@@ -7353,6 +7353,14 @@ export type Database = {
         Args: { p_orcamento_id: string }
         Returns: Json
       }
+      aprovar_orcamento_cliente_manual: {
+        Args: { p_orcamento_id: string }
+        Returns: Json
+      }
+      aprovar_orcamento_cliente_publico: {
+        Args: { p_orcamento_id: string; p_token: string }
+        Returns: Json
+      }
       aprovar_orcamento_financeiro: {
         Args: { p_orcamento_id: string }
         Returns: Json
@@ -7388,6 +7396,7 @@ export type Database = {
         Returns: Json
       }
       fn_gerar_numero_orcamento: { Args: never; Returns: string }
+      gen_token_hex: { Args: never; Returns: string }
       generate_product_slug: {
         Args: { nome: string; preco: number }
         Returns: string
