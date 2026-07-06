@@ -19,12 +19,9 @@ export interface ValidationResult {
 
 export function validateBudget(budget: any): ValidationResult {
   const issues: string[] = []
-  if (
-    budget.status !== 'Aprovação Financeira' &&
-    budget.status !== 'aprovado' &&
-    budget.status !== 'aprovado_financeiro'
-  )
-    issues.push('Orçamento não foi aprovado pelo cliente')
+  if (budget.status !== 'Aprovação Financeira') {
+    issues.push('Orçamento não está na fila de aprovação financeira')
+  }
   if (!budget.cliente_id) issues.push('Cliente não vinculado')
   if (!budget.empresa_id) issues.push('Empresa não vinculada')
   if (!budget.frete_tipo) issues.push('Frete não estruturado')

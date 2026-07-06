@@ -9,7 +9,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ProductSelectButton } from '@/components/ProductSelectButton'
-import { Trash2, PackageSearch } from 'lucide-react'
+import { Trash2, PackageSearch, PackagePlus } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 
@@ -25,6 +25,7 @@ interface BudgetItemCardProps {
   fieldId: string
   onRemove: (index: number) => void
   onSearchProduct: (index: number) => void
+  onCreateProduct?: (index: number) => void
   getProductInfo: (produtoId: string | null | undefined) => ProductMeta | null
 }
 
@@ -38,6 +39,7 @@ export function BudgetItemCard({
   fieldId,
   onRemove,
   onSearchProduct,
+  onCreateProduct,
   getProductInfo,
 }: BudgetItemCardProps) {
   const { control } = useFormContext()
@@ -204,6 +206,16 @@ export function BudgetItemCard({
                         className="shrink-0 h-9 w-9"
                       >
                         <PackageSearch className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => onCreateProduct?.(index)}
+                        title="Criar novo produto"
+                        className="shrink-0 h-9 w-9"
+                      >
+                        <PackagePlus className="w-4 h-4" />
                       </Button>
                     </div>
                     <FormMessage />
