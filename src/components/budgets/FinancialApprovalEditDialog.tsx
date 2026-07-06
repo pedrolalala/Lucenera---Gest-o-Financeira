@@ -158,7 +158,7 @@ export function FinancialApprovalEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-none w-full max-h-[90vh] overflow-y-auto">
+      <DialogContent className="!max-w-none w-full sm:w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-gray-900">
             <Pencil className="h-5 w-5 text-amber-600" />

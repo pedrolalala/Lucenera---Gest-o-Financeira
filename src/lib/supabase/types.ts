@@ -1644,6 +1644,7 @@ export type Database = {
           data_demissao: string | null
           data_elegibilidade_ferias: string | null
           departamento_id: string | null
+          email: string | null
           empresa: string | null
           empresa_id: string | null
           id: string
@@ -1662,6 +1663,7 @@ export type Database = {
           data_demissao?: string | null
           data_elegibilidade_ferias?: string | null
           departamento_id?: string | null
+          email?: string | null
           empresa?: string | null
           empresa_id?: string | null
           id?: string
@@ -1680,6 +1682,7 @@ export type Database = {
           data_demissao?: string | null
           data_elegibilidade_ferias?: string | null
           departamento_id?: string | null
+          email?: string | null
           empresa?: string | null
           empresa_id?: string | null
           id?: string
@@ -7398,6 +7401,8 @@ export type Database = {
         }
         Returns: string
       }
+      current_user_funcionario_id: { Args: never; Returns: string }
+      current_user_is_funcionario: { Args: never; Returns: boolean }
       enviar_orcamento_para_cliente: {
         Args: { p_orcamento_id: string }
         Returns: Json
@@ -7456,6 +7461,7 @@ export type Database = {
         Returns: number
       }
       get_latest_transaction_id: { Args: never; Returns: string }
+      get_my_funcionario_id: { Args: never; Returns: string }
       get_next_sku: { Args: { prefix: string }; Returns: string }
       get_user_role: { Args: never; Returns: string }
       get_vendedores: {
@@ -7469,6 +7475,7 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_ubiqua_admin: { Args: never; Returns: boolean }
       limpar_staging_processados: { Args: never; Returns: number }
+      link_my_funcionario_record: { Args: never; Returns: undefined }
       replace_orcamento_itens: {
         Args: { p_items: Json; p_orcamento_id: string }
         Returns: number

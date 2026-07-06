@@ -74,7 +74,10 @@ export function BudgetItemCard({
       {isNewGroup && currentCircuit && (
         <div className="flex items-center gap-2 mt-4 mb-2 first:mt-0 animate-fade-in">
           <div className="h-px bg-primary/20 flex-1" />
-          <span className="text-xs font-bold uppercase text-primary px-3 py-0.5 rounded-full bg-primary/10">
+          <span
+            title="Luminária"
+            className="text-xs font-bold uppercase text-primary px-3 py-0.5 rounded-full bg-primary/10"
+          >
             {currentCircuit}
           </span>
           <div className="h-px bg-primary/20 flex-1" />
@@ -91,12 +94,13 @@ export function BudgetItemCard({
               render={({ field: f }) => (
                 <FormItem>
                   <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
-                    Circuito
+                    Luminária
                   </FormLabel>
                   <FormControl>
                     <Input
                       placeholder="L01"
                       maxLength={4}
+                      title="Identificador da Luminária (ex: L01)"
                       value={f.value || ''}
                       onChange={(e) =>
                         f.onChange(formatCircuitIdInput(e.target.value))

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/client'
 import { ProjectFinancialDetail } from '@/services/projectFinancialApprovalService'
-import { formatCircuitId } from '@/lib/utils'
+import { formatCircuitId, extractCircuitNumber } from '@/lib/utils'
 
 export interface ProdutoInfo {
   codigo_produto: number | null
@@ -133,6 +133,7 @@ export async function finalizeValidation(
         preco_unitario: item.preco_unitario,
         desconto: item.desconto,
         custom_id: item.custom_id ? formatCircuitId(item.custom_id) : null,
+        ordem: item.custom_id ? extractCircuitNumber(item.custom_id) : null,
         descricao: item.descricao,
         peca_nova: item.peca_nova,
       })
