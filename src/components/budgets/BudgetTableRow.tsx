@@ -360,6 +360,22 @@ export function BudgetTableRow({
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                    title="Reenviar ao Cliente (regenerar token)"
+                    onClick={handleEnviarCliente}
+                    disabled={isSending}
+                  >
+                    {isSending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+                {canManageClient && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
                     title="Aprovar Manualmente"
                     onClick={handleAprovarManualmente}

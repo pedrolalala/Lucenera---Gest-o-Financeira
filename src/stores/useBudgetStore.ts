@@ -104,7 +104,7 @@ interface BudgetState {
       'id' | 'created_at' | 'empresa' | 'cliente' | 'arquiteto' | 'itens'
     >,
     items: BudgetItem[],
-  ) => Promise<void>
+  ) => Promise<string>
   updateBudget: (
     id: string,
     budget: Partial<Budget>,
@@ -229,6 +229,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     }
 
     await get().fetchBudgets()
+
+    return data.id
   },
 
   updateBudget: async (id, budget, items) => {

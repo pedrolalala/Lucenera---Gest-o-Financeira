@@ -23,6 +23,7 @@ import {
   sortItemsByCircuitId,
 } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
+import { buildClientApprovalLink } from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
@@ -82,7 +83,7 @@ const formSchema = z
       .min(1, 'Selecione um cliente'),
     arquiteto_id: z.string().optional().nullable(),
     vendedor_id: z.string().optional().nullable(),
-    status: z.string().default('Aguardando Aprovação'),
+    status: z.string().default('enviado_cliente'),
     data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
     desconto_global: z.coerce
       .number()
@@ -155,11 +156,13 @@ const formSchema = z
   })
 
 const STATUS_OPTIONS = [
-  'Aguardando Aprovação',
-  'Rascunho',
-  'Aprovado',
-  'Recusado',
-  'Expirado',
+  { value: 'enviado_cliente', label: 'Enviado ao Cliente' },
+  { value: 'rascunho', label: 'Rascunho' },
+  { value: 'aprovado_cliente', label: 'Aprovado pelo Cliente' },
+  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'recusado_cliente', label: 'Recusado pelo Cliente' },
+  { value: 'recusado', label: 'Recusado' },
+  { value: 'expirado', label: 'Expirado' },
 ]
 
 export default function BudgetFormPage() {
@@ -167,7 +170,13 @@ export default function BudgetFormPage() {
   const navigate = useNavigate()
   const isEditing = Boolean(id)
 
-  const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
+  const {
+    addBudget,
+    updateBudget,
+    budgets,
+    fetchBudgets,
+    enviarOrcamentoCliente,
+  } = useBudgetStore()
   const [isBatchImportOpen, setIsBatchImportOpen] = useState(false)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
@@ -210,7 +219,7 @@ export default function BudgetFormPage() {
       cliente_id: '',
       arquiteto_id: 'none',
       vendedor_id: 'none',
-      status: 'Aguardando Aprovação',
+      status: 'enviado_cliente',
       data_emissao: new Date(),
       desconto_global: 0,
       forma_pagamento: '',
@@ -309,7 +318,7 @@ export default function BudgetFormPage() {
             cliente_id: budget.cliente_id || '',
             arquiteto_id: budget.arquiteto_id || 'none',
             vendedor_id: budget.vendedor_id || 'none',
-            status: budget.status || 'Aguardando Aprovação',
+            status: budget.status || 'enviado_cliente',
             desconto_global: budget.desconto_global ?? 0,
             forma_pagamento: budget.forma_pagamento || '',
             parcelas: parsedParcelas,
@@ -595,8 +604,27 @@ export default function BudgetFormPage() {
         await updateBudget(budgetToEdit.id, payload, values.itens)
         toast.success('Orçamento atualizado com sucesso')
       } else {
-        await addBudget(payload, values.itens)
-        toast.success('Orçamento criado com sucesso')
+        const newBudgetId = await addBudget(payload, values.itens)
+        try {
+          const result = await enviarOrcamentoCliente(newBudgetId)
+          const link = buildClientApprovalLink(newBudgetId, result.token)
+          await navigator.clipboard.writeText(link)
+          toast.success(
+            'Orçamento criado e enviado ao cliente! Link copiado.',
+            {
+              description: link,
+              duration: 8000,
+            },
+          )
+        } catch (err: any) {
+          toast.warning(
+            'Orçamento criado, mas falha ao gerar link de aprovação.',
+            {
+              description:
+                err?.message || 'Você pode reenviar pelo painel de orçamentos.',
+            },
+          )
+        }
       }
 
       // Update store budgets list so table is updated without hard refresh
@@ -747,7 +775,7 @@ export default function BudgetFormPage() {
       cliente_id: clienteId,
       arquiteto_id: arquitetoId || 'none',
       vendedor_id: vendedorId || 'none',
-      status: results.find((r) => r.status)?.status || 'Aguardando Aprovação',
+      status: results.find((r) => r.status)?.status || 'enviado_cliente',
       desconto_global:
         results.find((r) => r.desconto_global)?.desconto_global || 0,
       forma_pagamento: formaPgto,
@@ -1017,8 +1045,8 @@ export default function BudgetFormPage() {
                         </FormControl>
                         <SelectContent>
                           {STATUS_OPTIONS.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
+                            <SelectItem key={s.value} value={s.value}>
+                              {s.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
