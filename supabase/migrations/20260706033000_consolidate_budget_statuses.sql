@@ -3,8 +3,17 @@
 -- aprovado_cliente → aprovado
 -- Also update aguardando_cliente → enviado_cliente for safety
 
--- 0. Ensure pgcrypto extension is available for gen_random_bytes
+-- 0. Ensure pgcrypto extension is available
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Helper to generate a random hex token without relying on gen_random_bytes
+CREATE OR REPLACE FUNCTION public.gen_token_hex()
+RETURNS text
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT md5(gen_random_uuid()::text) || md5(gen_random_uuid()::text);
+$$;
 
 -- 1. Data migration: update existing records
 UPDATE public.orcamentos SET status = 'enviado_cliente' WHERE status = 'aguardando_aprovacao';
@@ -29,7 +38,7 @@ BEGIN
 
   -- Auto-generate token when status is enviado_cliente and no token exists
   IF (NEW.status = 'enviado_cliente' AND NEW.token_aprovacao_cliente IS NULL) THEN
-    NEW.token_aprovacao_cliente := encode(gen_random_bytes(32), 'hex');
+    NEW.token_aprovacao_cliente := public.gen_token_hex();
     IF NEW.enviado_cliente_em IS NULL THEN
       NEW.enviado_cliente_em := now();
     END IF;
@@ -58,7 +67,7 @@ BEGIN
       ) INTO v_has_items;
       IF v_has_items THEN
         NEW.status := 'enviado_cliente';
-        NEW.token_aprovacao_cliente := encode(gen_random_bytes(32), 'hex');
+        NEW.token_aprovacao_cliente := public.gen_token_hex();
         NEW.enviado_cliente_em := COALESCE(NEW.enviado_cliente_em, now());
         NEW.enviado_cliente_por := COALESCE(NEW.enviado_cliente_por, auth.uid());
       END IF;
