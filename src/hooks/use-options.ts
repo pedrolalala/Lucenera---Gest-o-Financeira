@@ -64,7 +64,9 @@ export function useOptions() {
               .limit(10000),
             supabase
               .from('produtos')
-              .select('id, nome, preco_venda, sku, referencia, codigo_legado')
+              .select(
+                'id, nome, preco_venda, sku, referencia, codigo_legado, codigo_produto',
+              )
               .limit(50000)
               .order('nome'),
             supabase

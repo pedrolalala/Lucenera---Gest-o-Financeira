@@ -69,7 +69,7 @@ type SortKey =
   | 'estoque_disponivel'
 type SortDir = 'asc' | 'desc'
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 100
 
 const FMT = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
