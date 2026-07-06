@@ -9,7 +9,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ProductSelectButton } from '@/components/ProductSelectButton'
-import { Trash2, PackageSearch, Barcode, Tag } from 'lucide-react'
+import { Trash2, PackageSearch } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 
@@ -51,7 +51,6 @@ export function BudgetItemCard({
     name: `itens.${index}.preco_unitario`,
   })
   const desconto = useWatch({ control, name: `itens.${index}.desconto` })
-  const descricao = useWatch({ control, name: `itens.${index}.descricao` })
   const prevCustomId =
     useWatch({
       control,
@@ -84,8 +83,8 @@ export function BudgetItemCard({
 
       <div className="w-full bg-white p-3 rounded-xl border shadow-sm relative group transition-all hover:shadow-md">
         <div className="w-full flex flex-col lg:flex-row items-stretch lg:items-end gap-2">
-          {/* Circuito - X-Small */}
-          <div className="shrink-0 lg:w-16">
+          {/* Circuito - Fixed 65px, max 4 chars */}
+          <div className="shrink-0 lg:w-[65px]">
             <FormField
               control={control}
               name={`itens.${index}.custom_id`}
@@ -118,44 +117,41 @@ export function BudgetItemCard({
             />
           </div>
 
-          {/* Technical Codes - High Visibility */}
-          {hasProduct && productInfo && (
-            <div className="flex shrink-0 gap-2 items-end pb-1">
-              {productInfo.codigo_produto != null && (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-bold uppercase text-gray-400 flex items-center gap-0.5">
-                    <Barcode className="w-2.5 h-2.5" /> Código
-                  </span>
-                  <span className="font-mono font-bold text-primary text-sm bg-primary/5 px-2 py-1 rounded-md min-w-[60px] text-center">
-                    {productInfo.codigo_produto}
-                  </span>
-                </div>
-              )}
-              {productInfo.sku && (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-bold uppercase text-gray-400 flex items-center gap-0.5">
-                    <Tag className="w-2.5 h-2.5" /> SKU
-                  </span>
-                  <span className="font-mono text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-md min-w-[60px] text-center">
-                    {productInfo.sku}
-                  </span>
-                </div>
-              )}
-              {productInfo.referencia &&
-                productInfo.referencia !== productInfo.sku && (
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] font-bold uppercase text-gray-400">
-                      Ref
-                    </span>
-                    <span className="text-xs text-muted-foreground bg-gray-50 px-2 py-1 rounded-md min-w-[50px] text-center">
-                      {productInfo.referencia}
-                    </span>
-                  </div>
-                )}
-            </div>
-          )}
+          {/* Código Produto - Read-only, from codigo_produto column */}
+          <div className="shrink-0 lg:w-[110px]">
+            <FormItem>
+              <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+                Código Produto
+              </FormLabel>
+              <Input
+                readOnly
+                value={
+                  productInfo?.codigo_produto != null
+                    ? String(productInfo.codigo_produto)
+                    : ''
+                }
+                placeholder="-"
+                className="bg-muted/40 font-mono text-sm font-bold text-primary h-9 cursor-default"
+              />
+            </FormItem>
+          </div>
 
-          {/* Descrição - Fluid (expands to fill remaining space) */}
+          {/* Código de Referência - Read-only, from sku column */}
+          <div className="shrink-0 lg:w-[130px]">
+            <FormItem>
+              <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+                Código de Referência
+              </FormLabel>
+              <Input
+                readOnly
+                value={productInfo?.sku || ''}
+                placeholder="-"
+                className="bg-muted/40 font-mono text-xs text-gray-600 h-9 cursor-default truncate"
+              />
+            </FormItem>
+          </div>
+
+          {/* Descrição - Flexible (flex: 1) */}
           <div className="flex-1 min-w-0">
             {hasProduct ? (
               <FormField
@@ -213,8 +209,8 @@ export function BudgetItemCard({
             )}
           </div>
 
-          {/* Quantidade - Small */}
-          <div className="shrink-0 lg:w-20">
+          {/* Quantidade - Fixed 85px, max 4 digits */}
+          <div className="shrink-0 lg:w-[85px]">
             <FormField
               control={control}
               name={`itens.${index}.quantidade`}
@@ -228,12 +224,13 @@ export function BudgetItemCard({
                       type="number"
                       step="1"
                       min="1"
-                      max="1000"
+                      max="9999"
                       {...f}
                       onChange={(e) => {
                         const val = e.target.value
+                        if (val.length > 4) return
                         f.onChange(
-                          val ? Math.min(1000, Math.floor(Number(val))) : '',
+                          val ? Math.min(9999, Math.floor(Number(val))) : '',
                         )
                       }}
                       className="text-sm h-9 text-center"
@@ -245,8 +242,8 @@ export function BudgetItemCard({
             />
           </div>
 
-          {/* Preço Unitário - Small/Medium */}
-          <div className="shrink-0 lg:w-28">
+          {/* Preço Unitário - Fixed 130px */}
+          <div className="shrink-0 lg:w-[130px]">
             <FormField
               control={control}
               name={`itens.${index}.preco_unitario`}
@@ -270,7 +267,7 @@ export function BudgetItemCard({
             />
           </div>
 
-          {/* Desconto - Small */}
+          {/* Desconto */}
           <div className="shrink-0 lg:w-20">
             <FormField
               control={control}
