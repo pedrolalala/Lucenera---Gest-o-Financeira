@@ -1,5 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Search, X, ShieldAlert, ShieldCheck, Eye, Lock } from 'lucide-react'
+import {
+  Search,
+  X,
+  ShieldAlert,
+  ShieldCheck,
+  Eye,
+  Lock,
+  Pencil,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +33,7 @@ import {
   ProjectForApproval,
 } from '@/services/projectFinancialApprovalService'
 import { ProjectFinancialReviewDialog } from '@/components/budgets/ProjectFinancialReviewDialog'
+import { FinancialApprovalEditDialog } from '@/components/budgets/FinancialApprovalEditDialog'
 
 export function FinancialApprovalTab() {
   const { role } = useAuth()
@@ -35,6 +44,10 @@ export function FinancialApprovalTab() {
   const [selectedProject, setSelectedProject] =
     useState<ProjectForApproval | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [editProject, setEditProject] = useState<ProjectForApproval | null>(
+    null,
+  )
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const canManage = role === 'admin' || role === 'gerente'
 
@@ -62,6 +75,18 @@ export function FinancialApprovalTab() {
   const handleReview = (project: ProjectForApproval) => {
     setSelectedProject(project)
     setDialogOpen(true)
+  }
+
+  const handleEdit = (project: ProjectForApproval) => {
+    setEditProject(project)
+    setEditDialogOpen(true)
+  }
+
+  const handleEditFinalized = () => {
+    setEditDialogOpen(false)
+    setEditProject(null)
+    loadProjects()
+    fetchBudgets()
   }
 
   const handleApproved = () => {
@@ -218,14 +243,26 @@ export function FinancialApprovalTab() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
-                          onClick={() => handleReview(project)}
-                        >
-                          <Eye className="h-4 w-4 mr-1" /> Revisar
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                            onClick={() => handleReview(project)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" /> Revisar
+                          </Button>
+                          {canManage && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-amber-600 hover:text-amber-800 hover:bg-amber-50"
+                              onClick={() => handleEdit(project)}
+                            >
+                              <Pencil className="h-4 w-4 mr-1" /> Editar
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -242,6 +279,12 @@ export function FinancialApprovalTab() {
         onOpenChange={setDialogOpen}
         canManage={canManage}
         onApproved={handleApproved}
+      />
+      <FinancialApprovalEditDialog
+        project={editProject}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onFinalized={handleEditFinalized}
       />
     </div>
   )

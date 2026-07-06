@@ -16,6 +16,8 @@ export interface ProjectForApproval {
   cidade: string | null
   estado: string | null
   data_entrada: string | null
+  valor_total: number | null
+  nivel_estrategico: string | null
   cliente: ProjectContact | null
   arquiteto: ProjectContact | null
 }
@@ -28,6 +30,7 @@ export interface OrcamentoItemDetail {
   desconto: number | null
   custom_id: string | null
   ordem: number | null
+  peca_nova: boolean | null
 }
 
 export interface OrcamentoDetail {
@@ -64,6 +67,8 @@ const PROJECT_SELECT = `
   cidade,
   estado,
   data_entrada,
+  valor_total,
+  nivel_estrategico,
   cliente:contatos!cliente_id(nome, email, nome_empresa, razao_social),
   arquiteto:contatos!arquiteto_id(nome, email, nome_empresa)
 `
@@ -145,7 +150,7 @@ export async function fetchProjectFinancialDetails(
       status,
       condicoes_pagamento,
       forma_pagamento,
-      orcamento_itens(id, descricao, quantidade, preco_unitario, desconto, custom_id, ordem)
+      orcamento_itens(id, descricao, quantidade, preco_unitario, desconto, custom_id, ordem, peca_nova)
       `,
     )
     .eq('projeto_id', projectId)
