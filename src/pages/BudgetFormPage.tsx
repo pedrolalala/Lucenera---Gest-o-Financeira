@@ -1042,8 +1042,13 @@ export default function BudgetFormPage() {
                             <SearchableSelect
                               options={clientes.map((c) => ({
                                 value: c.id,
-                                label: c.nome,
-                                searchTerms: [c.nome_empresa].filter(Boolean),
+                                label:
+                                  (c as any).razao_social?.trim() || c.nome,
+                                searchTerms: [
+                                  (c as any).razao_social,
+                                  c.nome,
+                                  c.nome_empresa,
+                                ].filter(Boolean) as string[],
                               }))}
                               value={field.value}
                               onChange={field.onChange}
