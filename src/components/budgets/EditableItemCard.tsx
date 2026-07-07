@@ -3,7 +3,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { ProductSelectButton } from '@/components/ProductSelectButton'
-import { PackageSearch, Trash2 } from 'lucide-react'
+import { PackageSearch, PackagePlus, Trash2 } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 import type { EditableItemData } from '@/services/financialApprovalEditService'
@@ -19,6 +19,7 @@ interface EditableItemCardProps {
   prevCustomId?: string | null
   onUpdate: (orcId: string, itemId: string, field: string, value: any) => void
   onSearchProduct: (orcId: string, itemId: string) => void
+  onCreateProduct?: (orcId: string, itemId: string) => void
   onRemove?: (orcId: string, itemId: string) => void
 }
 
@@ -28,6 +29,7 @@ export function EditableItemCard({
   prevCustomId,
   onUpdate,
   onSearchProduct,
+  onCreateProduct,
   onRemove,
 }: EditableItemCardProps) {
   const q = Number(item.quantidade) || 0
@@ -147,6 +149,16 @@ export function EditableItemCard({
                   className="shrink-0 h-9 w-9"
                 >
                   <PackageSearch className="w-4 h-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => onCreateProduct?.(orcId, item.id)}
+                  title="Criar novo produto"
+                  className="shrink-0 h-9 w-9"
+                >
+                  <PackagePlus className="w-4 h-4" />
                 </Button>
               </div>
             )}

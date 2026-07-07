@@ -28,7 +28,6 @@ import {
 import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { normalizeStatus, cn } from '@/lib/utils'
-import { isApprovedStatus } from '@/lib/budget-status'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
 import { FiscalSummaryDialog } from './FiscalSummaryDialog'
@@ -70,6 +69,8 @@ export function BudgetTableRow({
   const normalizedStatus = normalizeStatus(status)
   const canManageClient =
     role !== null && ['admin', 'gerente', 'operador'].includes(role)
+  const canApproveFinancial =
+    canApproveQuotes || role === 'admin' || role === 'gerente'
 
   const hasSpecialItemsWithoutPrice = budget.itens?.some(
     (i) => Number(i.preco_unitario) === 0,
@@ -164,15 +165,10 @@ export function BudgetTableRow({
       setIsApproving(true)
       const result = await approveBudgetAndMigrate(budget)
       setApprovalResult(result)
-      if (canApproveQuotes) {
+      if (canApproveFinancial) {
         setShowFinanceModal(true)
-        toast.success('Orçamento aprovado e enviado para o Financeiro.')
+        toast.success('Orçamento aprovado financeiramente.')
       }
-      window.open(
-        'https://retorno-bancario-bradesco-5392a.goskip.app/notas-fiscais',
-        '_blank',
-        'noopener,noreferrer',
-      )
     } catch (error: any) {
       const isP0003 =
         error?.code === 'P0003' || error?.message?.includes('P0003')
@@ -185,40 +181,6 @@ export function BudgetTableRow({
           duration: 8000,
         },
       )
-    } finally {
-      setIsApproving(false)
-    }
-  }
-
-  const handleSync = async () => {
-    if (
-      !Array.isArray(budget.prazo_pagamento_dias) ||
-      budget.prazo_pagamento_dias.length === 0
-    ) {
-      toast.error(
-        'Preencha o "Prazo para Início da Cobrança" antes de sincronizar.',
-        { duration: 8000 },
-      )
-      return
-    }
-    if (!budget.frete_tipo) {
-      toast.error('Informe "Com Frete" ou "Sem Frete" antes de sincronizar.', {
-        duration: 8000,
-      })
-      return
-    }
-    try {
-      setIsApproving(true)
-      const result = await approveBudgetAndMigrate(budget)
-      setApprovalResult(result)
-      if (canApproveQuotes) setShowFinanceModal(true)
-      toast.success(
-        result.ja_processado
-          ? 'Orçamento já estava sincronizado.'
-          : 'Sincronização concluída.',
-      )
-    } catch (error: any) {
-      toast.error('Erro ao sincronizar', { description: error.message })
     } finally {
       setIsApproving(false)
     }
@@ -385,9 +347,8 @@ export function BudgetTableRow({
               </Button>
             )}
 
-            {normalizedStatus === 'aprovado' &&
-              !isApprovedStatus(status) &&
-              canApproveQuotes && (
+            {normalizedStatus === 'aprovacao_financeira' &&
+              canApproveFinancial && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -415,21 +376,6 @@ export function BudgetTableRow({
                   )}
                 </Button>
               )}
-
-            {normalizedStatus === 'aprovado' && !isApprovedStatus(status) && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                title="Sincronizar Projetos/Financeiro"
-                onClick={handleSync}
-                disabled={isApproving}
-              >
-                <RefreshCw
-                  className={cn('h-4 w-4', isApproving && 'animate-spin')}
-                />
-              </Button>
-            )}
 
             <Button
               variant="ghost"

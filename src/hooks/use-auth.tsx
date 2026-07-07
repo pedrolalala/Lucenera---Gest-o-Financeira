@@ -9,6 +9,7 @@ import {
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/client'
 import { Role } from '@/lib/types'
+import { consumeCodeFromUrl } from '@/lib/cross-system-auth'
 
 interface AuthContextType {
   user: User | null
@@ -129,20 +130,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     })
 
     // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return
+    consumeCodeFromUrl('orcamentos').finally(() =>
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!mounted) return
 
-      setSession(session)
-      const newUser = session?.user ?? null
+        setSession(session)
+        const newUser = session?.user ?? null
 
-      if (newUser) {
-        // Loading is true by default, so we just set the ref
-        userIdRef.current = newUser.id
-      } else {
-        setLoading(false)
-      }
-      setUser(newUser)
-    })
+        if (newUser) {
+          // Loading is true by default, so we just set the ref
+          userIdRef.current = newUser.id
+        } else {
+          setLoading(false)
+        }
+        setUser(newUser)
+      }),
+    )
 
     return () => {
       mounted = false

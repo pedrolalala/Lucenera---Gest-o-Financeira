@@ -8,6 +8,9 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ApprovalResult, Budget } from '@/stores/useBudgetStore'
+import { redirectWithCode } from '@/lib/cross-system-auth'
+
+const FINANCEIRO_URL = 'https://retorno-bancario-bradesco-5392a.goskip.app'
 
 interface FinanceResultModalProps {
   budget: Budget
@@ -22,12 +25,14 @@ export function FinanceResultModal({
   open,
   onOpenChange,
 }: FinanceResultModalProps) {
-  const openFinanceRoute = () => {
-    window.open(
-      'https://retorno-bancario-bradesco-5392a.goskip.app/notas-fiscais',
-      '_blank',
-      'noopener,noreferrer',
-    )
+  const openFinanceRoute = async (route: string) => {
+    try {
+      await redirectWithCode(FINANCEIRO_URL, route, 'financeiro', {
+        newTab: true,
+      })
+    } catch {
+      window.open(`${FINANCEIRO_URL}${route}`, '_blank', 'noopener,noreferrer')
+    }
   }
 
   return (
@@ -64,10 +69,17 @@ export function FinanceResultModal({
           )}
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button type="button" variant="outline" onClick={openFinanceRoute}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void openFinanceRoute('/notas-fiscais')}
+          >
             Abrir Nota Fiscal
           </Button>
-          <Button type="button" onClick={openFinanceRoute}>
+          <Button
+            type="button"
+            onClick={() => void openFinanceRoute('/boletos')}
+          >
             Abrir Boletos
           </Button>
         </DialogFooter>

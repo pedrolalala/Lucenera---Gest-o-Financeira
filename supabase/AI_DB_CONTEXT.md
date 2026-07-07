@@ -24,6 +24,8 @@ Principais tabelas:
 - `contatos`
 - `empresas`
 - `produtos`
+- `marcas`
+- `categorias_produto`
 
 Views úteis:
 
@@ -36,6 +38,8 @@ Views úteis:
 RPCs/funções relevantes:
 
 - `aprovar_orcamento_financeiro(p_orcamento_id uuid)`
+- `criar_produto_orcamento(p_payload jsonb)`
+- `get_next_sku(prefix text)`
 - `_lucenera_parse_prazo_pagamento(...)`
 - `fn_gerar_numero_orcamento(...)`
 
@@ -95,7 +99,10 @@ RPCs/funções relevantes:
 - O fluxo aprovado usa `orcamento_id` como chave de rastreio.
 - Não usar `venda_id` no fluxo orçamento aprovado -> financeiro.
 - Ao aprovar orçamento, chamar a RPC `aprovar_orcamento_financeiro(p_orcamento_id uuid)`.
+- O contrato oficial de status é `enviado_cliente -> Aprovação Financeira -> Orçamento Aprovado`; `aprovado`, `aprovado_cliente` e `aprovado_financeiro` são legados/compatibilidade.
 - A RPC deve preparar itens aprovados, parcelas e boletos.
+- Cadastro de produto feito dentro de Orçamentos deve chamar `criar_produto_orcamento(p_payload jsonb)` e gravar em `public.produtos`, nunca em catálogo paralelo.
+- Produtos criados no orçamento devem ser vinculados ao item por `orcamento_itens.produto_id` e trazer snapshot visual de `codigo_produto`, `referencia`, `nome` e `sku` na UI.
 - O financeiro deve exibir orçamento, projeto e cliente por relacionamento a partir de `orcamento_id`.
 - Vencimentos vêm da forma de pagamento e prazo registrados no orçamento; o financeiro valida, não presume manualmente.
 - `orcamentos.empresa_id` aponta para `empresas.id`, ou seja, empresa do grupo Lucenera responsável pela operação. Não confundir com a empresa/PJ de um cliente, fornecedor ou arquiteto, que é representada como registro em `contatos` e pode ser vinculada por `contatos.empresa_id -> contatos.id`.
@@ -106,6 +113,17 @@ RPCs/funções relevantes:
 
 - Não reimplementar aprovação no frontend.
 - Não inserir diretamente em `projeto_itens`, `projeto_parcelas` ou `boletos` se o fluxo é aprovação de orçamento; use a RPC existente.
+- Não aprovar orçamento por `project_id`.
+- Não criar produto por `insert` direto em `produtos` no frontend; use a RPC canônica para preservar validações de permissão, `codigo_produto`, `sku`, marca e categoria.
 - Se a RPC retornar erro de schema, registre pendência de DB.
 - Se a tela precisa abrir modal financeiro, só exibir se houver permissão de acesso ao financeiro.
 - Se a demanda exigir alteração estrutural de banco, preencha `DB_CHANGE_REQUEST_TEMPLATE.md`.
+
+## SPEC-007 — SSO entre sistemas
+
+- Este app é origem ao abrir o Financeiro pelo modal pós-aprovação e destino quando o CRM abre `Gerar Orçamento`.
+- Usar `src/lib/cross-system-auth.ts`.
+- A migration `20260708_030_spec007_sso_cross_system` e as Edge Functions `generate-cross-system-code`/`exchange-cross-system-code` estão publicadas no Supabase remoto desde 2026-07-07; falta homologação com usuário real.
+- Como origem, chamar `redirectWithCode(destino, redirectTo, sistemaDestino)`.
+- Como destino, `AuthProvider` deve chamar `consumeCodeFromUrl('orcamentos')` antes de decidir que precisa mostrar login.
+- Não passar tokens Supabase crus em URL. O fluxo usa apenas `sso_code`, trocado pela Edge Function `exchange-cross-system-code`.

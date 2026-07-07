@@ -30,7 +30,7 @@ export function useOptions() {
   const fetchClientes = async () => {
     const { data } = await supabase
       .from('contatos')
-      .select('id, nome, nome_empresa, codigo_legado')
+      .select('id, nome, nome_empresa, codigo_legado, razao_social')
       .eq('tipo', 'cliente')
       .limit(50000)
       .order('codigo_legado', { ascending: false, nullsFirst: false })
@@ -46,7 +46,7 @@ export function useOptions() {
             supabase.from('empresas').select('id, nome').order('nome'),
             supabase
               .from('contatos')
-              .select('id, nome, nome_empresa, codigo_legado')
+              .select('id, nome, nome_empresa, codigo_legado, razao_social')
               .eq('tipo', 'cliente')
               .limit(50000)
               .order('codigo_legado', { ascending: false, nullsFirst: false })
