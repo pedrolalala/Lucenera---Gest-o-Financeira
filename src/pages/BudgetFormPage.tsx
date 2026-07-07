@@ -958,10 +958,10 @@ export default function BudgetFormPage() {
       setApprovalResult(result)
       setBudgetToEdit({
         ...budgetToEdit,
-        status: result.status || 'aprovado',
+        status: result.status || 'Orçamento Aprovado',
         requer_revisao_financeira: false,
       })
-      form.setValue('status', result.status || 'aprovado', {
+      form.setValue('status', result.status || 'Orçamento Aprovado', {
         shouldDirty: false,
       })
       toast.success('Orçamento aprovado financeiramente!', {
@@ -1006,7 +1006,7 @@ export default function BudgetFormPage() {
         </div>
         <div className="flex items-center gap-3">
           {isEditing &&
-            budgetToEdit?.status === 'pendente_aprovacao_financeira' &&
+            budgetToEdit?.status === 'Aprovação Financeira' &&
             (role === 'admin' || role === 'gerente') && (
               <Button
                 variant="default"

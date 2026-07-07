@@ -1,9 +1,9 @@
 export const CLIENT_APPROVAL_BASE_URL =
   'https://gestaofinanceiralucenera.goskip.app/aprovacao'
 
-export const FINANCIAL_APPROVAL_STATUS = 'pendente_aprovacao_financeira'
+export const FINANCIAL_APPROVAL_STATUS = 'Aprovação Financeira'
 
-export const APPROVED_STATUSES: string[] = ['aprovado']
+export const APPROVED_STATUSES: string[] = ['Orçamento Aprovado']
 
 export function isApprovedStatus(status: string | null | undefined): boolean {
   if (!status) return false
@@ -23,8 +23,8 @@ export function getStatusLabel(status: string | null | undefined): string {
     enviado_cliente: 'Enviado para o Cliente',
     recusado_cliente: 'Recusado pelo Cliente',
     expirado: 'Expirado',
-    pendente_aprovacao_financeira: 'Pendente Aprovação Financeira',
-    aprovado: 'Orçamento Aprovado',
+    'Aprovação Financeira': 'Pendente Aprovação Financeira',
+    'Orçamento Aprovado': 'Orçamento Aprovado',
   }
   return labels[status || ''] || status || 'Rascunho'
 }
@@ -35,9 +35,8 @@ export function getStatusBadgeClass(status: string | null | undefined): string {
     enviado_cliente: 'bg-blue-50 text-blue-700 border-blue-200',
     recusado_cliente: 'bg-red-50 text-red-700 border-red-200',
     expirado: 'bg-red-50 text-red-700 border-red-200',
-    pendente_aprovacao_financeira:
-      'bg-amber-50 text-amber-700 border-amber-300',
-    aprovado: 'bg-green-50 text-green-700 border-green-200',
+    'Aprovação Financeira': 'bg-amber-50 text-amber-700 border-amber-300',
+    'Orçamento Aprovado': 'bg-green-50 text-green-700 border-green-200',
   }
   return classes[status || ''] || 'bg-gray-50'
 }
@@ -59,5 +58,5 @@ export function isClientApprovalStatus(
 export function isFinancialApprovalStatus(
   status: string | null | undefined,
 ): boolean {
-  return status === 'pendente_aprovacao_financeira'
+  return status === 'Aprovação Financeira'
 }
