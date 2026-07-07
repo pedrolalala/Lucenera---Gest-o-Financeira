@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ShieldAlert } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -115,6 +115,9 @@ export function ClientCreateModal({
   const [vendedores, setVendedores] = useState<any[]>([])
   const { user, role } = useAuth()
 
+  const AUTHORIZED_ROLES = ['admin', 'gerente', 'operador']
+  const isWriteAllowed = AUTHORIZED_ROLES.includes(role || '')
+
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -162,14 +165,12 @@ export function ClientCreateModal({
 
   const watchTipoPessoa = form.watch('tipo_pessoa')
 
-  const AUTHORIZED_ROLES = ['admin', 'gerente', 'operador']
-
   async function onSubmit(values: z.infer<typeof schema>) {
     try {
       setIsSubmitting(true)
 
-      if (!role || !AUTHORIZED_ROLES.includes(role)) {
-        toast.error('Usuário sem permissão de escrita', {
+      if (!isWriteAllowed) {
+        toast.error('Você não tem permissão para cadastrar contatos.', {
           description:
             'Apenas administradores, gerentes ou operadores podem cadastrar contatos.',
         })
@@ -259,27 +260,42 @@ export function ClientCreateModal({
       if (error !== null) {
         if (
           error.code === '23505' ||
-          error.message.includes('uq_contatos_cpf_cnpj')
+          error.message.includes('uq_contatos_cpf_cnpj') ||
+          error.message.includes('codigo_legado')
         ) {
           form.setError('cpf_cnpj', {
-            message: 'Este CPF/CNPJ já está cadastrado',
+            message: 'Este CPF/CNPJ ou Código já está cadastrado.',
           })
-          toast.error('CPF/CNPJ já cadastrado no sistema', {
-            description: error.message,
+          toast.error('Este CPF/CNPJ ou Código já está cadastrado.', {
+            description: `[${error.code}] ${error.message}`,
+          })
+        } else if (
+          error.code === '42501' ||
+          error.message.toLowerCase().includes('permission') ||
+          error.message.toLowerCase().includes('policy')
+        ) {
+          toast.error('Permissão negada pelo banco de dados.', {
+            description: `[${error.code}] ${error.message}`,
           })
         } else {
           toast.error('Erro ao cadastrar contato', {
-            description: error.message,
+            description: `[${error.code || 'ERR'}] ${error.message}`,
           })
         }
         setIsSubmitting(false)
         return
       }
 
-      if (data && error === null) {
+      if (data && !error && data.id) {
         toast.success('Contato cadastrado com sucesso!')
         onSuccess(data)
         onOpenChange(false)
+      } else {
+        toast.error('Falha ao cadastrar contato.', {
+          description:
+            error?.message ||
+            'Nenhum registro foi retornado pelo servidor. Verifique os dados e tente novamente.',
+        })
       }
     } catch (error: any) {
       toast.error('Erro ao cadastrar contato', {
@@ -783,6 +799,12 @@ export function ClientCreateModal({
                 />
               </div>
             </ScrollArea>
+            {!isWriteAllowed && (
+              <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>Você não tem permissão para cadastrar contatos.</span>
+              </div>
+            )}
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button
                 type="button"
@@ -791,7 +813,15 @@ export function ClientCreateModal({
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                disabled={isSubmitting || !isWriteAllowed}
+                title={
+                  !isWriteAllowed
+                    ? 'Você não tem permissão para cadastrar contatos.'
+                    : undefined
+                }
+              >
                 {isSubmitting && (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 )}
