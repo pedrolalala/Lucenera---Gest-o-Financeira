@@ -27,7 +27,9 @@ export function FinanceResultModal({
 }: FinanceResultModalProps) {
   const openFinanceRoute = async (route: string) => {
     try {
-      await redirectWithCode(FINANCEIRO_URL, route, 'financeiro', { newTab: true })
+      await redirectWithCode(FINANCEIRO_URL, route, 'financeiro', {
+        newTab: true,
+      })
     } catch {
       window.open(`${FINANCEIRO_URL}${route}`, '_blank', 'noopener,noreferrer')
     }
@@ -67,10 +69,17 @@ export function FinanceResultModal({
           )}
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button type="button" variant="outline" onClick={() => void openFinanceRoute('/notas-fiscais')}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void openFinanceRoute('/notas-fiscais')}
+          >
             Abrir Nota Fiscal
           </Button>
-          <Button type="button" onClick={() => void openFinanceRoute('/boletos')}>
+          <Button
+            type="button"
+            onClick={() => void openFinanceRoute('/boletos')}
+          >
             Abrir Boletos
           </Button>
         </DialogFooter>

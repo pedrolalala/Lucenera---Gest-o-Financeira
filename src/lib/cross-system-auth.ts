@@ -24,18 +24,23 @@ export async function redirectWithCode(
   sistemaDestino?: string,
   options: RedirectOptions = {},
 ) {
-  const placeholder = options.newTab ? window.open('about:blank', '_blank', 'noopener,noreferrer') : null
+  const placeholder = options.newTab
+    ? window.open('about:blank', '_blank', 'noopener,noreferrer')
+    : null
 
   try {
     const destination = new URL(destinationBaseUrl, window.location.href)
     const redirectPath = safeRedirectPath(redirectTo)
-    const { data, error } = await supabase.functions.invoke('generate-cross-system-code', {
-      body: {
-        sistema_origem: 'orcamentos',
-        sistema_destino: sistemaDestino || destination.hostname,
-        redirect_to: redirectPath,
+    const { data, error } = await supabase.functions.invoke(
+      'generate-cross-system-code',
+      {
+        body: {
+          sistema_origem: 'orcamentos',
+          sistema_destino: sistemaDestino || destination.hostname,
+          redirect_to: redirectPath,
+        },
       },
-    })
+    )
 
     if (error) throw error
     if (!data?.code) throw new Error('Código SSO não retornado.')
@@ -52,14 +57,19 @@ export async function redirectWithCode(
   }
 }
 
-export async function consumeCodeFromUrl(sistemaDestino?: string): Promise<boolean> {
+export async function consumeCodeFromUrl(
+  sistemaDestino?: string,
+): Promise<boolean> {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('sso_code')
   if (!code) return false
 
-  const { data, error } = await supabase.functions.invoke('exchange-cross-system-code', {
-    body: { code, sistema_destino: sistemaDestino },
-  })
+  const { data, error } = await supabase.functions.invoke(
+    'exchange-cross-system-code',
+    {
+      body: { code, sistema_destino: sistemaDestino },
+    },
+  )
 
   if (error || !data) return false
 
@@ -80,6 +90,10 @@ export async function consumeCodeFromUrl(sistemaDestino?: string): Promise<boole
 
   const redirectTo = safeRedirectPath(data.redirect_to || '/')
   const next = new URL(redirectTo, window.location.origin)
-  window.history.replaceState({}, '', `${next.pathname}${next.search}${next.hash}`)
+  window.history.replaceState(
+    {},
+    '',
+    `${next.pathname}${next.search}${next.hash}`,
+  )
   return true
 }
