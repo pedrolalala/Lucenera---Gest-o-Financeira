@@ -15,8 +15,10 @@ import {
   ProductSearchModal,
   type ProductSearchItem,
 } from '@/components/budgets/ProductSearchModal'
+import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
 import { isValidUUID } from '@/lib/uuid'
 import { sortItemsByCircuitId } from '@/lib/utils'
+import type { ProductCatalogItem } from '@/services/productCatalogService'
 import { toast } from 'sonner'
 
 interface EditableBudgetItemsTableProps {
@@ -49,6 +51,11 @@ export function EditableBudgetItemsTable({
     itemId: string
   } | null>(null)
   const [addTargetOrc, setAddTargetOrc] = useState<string | null>(null)
+  const [isProductCreateOpen, setIsProductCreateOpen] = useState(false)
+  const [createTarget, setCreateTarget] = useState<{
+    orcId: string
+    itemId: string
+  } | null>(null)
 
   const updateItem = (
     orcId: string,
@@ -83,6 +90,11 @@ export function EditableBudgetItemsTable({
     setIsProductSearchOpen(true)
   }
 
+  const handleCreateProduct = (orcId: string, itemId: string) => {
+    setCreateTarget({ orcId, itemId })
+    setIsProductCreateOpen(true)
+  }
+
   const handleAddItem = (orcId: string) => {
     setAddTargetOrc(orcId)
     setSearchTarget(null)
@@ -101,6 +113,45 @@ export function EditableBudgetItemsTable({
         return { ...o, itens, valor_total }
       }),
     )
+  }
+
+  const handleProductCreateConfirm = (newProduct: ProductCatalogItem) => {
+    if (createTarget) {
+      const { orcId, itemId } = createTarget
+      onChange(
+        orcamentos.map((o) => {
+          if (o.id !== orcId) return o
+          const itens = o.itens.map((i) =>
+            i.id === itemId
+              ? {
+                  ...i,
+                  produto_id: newProduct.id,
+                  produto_info: {
+                    codigo_produto: newProduct.codigo_produto,
+                    referencia: newProduct.referencia,
+                    nome: newProduct.nome,
+                    sku: newProduct.sku,
+                  },
+                  preco_unitario:
+                    newProduct.valor_venda ||
+                    newProduct.preco_venda ||
+                    i.preco_unitario,
+                  descricao: '',
+                }
+              : i,
+          )
+          const valor_total = itens.reduce(
+            (s, i) => s + (i.quantidade || 0) * (i.preco_unitario || 0),
+            0,
+          )
+          return { ...o, itens, valor_total }
+        }),
+      )
+      toast.success('Produto criado e adicionado ao orçamento.')
+    }
+
+    setIsProductCreateOpen(false)
+    setCreateTarget(null)
   }
 
   const handleProductConfirm = (products: ProductSearchItem[]) => {
@@ -228,6 +279,7 @@ export function EditableBudgetItemsTable({
                 prevCustomId={idx > 0 ? arr[idx - 1].custom_id : null}
                 onUpdate={updateItem}
                 onSearchProduct={handleSearchProduct}
+                onCreateProduct={handleCreateProduct}
                 onRemove={handleRemoveItem}
               />
             ))}
@@ -258,6 +310,23 @@ export function EditableBudgetItemsTable({
           }
         }}
         onConfirm={handleProductConfirm}
+      />
+
+      <ProductCreateModal
+        open={isProductCreateOpen}
+        onOpenChange={(v) => {
+          setIsProductCreateOpen(v)
+          if (!v) setCreateTarget(null)
+        }}
+        onSuccess={handleProductCreateConfirm}
+        initialName={
+          createTarget
+            ? orcamentos
+                .find((orc) => orc.id === createTarget.orcId)
+                ?.itens.find((item) => item.id === createTarget.itemId)
+                ?.descricao || ''
+            : ''
+        }
       />
     </div>
   )

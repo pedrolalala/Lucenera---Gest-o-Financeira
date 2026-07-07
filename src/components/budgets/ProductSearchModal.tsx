@@ -37,11 +37,14 @@ import {
   ArrowUpDown,
   MapPin,
   Check,
+  PackagePlus,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useDebounce } from '@/hooks/use-debounce'
 import { Badge } from '@/components/ui/badge'
+import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
+import type { ProductCatalogItem } from '@/services/productCatalogService'
 
 export interface ProductSearchItem {
   id: string
@@ -161,10 +164,12 @@ export function ProductSearchModal({
   open,
   onOpenChange,
   onConfirm,
+  onProductCreated,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   onConfirm: (p: ProductSearchItem[]) => void
+  onProductCreated?: (p: ProductSearchItem) => void
 }) {
   const [search, setSearch] = useState('')
   const debounced = useDebounce(search, 300)
@@ -182,6 +187,7 @@ export function ProductSearchModal({
   const [selected, setSelected] = useState<
     Map<string, { product: ProductSearchItem; quantity: number }>
   >(new Map())
+  const [createOpen, setCreateOpen] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
@@ -461,6 +467,37 @@ export function ProductSearchModal({
     setSelected(new Map())
   }
 
+  const handleProductCreated = (product: ProductCatalogItem) => {
+    const created: ProductSearchItem = {
+      id: product.id,
+      nome: product.nome,
+      sku: product.sku || null,
+      referencia: product.referencia || null,
+      codigo_produto: product.codigo_produto ?? null,
+      preco_venda: product.preco_venda ?? null,
+      valor_venda: product.valor_venda ?? product.preco_venda ?? null,
+      estoque_total: 0,
+      estoque_disponivel: 0,
+      marca_nome:
+        brands.find((marca) => marca.id === product.marca_id)?.nome || null,
+      categoria_nome:
+        cats.find((categoria) => categoria.id === product.categoria_id)?.nome ||
+        null,
+      source: 'produtos',
+    }
+
+    setProducts((prev) => [
+      created,
+      ...prev.filter((item) => item.id !== created.id),
+    ])
+    setSelected((prev) => {
+      const next = new Map(prev)
+      next.set(created.id, { product: created, quantity: 1 })
+      return next
+    })
+    onProductCreated?.(created)
+  }
+
   const handleConfirm = () => {
     const chosen: ProductSearchItem[] = []
     selected.forEach(({ product, quantity }) => {
@@ -478,256 +515,283 @@ export function ProductSearchModal({
   )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] max-h-[95vh] w-[95vw] h-[95vh] p-0 gap-0 flex flex-col">
-        <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle>Buscar Produtos</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] w-[95vw] h-[95vh] p-0 gap-0 flex flex-col">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle>Buscar Produtos</DialogTitle>
+          </DialogHeader>
 
-        <div className="px-6 py-3 border-b flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, SKU ou referência..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Select value={brandFilter} onValueChange={setBrandFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Marca" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as marcas</SelectItem>
-              {brands.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={catFilter} onValueChange={setCatFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as categorias</SelectItem>
-              {cats.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div ref={scrollContainerRef} className="flex-1 overflow-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <div className="px-6 py-3 border-b flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome, SKU ou referência..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
             </div>
-          ) : (
-            <Table>
-              <TableHeader className="sticky top-0 bg-background z-10">
-                <TableRow>
-                  <TableHead className="w-20">
-                    <Checkbox
-                      checked={allSelected}
-                      onCheckedChange={toggleAll}
-                    />
-                  </TableHead>
-                  {COLS.map((col) => (
-                    <TableHead key={col.key}>
-                      <button
-                        type="button"
-                        onClick={() => handleSort(col.key)}
-                        className="flex items-center gap-1 hover:text-foreground"
-                      >
-                        {col.label}
-                        {sortKey === col.key ? (
-                          sortDir === 'asc' ? (
-                            <ArrowUp className="w-3 h-3" />
-                          ) : (
-                            <ArrowDown className="w-3 h-3" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 opacity-40" />
-                        )}
-                      </button>
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.length === 0 ? (
+            <Select value={brandFilter} onValueChange={setBrandFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Marca" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as marcas</SelectItem>
+                {brands.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={catFilter} onValueChange={setCatFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as categorias</SelectItem>
+                {cats.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCreateOpen(true)}
+              className="shrink-0"
+            >
+              <PackagePlus className="mr-2 h-4 w-4" />
+              Criar novo produto
+            </Button>
+          </div>
+
+          <div ref={scrollContainerRef} className="flex-1 overflow-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
-                    <TableCell
-                      colSpan={COLS.length + 1}
-                      className="text-center text-muted-foreground py-8"
-                    >
-                      Nenhum produto encontrado.
-                    </TableCell>
+                    <TableHead className="w-20">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={toggleAll}
+                      />
+                    </TableHead>
+                    {COLS.map((col) => (
+                      <TableHead key={col.key}>
+                        <button
+                          type="button"
+                          onClick={() => handleSort(col.key)}
+                          className="flex items-center gap-1 hover:text-foreground"
+                        >
+                          {col.label}
+                          {sortKey === col.key ? (
+                            sortDir === 'asc' ? (
+                              <ArrowUp className="w-3 h-3" />
+                            ) : (
+                              <ArrowDown className="w-3 h-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 opacity-40" />
+                          )}
+                        </button>
+                      </TableHead>
+                    ))}
                   </TableRow>
-                ) : (
-                  sorted.map((p) => (
-                    <TableRow
-                      key={p.id}
-                      data-state={selected.has(p.id) ? 'selected' : undefined}
-                      className={cn(
-                        selected.has(p.id) &&
-                          'bg-primary/10 border-l-4 border-l-primary',
-                      )}
-                    >
-                      <TableCell>
-                        <div className="flex flex-col items-center gap-1">
-                          <Checkbox
-                            checked={selected.has(p.id)}
-                            onCheckedChange={() => toggleSelect(p)}
-                          />
-                          {selected.has(p.id) && (
-                            <Input
-                              type="number"
-                              min="1"
-                              max="99"
-                              value={selected.get(p.id)?.quantity ?? 1}
-                              onChange={(e) =>
-                                updateQuantity(
-                                  p.id,
-                                  parseInt(e.target.value) || 1,
-                                )
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-14 h-7 text-xs text-center px-1"
-                              title="Número de linhas independentes para este SKU"
-                            />
-                          )}
+                </TableHeader>
+                <TableBody>
+                  {sorted.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={COLS.length + 1}
+                        className="text-center text-muted-foreground py-8"
+                      >
+                        <div className="flex flex-col items-center gap-3">
+                          <span>Nenhum produto encontrado.</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setCreateOpen(true)}
+                          >
+                            <PackagePlus className="mr-2 h-4 w-4" />
+                            Criar novo produto
+                          </Button>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono font-bold text-sm text-primary">
-                          {p.codigo_produto ?? '-'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-bold text-base text-gray-900">
-                          {p.sku || p.referencia || '-'}
-                        </div>
-                        {p.referencia && p.sku && p.referencia !== p.sku && (
-                          <div className="text-xs text-muted-foreground">
-                            Ref: {p.referencia}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-start gap-2">
-                          <div className="line-clamp-2 max-w-[200px] text-sm text-gray-600">
-                            {p.nome}
-                          </div>
-                          {selected.has(p.id) && (
-                            <Badge
-                              variant="default"
-                              className="shrink-0 text-[10px] px-1.5 py-0"
-                            >
-                              Selecionado
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-600">
-                        {p.marca_nome || '-'}
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-600">
-                        {p.categoria_nome || '-'}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {FMT.format(p.preco_venda || p.valor_venda || 0)}
-                      </TableCell>
-                      <TableCell>
-                        <HoverCard openDelay={300} closeDelay={200}>
-                          <HoverCardTrigger asChild>
-                            <span className="cursor-help font-semibold underline decoration-dotted">
-                              {p.estoque_total}
-                            </span>
-                          </HoverCardTrigger>
-                          <HoverCardContent className="w-64">
-                            <StockPopover productId={p.id} />
-                          </HoverCardContent>
-                        </HoverCard>
-                      </TableCell>
-                      <TableCell>
-                        <HoverCard openDelay={300} closeDelay={200}>
-                          <HoverCardTrigger asChild>
-                            <span
-                              className={cn(
-                                'cursor-help font-semibold underline decoration-dotted',
-                                p.estoque_disponivel <= 0 && 'text-red-600',
-                              )}
-                            >
-                              {p.estoque_disponivel}
-                            </span>
-                          </HoverCardTrigger>
-                          <HoverCardContent className="w-64">
-                            <StockPopover productId={p.id} />
-                          </HoverCardContent>
-                        </HoverCard>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-          <div ref={sentinelRef} className="h-1" />
-          {loadingMore && (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
-          )}
-          {!loading && !loadingMore && !hasMore && sorted.length > 0 && (
-            <div className="text-center py-4 text-sm text-muted-foreground">
-              Fim da lista — {sorted.length} produto(s) carregado(s)
-            </div>
-          )}
-        </div>
-
-        <DialogFooter className="px-6 py-4 border-t flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">
-              {totalLines} linha(s) independente(s) · {selected.size} SKU(s)
-              {selected.size > 0 &&
-                sorted.filter((p) => selected.has(p.id)).length <
-                  selected.size && (
-                  <span className="text-amber-600 ml-1 font-medium">
-                    (
-                    {selected.size -
-                      sorted.filter((p) => selected.has(p.id)).length}{' '}
-                    oculto(s) na busca atual)
-                  </span>
-                )}
-            </span>
-            {selected.size > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearSelection}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                Limpar seleção
-              </Button>
+                  ) : (
+                    sorted.map((p) => (
+                      <TableRow
+                        key={p.id}
+                        data-state={selected.has(p.id) ? 'selected' : undefined}
+                        className={cn(
+                          selected.has(p.id) &&
+                            'bg-primary/10 border-l-4 border-l-primary',
+                        )}
+                      >
+                        <TableCell>
+                          <div className="flex flex-col items-center gap-1">
+                            <Checkbox
+                              checked={selected.has(p.id)}
+                              onCheckedChange={() => toggleSelect(p)}
+                            />
+                            {selected.has(p.id) && (
+                              <Input
+                                type="number"
+                                min="1"
+                                max="99"
+                                value={selected.get(p.id)?.quantity ?? 1}
+                                onChange={(e) =>
+                                  updateQuantity(
+                                    p.id,
+                                    parseInt(e.target.value) || 1,
+                                  )
+                                }
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-14 h-7 text-xs text-center px-1"
+                                title="Número de linhas independentes para este SKU"
+                              />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono font-bold text-sm text-primary">
+                            {p.codigo_produto ?? '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-bold text-base text-gray-900">
+                            {p.sku || p.referencia || '-'}
+                          </div>
+                          {p.referencia && p.sku && p.referencia !== p.sku && (
+                            <div className="text-xs text-muted-foreground">
+                              Ref: {p.referencia}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-start gap-2">
+                            <div className="line-clamp-2 max-w-[200px] text-sm text-gray-600">
+                              {p.nome}
+                            </div>
+                            {selected.has(p.id) && (
+                              <Badge
+                                variant="default"
+                                className="shrink-0 text-[10px] px-1.5 py-0"
+                              >
+                                Selecionado
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {p.marca_nome || '-'}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {p.categoria_nome || '-'}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {FMT.format(p.preco_venda || p.valor_venda || 0)}
+                        </TableCell>
+                        <TableCell>
+                          <HoverCard openDelay={300} closeDelay={200}>
+                            <HoverCardTrigger asChild>
+                              <span className="cursor-help font-semibold underline decoration-dotted">
+                                {p.estoque_total}
+                              </span>
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-64">
+                              <StockPopover productId={p.id} />
+                            </HoverCardContent>
+                          </HoverCard>
+                        </TableCell>
+                        <TableCell>
+                          <HoverCard openDelay={300} closeDelay={200}>
+                            <HoverCardTrigger asChild>
+                              <span
+                                className={cn(
+                                  'cursor-help font-semibold underline decoration-dotted',
+                                  p.estoque_disponivel <= 0 && 'text-red-600',
+                                )}
+                              >
+                                {p.estoque_disponivel}
+                              </span>
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-64">
+                              <StockPopover productId={p.id} />
+                            </HoverCardContent>
+                          </HoverCard>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
+            <div ref={sentinelRef} className="h-1" />
+            {loadingMore && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            )}
+            {!loading && !loadingMore && !hasMore && sorted.length > 0 && (
+              <div className="text-center py-4 text-sm text-muted-foreground">
+                Fim da lista — {sorted.length} produto(s) carregado(s)
+              </div>
             )}
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirm} disabled={selected.size === 0}>
-              <Check className="w-4 h-4 mr-2" />
-              Confirmar Seleção ({totalLines} linha(s))
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+          <DialogFooter className="px-6 py-4 border-t flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                {totalLines} linha(s) independente(s) · {selected.size} SKU(s)
+                {selected.size > 0 &&
+                  sorted.filter((p) => selected.has(p.id)).length <
+                    selected.size && (
+                    <span className="text-amber-600 ml-1 font-medium">
+                      (
+                      {selected.size -
+                        sorted.filter((p) => selected.has(p.id)).length}{' '}
+                      oculto(s) na busca atual)
+                    </span>
+                  )}
+              </span>
+              {selected.size > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearSelection}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  Limpar seleção
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleConfirm} disabled={selected.size === 0}>
+                <Check className="w-4 h-4 mr-2" />
+                Confirmar Seleção ({totalLines} linha(s))
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ProductCreateModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        initialName={search}
+        onSuccess={handleProductCreated}
+      />
+    </>
   )
 }

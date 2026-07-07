@@ -9,7 +9,6 @@ import {
   CalendarIcon,
   Loader2,
   Plus,
-  Trash2,
   ArrowLeft,
   Save,
   Upload,
@@ -17,12 +16,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 
-import {
-  cn,
-  formatCircuitId,
-  formatCircuitIdInput,
-  sortItemsByCircuitId,
-} from '@/lib/utils'
+import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 import { buildClientApprovalLink } from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
@@ -49,7 +43,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
-import { ProductSelectButton } from '@/components/ProductSelectButton'
 import { ProjectCreateModal } from '@/components/ProjectCreateModal'
 import { ClientCreateModal } from '@/components/ClientCreateModal'
 import {
@@ -67,7 +60,6 @@ import {
   approveBudgetFinancial,
   type ApprovalResult,
 } from '@/services/budgetApprovalService'
-import { approveProjectFinancial } from '@/services/projectFinancialApprovalService'
 import { FinancialApprovalDialog } from '@/components/budgets/FinancialApprovalDialog'
 import { FinanceResultModal } from '@/components/budgets/FinanceResultModal'
 import { supabase } from '@/lib/supabase/client'
@@ -75,12 +67,14 @@ import {
   ProductSearchModal,
   type ProductSearchItem,
 } from '@/components/budgets/ProductSearchModal'
+import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
 import { BatchPdfImport } from '@/components/budgets/BatchPdfImport'
 import {
   BudgetItemCard,
   type ProductMeta,
 } from '@/components/budgets/BudgetItemCard'
 import type { ParsedPdfResult } from '@/lib/pdf-import'
+import type { ProductCatalogItem } from '@/services/productCatalogService'
 
 const formSchema = z
   .object({
@@ -171,7 +165,9 @@ const formSchema = z
 const STATUS_OPTIONS = [
   { value: 'rascunho', label: 'Rascunho' },
   { value: 'enviado_cliente', label: 'Enviado ao Cliente' },
-  { value: 'aprovado', label: 'Aprovado' },
+  { value: 'Aprovação Financeira', label: 'Aprovação Financeira' },
+  { value: 'Orçamento Aprovado', label: 'Orçamento Aprovado' },
+  { value: 'aprovado', label: 'Aprovado pelo Cliente (legado)' },
   { value: 'recusado_cliente', label: 'Recusado pelo Cliente' },
   { value: 'recusado', label: 'Recusado' },
   { value: 'expirado', label: 'Expirado' },
@@ -190,6 +186,10 @@ export default function BudgetFormPage() {
   const [productSearchRowIndex, setProductSearchRowIndex] = useState<
     number | null
   >(null)
+  const [isProductCreateOpen, setIsProductCreateOpen] = useState(false)
+  const [productCreateTarget, setProductCreateTarget] = useState<{
+    index?: number
+  } | null>(null)
   const {
     empresas,
     clientes,
@@ -216,7 +216,6 @@ export default function BudgetFormPage() {
     empresa_nome?: string
     isLoading?: boolean
   } | null>(null)
-  const [projectStatus, setProjectStatus] = useState<string | null>(null)
   const [showApprovalDialog, setShowApprovalDialog] = useState(false)
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
     null,
@@ -336,12 +335,11 @@ export default function BudgetFormPage() {
           if (budget.projeto_id) {
             const { data: pData } = await supabase
               .from('projetos')
-              .select('codigo, status')
+              .select('codigo')
               .eq('id', budget.projeto_id)
               .single()
             if (pData) {
               projetoCodigo = pData.codigo
-              setProjectStatus(pData.status)
             }
           }
 
@@ -396,7 +394,7 @@ export default function BudgetFormPage() {
             ),
           })
         }
-      } catch (error) {
+      } catch {
         toast.error('Erro ao carregar orçamento')
         navigate('/budgets')
       } finally {
@@ -684,7 +682,7 @@ export default function BudgetFormPage() {
               duration: 6000,
             })
           }
-        } catch (err: any) {
+        } catch {
           toast.success('Orçamento criado com sucesso!')
         }
       }
@@ -703,15 +701,51 @@ export default function BudgetFormPage() {
     }
   }
 
-  const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
-    console.log(`[DEBUG] Itens recebidos: [${products.length}]`)
+  const updateProductMeta = (products: ProductSearchItem[]) => {
+    setProductMetaMap((prev) => {
+      const next = new Map(prev)
+      products.forEach((product) => {
+        if (product.source === 'produtos' && isValidUUID(product.id)) {
+          next.set(product.id, {
+            codigo_produto: product.codigo_produto ?? null,
+            referencia: product.referencia ?? null,
+            nome: product.nome ?? null,
+            sku: product.sku ?? null,
+          })
+        }
+      })
+      return next
+    })
+  }
 
+  const productCatalogToSearchItem = (
+    product: ProductCatalogItem,
+  ): ProductSearchItem => ({
+    id: product.id,
+    nome: product.nome,
+    sku: product.sku || null,
+    referencia: product.referencia || null,
+    codigo_produto: product.codigo_produto ?? null,
+    preco_venda: product.preco_venda ?? null,
+    valor_venda: product.valor_venda ?? product.preco_venda ?? null,
+    estoque_total: 0,
+    estoque_disponivel: 0,
+    marca_nome: null,
+    categoria_nome: null,
+    source: 'produtos',
+  })
+
+  const applyProductSelection = (
+    products: ProductSearchItem[],
+    targetIndex: number | null = productSearchRowIndex,
+  ) => {
     if (products.length === 0) {
       setIsProductSearchOpen(false)
       setProductSearchRowIndex(null)
       return
     }
 
+    updateProductMeta(products)
     const currentItems = form.getValues('itens') || []
 
     const maxL = currentItems.reduce((max, item) => {
@@ -730,19 +764,17 @@ export default function BudgetFormPage() {
     })
 
     if (
-      productSearchRowIndex !== null &&
-      productSearchRowIndex >= 0 &&
-      productSearchRowIndex < currentItems.length
+      targetIndex !== null &&
+      targetIndex >= 0 &&
+      targetIndex < currentItems.length
     ) {
       const updatedItems = [...currentItems]
-      const existingCustomId =
-        updatedItems[productSearchRowIndex].custom_id || ''
+      const existingCustomId = updatedItems[targetIndex].custom_id || ''
 
-      updatedItems[productSearchRowIndex] = {
-        ...updatedItems[productSearchRowIndex],
-        ...buildNewItem(products[0], productSearchRowIndex + 1),
-        custom_id:
-          existingCustomId || formatCircuitId(`L${productSearchRowIndex + 1}`),
+      updatedItems[targetIndex] = {
+        ...updatedItems[targetIndex],
+        ...buildNewItem(products[0], targetIndex + 1),
+        custom_id: existingCustomId || formatCircuitId(`L${targetIndex + 1}`),
       }
 
       if (products.length > 1) {
@@ -759,11 +791,6 @@ export default function BudgetFormPage() {
       replace(combinedItems, { shouldFocus: false })
     }
 
-    const finalCount = (form.getValues('itens') || []).length
-    console.log(
-      `[DEBUG] Total de itens na lista após inserção: [${finalCount}]`,
-    )
-
     toast.success(
       products.length === 1
         ? '1 produto adicionado com sucesso'
@@ -771,6 +798,20 @@ export default function BudgetFormPage() {
     )
     setIsProductSearchOpen(false)
     setProductSearchRowIndex(null)
+  }
+
+  const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
+    applyProductSelection(products)
+  }
+
+  const handleProductCreateConfirm = (product: ProductCatalogItem) => {
+    const searchItem = productCatalogToSearchItem(product)
+    applyProductSelection(
+      [searchItem],
+      productCreateTarget?.index ?? productSearchRowIndex,
+    )
+    setIsProductCreateOpen(false)
+    setProductCreateTarget(null)
   }
 
   const handleBatchComplete = (results: ParsedPdfResult[]) => {
@@ -892,19 +933,15 @@ export default function BudgetFormPage() {
     if (!budgetToEdit) return
     try {
       const result = await approveBudgetFinancial(budgetToEdit.id)
-      if (budgetToEdit.projeto_id) {
-        try {
-          await approveProjectFinancial(budgetToEdit.projeto_id)
-          setProjectStatus('Orçamento Aprovado')
-        } catch (projErr: any) {
-          console.warn('Project status update failed:', projErr?.message)
-          toast.info('Status do projeto não foi atualizado automaticamente', {
-            description: projErr?.message,
-          })
-        }
-      }
       setApprovalResult(result)
-      form.setValue('status', 'aprovado', { shouldDirty: false })
+      setBudgetToEdit({
+        ...budgetToEdit,
+        status: result.status || 'Orçamento Aprovado',
+        requer_revisao_financeira: false,
+      })
+      form.setValue('status', result.status || 'Orçamento Aprovado', {
+        shouldDirty: false,
+      })
       toast.success('Orçamento aprovado financeiramente!', {
         description: `Itens: ${result.projeto_itens_criados}, Parcelas: ${result.parcelas_criadas}, Boletos: ${result.boletos_criados}`,
       })
@@ -947,7 +984,7 @@ export default function BudgetFormPage() {
         </div>
         <div className="flex items-center gap-3">
           {isEditing &&
-            projectStatus === 'Aprovação Financeira' &&
+            budgetToEdit?.status === 'Aprovação Financeira' &&
             (role === 'admin' || role === 'gerente') && (
               <Button
                 variant="default"
@@ -1492,6 +1529,10 @@ export default function BudgetFormPage() {
                         setProductSearchRowIndex(idx)
                         setIsProductSearchOpen(true)
                       }}
+                      onCreateProduct={(idx) => {
+                        setProductCreateTarget({ index: idx })
+                        setIsProductCreateOpen(true)
+                      }}
                       getProductInfo={getProductInfo}
                     />
                   )
@@ -1809,6 +1850,27 @@ export default function BudgetFormPage() {
               if (!v) setProductSearchRowIndex(null)
             }}
             onConfirm={handleProductSearchConfirm}
+            onProductCreated={(product) => updateProductMeta([product])}
+          />
+
+          <ProductCreateModal
+            open={isProductCreateOpen}
+            onOpenChange={(v) => {
+              setIsProductCreateOpen(v)
+              if (!v) setProductCreateTarget(null)
+            }}
+            initialName={
+              productCreateTarget?.index != null
+                ? form.getValues(
+                    `itens.${productCreateTarget.index}.descricao`,
+                  ) ||
+                  form.getValues(
+                    `itens.${productCreateTarget.index}.custom_id`,
+                  ) ||
+                  ''
+                : ''
+            }
+            onSuccess={handleProductCreateConfirm}
           />
 
           <BatchPdfImport

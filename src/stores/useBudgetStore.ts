@@ -373,7 +373,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         requer_revisao_financeira: previousReviewFlag,
       },
       dados_novos: {
-        status: 'aprovado',
+        status: 'Orçamento Aprovado',
         requer_revisao_financeira: false,
       },
       observacao:
