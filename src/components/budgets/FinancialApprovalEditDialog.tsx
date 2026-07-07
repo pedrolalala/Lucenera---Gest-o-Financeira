@@ -17,6 +17,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Loader2, AlertTriangle, Save, Pencil } from 'lucide-react'
 import {
   Card,
@@ -62,6 +72,7 @@ export function FinancialApprovalEditDialog({
     estado: '',
   })
   const [orcamentos, setOrcamentos] = useState<EditableOrcamentoData[]>([])
+  const [showResetChoice, setShowResetChoice] = useState(false)
 
   useEffect(() => {
     if (!open || !project) {
@@ -129,21 +140,30 @@ export function FinancialApprovalEditDialog({
 
   if (!project) return null
 
-  const handleFinalize = async () => {
+  const requestFinalize = () => {
     if (!project) return
     if (!projectData.valor_total || projectData.valor_total <= 0) {
       toast.error('Valor total do projeto deve ser maior que zero.')
       return
     }
+    setShowResetChoice(true)
+  }
+
+  const handleFinalize = async (reiniciarAprovacaoCliente: boolean) => {
+    if (!project) return
+    setShowResetChoice(false)
     setFinalizing(true)
     try {
       const result = await finalizeValidation(
         project.id,
         projectData,
         orcamentos,
+        reiniciarAprovacaoCliente,
       )
       toast.success('Validação financeira finalizada!', {
-        description: `Status alterado para: ${result.status_novo}`,
+        description: reiniciarAprovacaoCliente
+          ? 'Aprovação do cliente reiniciada — orçamento voltou para Enviado ao Cliente.'
+          : `Aprovação do cliente mantida. Status: ${result.status_novo}`,
       })
       onOpenChange(false)
       onFinalized()
@@ -287,7 +307,7 @@ export function FinancialApprovalEditDialog({
             Cancelar
           </Button>
           <Button
-            onClick={handleFinalize}
+            onClick={requestFinalize}
             disabled={finalizing || loading || projectData.valor_total <= 0}
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
@@ -305,6 +325,39 @@ export function FinancialApprovalEditDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog open={showResetChoice} onOpenChange={setShowResetChoice}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reiniciar aprovação do cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você alterou valores, forma de pagamento ou itens deste orçamento,
+              que já foi aprovado pelo cliente. Escolha se essa correção deve
+              reiniciar o ciclo de aprovação (o orçamento volta para "Enviado ao
+              Cliente" e precisa ser aprovado de novo) ou se é apenas um ajuste
+              interno do financeiro, mantendo a aprovação atual do cliente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={finalizing}>
+              Cancelar
+            </AlertDialogCancel>
+            <Button
+              variant="outline"
+              disabled={finalizing}
+              onClick={() => handleFinalize(false)}
+            >
+              Manter aprovação do cliente
+            </Button>
+            <AlertDialogAction
+              disabled={finalizing}
+              onClick={() => handleFinalize(true)}
+            >
+              Reiniciar aprovação do cliente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

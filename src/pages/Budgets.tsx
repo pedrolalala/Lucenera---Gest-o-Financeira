@@ -22,15 +22,14 @@ import AccessDenied from '@/pages/AccessDenied'
 const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
   { label: 'Rascunho', value: 'rascunho' },
-  { label: 'Enviado ao Cliente', value: 'enviado_cliente' },
+  { label: 'Enviado para o Cliente', value: 'enviado_cliente' },
   { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
-  { label: 'Aprovado pelo Cliente', value: 'aprovado' },
-  { label: 'Aprovação Financeira', value: 'Aprovação Financeira' },
-  { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
-  { label: 'Finalizado', value: 'Finalizado' },
-  { label: 'Obra Finalizada', value: 'Obra Finalizada' },
-  { label: 'Recusado', value: 'recusado' },
   { label: 'Expirado', value: 'expirado' },
+  {
+    label: 'Pendente Aprovação Financeira',
+    value: 'pendente_aprovacao_financeira',
+  },
+  { label: 'Orçamento Aprovado', value: 'aprovado' },
 ]
 
 export default function Budgets() {
