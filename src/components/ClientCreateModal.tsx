@@ -316,7 +316,13 @@ export function ClientCreateModal({
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.stopPropagation()
+              form.handleSubmit(onSubmit)(e)
+            }}
+            className="space-y-4"
+          >
             <ScrollArea className="h-[60vh] px-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
                 <div className="md:col-span-2">
