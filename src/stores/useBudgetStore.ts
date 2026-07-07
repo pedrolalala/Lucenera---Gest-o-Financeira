@@ -70,6 +70,7 @@ export interface Budget {
   enviado_cliente_em: string | null
   enviado_cliente_por: string | null
   aprovado_cliente_em: string | null
+  aprovado_cliente_origem: string | null
   recusado_cliente_em: string | null
   motivo_recusa_cliente: string | null
   token_aprovacao_cliente: string | null
@@ -115,7 +116,6 @@ interface BudgetState {
     budget: Partial<Budget>,
     items: BudgetItem[],
   ) => Promise<void>
-  updateBudgetStatus: (id: string, status: string) => Promise<void>
   deleteBudget: (id: string) => Promise<void>
   approveBudgetAndMigrate: (budget: Budget) => Promise<ApprovalResult>
   financialApprove: (budget: Budget) => Promise<ApprovalResult>
@@ -307,18 +307,6 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     await get().fetchBudgets()
   },
 
-  updateBudgetStatus: async (id, status) => {
-    const { error } = await supabase
-      .from('orcamentos')
-      .update({ status })
-      .eq('id', id)
-    if (error) throw error
-
-    set((state) => ({
-      budgets: state.budgets.map((b) => (b.id === id ? { ...b, status } : b)),
-    }))
-  },
-
   deleteBudget: async (id) => {
     const { error } = await supabase.from('orcamentos').delete().eq('id', id)
     if (error) throw error
@@ -355,11 +343,6 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       throw new Error(error.message || 'Erro ao aprovar orçamento.')
     }
 
-    await supabase
-      .from('orcamentos')
-      .update({ requer_revisao_financeira: false })
-      .eq('id', budget.id)
-
     const { data: sessionData } = await supabase.auth.getSession()
     const userId = sessionData.session?.user?.id || null
 
@@ -373,7 +356,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         requer_revisao_financeira: previousReviewFlag,
       },
       dados_novos: {
-        status: 'Orçamento Aprovado',
+        status: 'aprovado',
         requer_revisao_financeira: false,
       },
       observacao:

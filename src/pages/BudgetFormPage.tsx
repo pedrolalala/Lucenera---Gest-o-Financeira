@@ -18,7 +18,11 @@ import {
 
 import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
-import { buildClientApprovalLink } from '@/lib/budget-status'
+import {
+  buildClientApprovalLink,
+  getStatusLabel,
+  getStatusBadgeClass,
+} from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar } from '@/components/ui/calendar'
@@ -161,17 +165,6 @@ const formSchema = z
       }
     })
   })
-
-const STATUS_OPTIONS = [
-  { value: 'rascunho', label: 'Rascunho' },
-  { value: 'enviado_cliente', label: 'Enviado ao Cliente' },
-  { value: 'Aprovação Financeira', label: 'Aprovação Financeira' },
-  { value: 'Orçamento Aprovado', label: 'Orçamento Aprovado' },
-  { value: 'aprovado', label: 'Aprovado pelo Cliente (legado)' },
-  { value: 'recusado_cliente', label: 'Recusado pelo Cliente' },
-  { value: 'recusado', label: 'Recusado' },
-  { value: 'expirado', label: 'Expirado' },
-]
 
 export default function BudgetFormPage() {
   const { id } = useParams()
@@ -965,10 +958,10 @@ export default function BudgetFormPage() {
       setApprovalResult(result)
       setBudgetToEdit({
         ...budgetToEdit,
-        status: result.status || 'Orçamento Aprovado',
+        status: result.status || 'aprovado',
         requer_revisao_financeira: false,
       })
-      form.setValue('status', result.status || 'Orçamento Aprovado', {
+      form.setValue('status', result.status || 'aprovado', {
         shouldDirty: false,
       })
       toast.success('Orçamento aprovado financeiramente!', {
@@ -1013,7 +1006,7 @@ export default function BudgetFormPage() {
         </div>
         <div className="flex items-center gap-3">
           {isEditing &&
-            budgetToEdit?.status === 'Aprovação Financeira' &&
+            budgetToEdit?.status === 'pendente_aprovacao_financeira' &&
             (role === 'admin' || role === 'gerente') && (
               <Button
                 variant="default"
@@ -1195,43 +1188,25 @@ export default function BudgetFormPage() {
                   </div>
                 )}
 
-                {isEditing ? (
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {STATUS_OPTIONS.map((s) => (
-                              <SelectItem key={s.value} value={s.value}>
-                                {s.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <div className="flex items-center h-10 px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">
-                      Rascunho (definido automaticamente)
-                    </div>
-                  </FormItem>
-                )}
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <div>
+                    <span
+                      className={`inline-flex items-center h-7 px-3 rounded-full border text-xs font-medium ${getStatusBadgeClass(
+                        isEditing ? form.watch('status') : 'rascunho',
+                      )}`}
+                    >
+                      {isEditing
+                        ? getStatusLabel(form.watch('status'))
+                        : 'Rascunho'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    O status é definido automaticamente pelas ações do fluxo
+                    (enviar, aprovar, recusar) e não pode ser editado
+                    diretamente.
+                  </p>
+                </FormItem>
 
                 <FormField
                   control={form.control}

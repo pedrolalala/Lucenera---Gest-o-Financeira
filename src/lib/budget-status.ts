@@ -1,14 +1,9 @@
 export const CLIENT_APPROVAL_BASE_URL =
   'https://gestaofinanceiralucenera.goskip.app/aprovacao'
 
-export const FINANCIAL_APPROVAL_STATUS = 'Aprovação Financeira'
+export const FINANCIAL_APPROVAL_STATUS = 'pendente_aprovacao_financeira'
 
-export const APPROVED_STATUSES: string[] = [
-  'Orçamento Aprovado',
-  'aprovado_financeiro',
-  'Finalizado',
-  'Obra Finalizada',
-]
+export const APPROVED_STATUSES: string[] = ['aprovado']
 
 export function isApprovedStatus(status: string | null | undefined): boolean {
   if (!status) return false
@@ -24,35 +19,35 @@ export function buildClientApprovalLink(
 
 export function getStatusLabel(status: string | null | undefined): string {
   const labels: Record<string, string> = {
-    'Aprovação Financeira': 'Aprovação Financeira',
-    'Orçamento Aprovado': 'Orçamento Aprovado',
-    Finalizado: 'Finalizado',
-    'Obra Finalizada': 'Obra Finalizada',
-    enviado_cliente: 'Enviado ao Cliente',
-    recusado_cliente: 'Recusado pelo Cliente',
-    aprovado: 'Aprovado pelo Cliente',
-    aprovado_financeiro: 'Orçamento Aprovado',
     rascunho: 'Rascunho',
-    recusado: 'Recusado',
+    enviado_cliente: 'Enviado para o Cliente',
+    recusado_cliente: 'Recusado pelo Cliente',
     expirado: 'Expirado',
+    pendente_aprovacao_financeira: 'Pendente Aprovação Financeira',
+    aprovado: 'Orçamento Aprovado',
   }
   return labels[status || ''] || status || 'Rascunho'
 }
 
 export function getStatusBadgeClass(status: string | null | undefined): string {
   const classes: Record<string, string> = {
-    'Aprovação Financeira': 'bg-amber-50 text-amber-700 border-amber-300',
-    'Orçamento Aprovado': 'bg-green-50 text-green-700 border-green-200',
-    Finalizado: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    'Obra Finalizada': 'bg-teal-50 text-teal-700 border-teal-200',
-    aprovado: 'bg-blue-50 text-blue-700 border-blue-200',
-    aprovado_financeiro: 'bg-green-50 text-green-700 border-green-200',
+    rascunho: 'bg-gray-50 text-gray-700 border-gray-200',
     enviado_cliente: 'bg-blue-50 text-blue-700 border-blue-200',
     recusado_cliente: 'bg-red-50 text-red-700 border-red-200',
-    recusado: 'bg-red-50 text-red-700 border-red-200',
-    rascunho: 'bg-gray-50 text-gray-700 border-gray-200',
+    expirado: 'bg-red-50 text-red-700 border-red-200',
+    pendente_aprovacao_financeira:
+      'bg-amber-50 text-amber-700 border-amber-300',
+    aprovado: 'bg-green-50 text-green-700 border-green-200',
   }
   return classes[status || ''] || 'bg-gray-50'
+}
+
+export function getClientApprovalOriginLabel(
+  origem: string | null | undefined,
+): string | null {
+  if (origem === 'manual') return 'Aprovado pelo cliente (manual)'
+  if (origem === 'token') return 'Aprovado pelo cliente (token)'
+  return null
 }
 
 export function isClientApprovalStatus(
@@ -64,5 +59,5 @@ export function isClientApprovalStatus(
 export function isFinancialApprovalStatus(
   status: string | null | undefined,
 ): boolean {
-  return status === 'Aprovação Financeira'
+  return status === 'pendente_aprovacao_financeira'
 }

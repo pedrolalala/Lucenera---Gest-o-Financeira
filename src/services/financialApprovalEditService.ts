@@ -75,6 +75,7 @@ export async function finalizeValidation(
   projectId: string,
   projectData: EditableProjectData,
   orcamentos: EditableOrcamentoData[],
+  reiniciarAprovacaoCliente: boolean,
 ): Promise<FinalizeResult> {
   const { data: project } = await supabase
     .from('projetos')
@@ -102,48 +103,36 @@ export async function finalizeValidation(
       0,
     )
 
-    await supabase
-      .from('orcamentos')
-      .update({
-        forma_pagamento: orc.forma_pagamento,
-        valor_total: valorTotal,
-      })
-      .eq('id', orc.id)
+    const itensPayload = orc.itens.map((item) => ({
+      id: item.id,
+      produto_id: item.produto_id || null,
+      quantidade: item.quantidade,
+      preco_unitario: item.preco_unitario,
+      desconto: item.desconto,
+      custom_id: item.custom_id ? formatCircuitId(item.custom_id) : null,
+      ordem: item.custom_id ? extractCircuitNumber(item.custom_id) : null,
+      descricao: item.descricao,
+      peca_nova: item.peca_nova,
+    }))
 
-    const { data: existingItems } = await supabase
-      .from('orcamento_itens')
-      .select('id')
-      .eq('orcamento_id', orc.id)
+    const { error: rpcError } = await (supabase as any).rpc(
+      'financeiro_editar_orcamento',
+      {
+        p_orcamento_id: orc.id,
+        p_forma_pagamento: orc.forma_pagamento,
+        p_valor_total: valorTotal,
+        p_itens: itensPayload,
+        p_reiniciar_aprovacao: reiniciarAprovacaoCliente,
+      },
+    )
 
-    const uiItemIds = new Set(orc.itens.map((i) => i.id))
-    const toDelete = (existingItems || [])
-      .filter((i: any) => !uiItemIds.has(i.id))
-      .map((i: any) => i.id)
-
-    if (toDelete.length > 0) {
-      await supabase.from('orcamento_itens').delete().in('id', toDelete)
-    }
-
-    for (const item of orc.itens) {
-      await supabase.from('orcamento_itens').upsert({
-        id: item.id,
-        orcamento_id: orc.id,
-        produto_id: item.produto_id || null,
-        quantidade: item.quantidade,
-        preco_unitario: item.preco_unitario,
-        desconto: item.desconto,
-        custom_id: item.custom_id ? formatCircuitId(item.custom_id) : null,
-        ordem: item.custom_id ? extractCircuitNumber(item.custom_id) : null,
-        descricao: item.descricao,
-        peca_nova: item.peca_nova,
-      })
-    }
+    if (rpcError) throw rpcError
   }
 
   return {
     success: true,
     project_id: projectId,
     status_anterior: statusAnterior,
-    status_novo: 'Orçamento Aprovado',
+    status_novo: reiniciarAprovacaoCliente ? 'enviado_cliente' : statusAnterior,
   }
 }
