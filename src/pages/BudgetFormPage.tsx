@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -176,6 +176,7 @@ const STATUS_OPTIONS = [
 export default function BudgetFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const isEditing = Boolean(id)
 
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
@@ -566,6 +567,34 @@ export default function BudgetFormPage() {
       setProjectDetails(null)
     }
   }
+
+  // Handoff a partir de outro sistema (ex.: CRM "Gerar Orçamento"): permite
+  // pré-selecionar o projeto por id via query string em vez de forçar o
+  // usuário a digitar o código de novo.
+  useEffect(() => {
+    if (isEditing) return
+    const projetoId = searchParams.get('projeto_id')
+    if (!projetoId) return
+
+    async function preencherProjetoPorId() {
+      const { data, error } = await supabase
+        .from('projetos')
+        .select('codigo')
+        .eq('id', projetoId)
+        .single()
+
+      if (error || !data?.codigo) return
+
+      form.setValue('projeto_codigo', data.codigo, {
+        shouldValidate: true,
+        shouldDirty: true,
+      })
+      await handleProjectSelect(data.codigo)
+    }
+
+    preencherProjetoPorId()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, searchParams])
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
