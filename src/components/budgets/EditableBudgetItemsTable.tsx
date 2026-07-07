@@ -149,7 +149,6 @@ export function EditableBudgetItemsTable({
       )
       toast.success('Produto criado e adicionado ao orçamento.')
     }
-
     setIsProductCreateOpen(false)
     setCreateTarget(null)
   }
@@ -314,7 +313,7 @@ export function EditableBudgetItemsTable({
 
       <ProductCreateModal
         open={isProductCreateOpen}
-        onOpenChange={(v) => {
+        onOpenChange={(v: boolean) => {
           setIsProductCreateOpen(v)
           if (!v) setCreateTarget(null)
         }}
