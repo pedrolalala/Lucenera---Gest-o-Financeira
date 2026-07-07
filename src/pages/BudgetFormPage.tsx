@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -9,7 +9,6 @@ import {
   CalendarIcon,
   Loader2,
   Plus,
-  Trash2,
   ArrowLeft,
   Save,
   Upload,
@@ -17,12 +16,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 
-import {
-  cn,
-  formatCircuitId,
-  formatCircuitIdInput,
-  sortItemsByCircuitId,
-} from '@/lib/utils'
+import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 import { buildClientApprovalLink } from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
@@ -49,7 +43,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
-import { ProductSelectButton } from '@/components/ProductSelectButton'
 import { ProjectCreateModal } from '@/components/ProjectCreateModal'
 import { ClientCreateModal } from '@/components/ClientCreateModal'
 import {
@@ -81,6 +74,7 @@ import {
   type ProductMeta,
 } from '@/components/budgets/BudgetItemCard'
 import type { ParsedPdfResult } from '@/lib/pdf-import'
+import type { ProductCatalogItem } from '@/services/productCatalogService'
 
 const formSchema = z
   .object({
@@ -182,6 +176,7 @@ const STATUS_OPTIONS = [
 export default function BudgetFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const isEditing = Boolean(id)
 
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
@@ -400,7 +395,7 @@ export default function BudgetFormPage() {
             ),
           })
         }
-      } catch (error) {
+      } catch {
         toast.error('Erro ao carregar orçamento')
         navigate('/budgets')
       } finally {
@@ -573,6 +568,34 @@ export default function BudgetFormPage() {
     }
   }
 
+  // Handoff a partir de outro sistema (ex.: CRM "Gerar Orçamento"): permite
+  // pré-selecionar o projeto por id via query string em vez de forçar o
+  // usuário a digitar o código de novo.
+  useEffect(() => {
+    if (isEditing) return
+    const projetoId = searchParams.get('projeto_id')
+    if (!projetoId) return
+
+    async function preencherProjetoPorId() {
+      const { data, error } = await supabase
+        .from('projetos')
+        .select('codigo')
+        .eq('id', projetoId)
+        .single()
+
+      if (error || !data?.codigo) return
+
+      form.setValue('projeto_codigo', data.codigo, {
+        shouldValidate: true,
+        shouldDirty: true,
+      })
+      await handleProjectSelect(data.codigo)
+    }
+
+    preencherProjetoPorId()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, searchParams])
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       setIsSubmitting(true)
@@ -688,7 +711,7 @@ export default function BudgetFormPage() {
               duration: 6000,
             })
           }
-        } catch (err: any) {
+        } catch {
           toast.success('Orçamento criado com sucesso!')
         }
       }
@@ -707,45 +730,51 @@ export default function BudgetFormPage() {
     }
   }
 
-  const handleProductCreateConfirm = (newProduct: any) => {
-    if (productCreateTarget?.index !== undefined) {
-      const index = productCreateTarget.index
-      const currentItems = form.getValues('itens') || []
-      const updatedItems = [...currentItems]
-      updatedItems[index] = {
-        ...updatedItems[index],
-        produto_id: newProduct.id,
-        descricao: '',
-        preco_unitario: newProduct.valor_venda || newProduct.preco_venda || 0,
-      }
-      replace(updatedItems, { shouldFocus: false })
-
-      setProductMetaMap((prev) => {
-        const m = new Map(prev)
-        m.set(newProduct.id, {
-          codigo_produto: newProduct.codigo_produto,
-          referencia: newProduct.referencia,
-          nome: newProduct.nome,
-          sku: newProduct.sku,
-        })
-        return m
+  const updateProductMeta = (products: ProductSearchItem[]) => {
+    setProductMetaMap((prev) => {
+      const next = new Map(prev)
+      products.forEach((product) => {
+        if (product.source === 'produtos' && isValidUUID(product.id)) {
+          next.set(product.id, {
+            codigo_produto: product.codigo_produto ?? null,
+            referencia: product.referencia ?? null,
+            nome: product.nome ?? null,
+            sku: product.sku ?? null,
+          })
+        }
       })
-
-      toast.success('Produto criado e adicionado ao orçamento.')
-    }
-    setIsProductCreateOpen(false)
-    setProductCreateTarget(null)
+      return next
+    })
   }
 
-  const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
-    console.log(`[DEBUG] Itens recebidos: [${products.length}]`)
+  const productCatalogToSearchItem = (
+    product: ProductCatalogItem,
+  ): ProductSearchItem => ({
+    id: product.id,
+    nome: product.nome,
+    sku: product.sku || null,
+    referencia: product.referencia || null,
+    codigo_produto: product.codigo_produto ?? null,
+    preco_venda: product.preco_venda ?? null,
+    valor_venda: product.valor_venda ?? product.preco_venda ?? null,
+    estoque_total: 0,
+    estoque_disponivel: 0,
+    marca_nome: null,
+    categoria_nome: null,
+    source: 'produtos',
+  })
 
+  const applyProductSelection = (
+    products: ProductSearchItem[],
+    targetIndex: number | null = productSearchRowIndex,
+  ) => {
     if (products.length === 0) {
       setIsProductSearchOpen(false)
       setProductSearchRowIndex(null)
       return
     }
 
+    updateProductMeta(products)
     const currentItems = form.getValues('itens') || []
 
     const maxL = currentItems.reduce((max, item) => {
@@ -764,19 +793,17 @@ export default function BudgetFormPage() {
     })
 
     if (
-      productSearchRowIndex !== null &&
-      productSearchRowIndex >= 0 &&
-      productSearchRowIndex < currentItems.length
+      targetIndex !== null &&
+      targetIndex >= 0 &&
+      targetIndex < currentItems.length
     ) {
       const updatedItems = [...currentItems]
-      const existingCustomId =
-        updatedItems[productSearchRowIndex].custom_id || ''
+      const existingCustomId = updatedItems[targetIndex].custom_id || ''
 
-      updatedItems[productSearchRowIndex] = {
-        ...updatedItems[productSearchRowIndex],
-        ...buildNewItem(products[0], productSearchRowIndex + 1),
-        custom_id:
-          existingCustomId || formatCircuitId(`L${productSearchRowIndex + 1}`),
+      updatedItems[targetIndex] = {
+        ...updatedItems[targetIndex],
+        ...buildNewItem(products[0], targetIndex + 1),
+        custom_id: existingCustomId || formatCircuitId(`L${targetIndex + 1}`),
       }
 
       if (products.length > 1) {
@@ -793,11 +820,6 @@ export default function BudgetFormPage() {
       replace(combinedItems, { shouldFocus: false })
     }
 
-    const finalCount = (form.getValues('itens') || []).length
-    console.log(
-      `[DEBUG] Total de itens na lista após inserção: [${finalCount}]`,
-    )
-
     toast.success(
       products.length === 1
         ? '1 produto adicionado com sucesso'
@@ -805,6 +827,20 @@ export default function BudgetFormPage() {
     )
     setIsProductSearchOpen(false)
     setProductSearchRowIndex(null)
+  }
+
+  const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
+    applyProductSelection(products)
+  }
+
+  const handleProductCreateConfirm = (product: ProductCatalogItem) => {
+    const searchItem = productCatalogToSearchItem(product)
+    applyProductSelection(
+      [searchItem],
+      productCreateTarget?.index ?? productSearchRowIndex,
+    )
+    setIsProductCreateOpen(false)
+    setProductCreateTarget(null)
   }
 
   const handleBatchComplete = (results: ParsedPdfResult[]) => {
@@ -1843,6 +1879,27 @@ export default function BudgetFormPage() {
               if (!v) setProductSearchRowIndex(null)
             }}
             onConfirm={handleProductSearchConfirm}
+            onProductCreated={(product) => updateProductMeta([product])}
+          />
+
+          <ProductCreateModal
+            open={isProductCreateOpen}
+            onOpenChange={(v) => {
+              setIsProductCreateOpen(v)
+              if (!v) setProductCreateTarget(null)
+            }}
+            initialName={
+              productCreateTarget?.index != null
+                ? form.getValues(
+                    `itens.${productCreateTarget.index}.descricao`,
+                  ) ||
+                  form.getValues(
+                    `itens.${productCreateTarget.index}.custom_id`,
+                  ) ||
+                  ''
+                : ''
+            }
+            onSuccess={handleProductCreateConfirm}
           />
 
           <ProductCreateModal
