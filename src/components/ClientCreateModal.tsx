@@ -113,7 +113,7 @@ export function ClientCreateModal({
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [vendedores, setVendedores] = useState<any[]>([])
-  const { user } = useAuth()
+  const { user, role } = useAuth()
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -162,9 +162,44 @@ export function ClientCreateModal({
 
   const watchTipoPessoa = form.watch('tipo_pessoa')
 
+  const AUTHORIZED_ROLES = ['admin', 'gerente', 'operador']
+
   async function onSubmit(values: z.infer<typeof schema>) {
     try {
       setIsSubmitting(true)
+
+      if (!role || !AUTHORIZED_ROLES.includes(role)) {
+        toast.error('Usuário sem permissão de escrita', {
+          description:
+            'Apenas administradores, gerentes ou operadores podem cadastrar contatos.',
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      const { data: userData, error: userErr } = await supabase
+        .from('usuarios')
+        .select('role')
+        .eq('id', user?.id || '')
+        .single()
+
+      if (userErr || !userData) {
+        toast.error('Não foi possível verificar suas permissões.', {
+          description: userErr?.message || 'Tente novamente.',
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      if (!AUTHORIZED_ROLES.includes(userData.role)) {
+        toast.error('Usuário sem permissão de escrita', {
+          description:
+            'Seu perfil atual não permite cadastrar contatos. Contate um administrador.',
+        })
+        setIsSubmitting(false)
+        return
+      }
+
       if (values.cpf_cnpj) {
         const { data: existing } = await supabase
           .from('contatos')
@@ -180,8 +215,11 @@ export function ClientCreateModal({
           return
         }
       }
+
+      const tipoValue = values.tipo || 'cliente'
+
       const payload = {
-        tipo: values.tipo,
+        tipo: tipoValue,
         ativo: true,
         nao_residente: values.nao_residente,
         nome: values.nome,
@@ -211,12 +249,14 @@ export function ClientCreateModal({
         vendedor_padrao_id: values.vendedor_padrao_id || null,
         created_by: user?.id || null,
       }
+
       const { data, error } = await supabase
         .from('contatos')
         .insert(payload)
         .select()
         .single()
-      if (error) {
+
+      if (error !== null) {
         if (
           error.code === '23505' ||
           error.message.includes('uq_contatos_cpf_cnpj')
@@ -224,17 +264,27 @@ export function ClientCreateModal({
           form.setError('cpf_cnpj', {
             message: 'Este CPF/CNPJ já está cadastrado',
           })
-          toast.error('CPF/CNPJ já cadastrado no sistema')
+          toast.error('CPF/CNPJ já cadastrado no sistema', {
+            description: error.message,
+          })
         } else {
-          throw error
+          toast.error('Erro ao cadastrar contato', {
+            description: error.message,
+          })
         }
+        setIsSubmitting(false)
         return
       }
-      toast.success('Contato cadastrado com sucesso!')
-      onSuccess(data)
-      onOpenChange(false)
+
+      if (data && error === null) {
+        toast.success('Contato cadastrado com sucesso!')
+        onSuccess(data)
+        onOpenChange(false)
+      }
     } catch (error: any) {
-      toast.error('Erro ao cadastrar contato: ' + error.message)
+      toast.error('Erro ao cadastrar contato', {
+        description: error?.message || 'Erro inesperado.',
+      })
     } finally {
       setIsSubmitting(false)
     }
