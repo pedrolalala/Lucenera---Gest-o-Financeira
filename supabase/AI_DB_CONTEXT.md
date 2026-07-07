@@ -118,3 +118,12 @@ RPCs/funções relevantes:
 - Se a RPC retornar erro de schema, registre pendência de DB.
 - Se a tela precisa abrir modal financeiro, só exibir se houver permissão de acesso ao financeiro.
 - Se a demanda exigir alteração estrutural de banco, preencha `DB_CHANGE_REQUEST_TEMPLATE.md`.
+
+## SPEC-007 — SSO entre sistemas
+
+- Este app é origem ao abrir o Financeiro pelo modal pós-aprovação e destino quando o CRM abre `Gerar Orçamento`.
+- Usar `src/lib/cross-system-auth.ts`.
+- A migration `20260708_030_spec007_sso_cross_system` e as Edge Functions `generate-cross-system-code`/`exchange-cross-system-code` estão publicadas no Supabase remoto desde 2026-07-07; falta homologação com usuário real.
+- Como origem, chamar `redirectWithCode(destino, redirectTo, sistemaDestino)`.
+- Como destino, `AuthProvider` deve chamar `consumeCodeFromUrl('orcamentos')` antes de decidir que precisa mostrar login.
+- Não passar tokens Supabase crus em URL. O fluxo usa apenas `sso_code`, trocado pela Edge Function `exchange-cross-system-code`.
