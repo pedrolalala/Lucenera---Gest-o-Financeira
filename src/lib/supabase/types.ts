@@ -2890,6 +2890,7 @@ export type Database = {
       orcamentos: {
         Row: {
           aprovado_cliente_em: string | null
+          aprovado_cliente_origem: string | null
           arquiteto_id: string | null
           cliente_id: string | null
           condicoes_pagamento: string | null
@@ -2921,6 +2922,7 @@ export type Database = {
         }
         Insert: {
           aprovado_cliente_em?: string | null
+          aprovado_cliente_origem?: string | null
           arquiteto_id?: string | null
           cliente_id?: string | null
           condicoes_pagamento?: string | null
@@ -2954,6 +2956,7 @@ export type Database = {
         }
         Update: {
           aprovado_cliente_em?: string | null
+          aprovado_cliente_origem?: string | null
           arquiteto_id?: string | null
           cliente_id?: string | null
           condicoes_pagamento?: string | null
@@ -8866,6 +8869,10 @@ export type Database = {
         Args: { p_transferencia_id: string }
         Returns: Json
       }
+      buscar_orcamento_para_aprovacao: {
+        Args: { p_orcamento_id: string; p_token: string }
+        Returns: Json
+      }
       can_user_approve_quotes: { Args: never; Returns: boolean }
       cancelar_orcamento: {
         Args: { p_motivo?: string; p_orcamento_id: string }
@@ -8901,6 +8908,16 @@ export type Database = {
       }
       finalizar_validacao_financeira: {
         Args: { p_orcamentos: Json; p_project_data: Json; p_project_id: string }
+        Returns: Json
+      }
+      financeiro_editar_orcamento: {
+        Args: {
+          p_forma_pagamento: string
+          p_itens: Json
+          p_orcamento_id: string
+          p_reiniciar_aprovacao: boolean
+          p_valor_total: number
+        }
         Returns: Json
       }
       fn_gerar_numero_orcamento: { Args: never; Returns: string }
@@ -9004,6 +9021,10 @@ export type Database = {
           p_nome_arquivo: string
           p_registros: Json
         }
+        Returns: Json
+      }
+      recusar_orcamento_cliente_publico: {
+        Args: { p_motivo?: string; p_orcamento_id: string; p_token: string }
         Returns: Json
       }
       registrar_devolucao_projeto_item: {

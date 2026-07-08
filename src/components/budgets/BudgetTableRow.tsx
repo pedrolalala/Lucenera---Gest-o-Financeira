@@ -258,15 +258,6 @@ export function BudgetTableRow({
             >
               {getStatusLabel(status)}
             </Badge>
-            {needsFinancialReview && (
-              <Badge
-                variant="outline"
-                className="bg-orange-50 text-orange-700 border-orange-200 text-[10px] whitespace-nowrap"
-              >
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                Revisão Financeira Pendente
-              </Badge>
-            )}
             {status === 'recusado_cliente' && budget.motivo_recusa_cliente && (
               <span
                 className="text-[10px] text-red-600 truncate max-w-[150px]"
