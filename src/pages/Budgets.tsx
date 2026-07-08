@@ -31,11 +31,6 @@ const STATUS_OPTIONS = [
   { label: 'Obra Finalizada', value: 'Obra Finalizada' },
   { label: 'Recusado', value: 'recusado' },
   { label: 'Expirado', value: 'expirado' },
-  {
-    label: 'Pendente Aprovação Financeira',
-    value: 'Aprovação Financeira',
-  },
-  { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
 ]
 
 export default function Budgets() {
