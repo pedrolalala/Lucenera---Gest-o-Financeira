@@ -24,12 +24,13 @@ const STATUS_OPTIONS = [
   { label: 'Rascunho', value: 'rascunho' },
   { label: 'Enviado para o Cliente', value: 'enviado_cliente' },
   { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
-  { label: 'Expirado', value: 'expirado' },
-  {
-    label: 'Pendente Aprovação Financeira',
-    value: 'Aprovação Financeira',
-  },
+  { label: 'Aprovado pelo Cliente', value: 'aprovado' },
+  { label: 'Revisão Financeira Pendente', value: 'Aprovação Financeira' },
   { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
+  { label: 'Finalizado', value: 'Finalizado' },
+  { label: 'Obra Finalizada', value: 'Obra Finalizada' },
+  { label: 'Recusado', value: 'recusado' },
+  { label: 'Expirado', value: 'expirado' },
 ]
 
 export default function Budgets() {
@@ -92,7 +93,7 @@ export default function Budgets() {
           </TabsTrigger>
           {(role === 'admin' || role === 'gerente') && (
             <TabsTrigger value="aprovacao-financeira">
-              Aprovação Financeira
+              Revisão Financeira Pendente
             </TabsTrigger>
           )}
           <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
