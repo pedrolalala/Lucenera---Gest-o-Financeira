@@ -119,6 +119,13 @@ RPCs/funções relevantes:
 - Se a tela precisa abrir modal financeiro, só exibir se houver permissão de acesso ao financeiro.
 - Se a demanda exigir alteração estrutural de banco, preencha `DB_CHANGE_REQUEST_TEMPLATE.md`.
 
+## SPEC-019 — Origem da aprovação do cliente e reset pós-aprovação
+
+- `orcamentos.aprovado_cliente_origem` (`'manual'|'token'`) distingue como o cliente aprovou, sem duplicar o status oficial da SPEC-016.
+- Editar `valor_total`, `forma_pagamento`, `frete_tipo`, `frete_valor`, `condicoes_pagamento`, `prazo_pagamento_dias`, `desconto_global` ou os itens de um orçamento já em `Aprovação Financeira`/`Orçamento Aprovado` reinicia o ciclo automaticamente (volta para `enviado_cliente`, limpa aprovação anterior, gera novo token).
+- Exceção: a tela de Aprovação Financeira usa a RPC `financeiro_editar_orcamento(p_orcamento_id, p_forma_pagamento, p_valor_total, p_itens, p_reiniciar_aprovacao)`, que permite ao usuário optar por **não** reiniciar o ciclo ao corrigir valores (modal de confirmação em `FinancialApprovalEditDialog.tsx`). Não fazer `UPDATE`/`upsert` direto em `orcamentos`/`orcamento_itens` nessa tela — sempre passar por essa RPC.
+- `buscar_orcamento_para_aprovacao(p_orcamento_id, p_token)` e `recusar_orcamento_cliente_publico(p_orcamento_id, p_token, p_motivo)` são as RPCs usadas pelo link público (`ClientApproval.tsx`) — existem desde 2026-07-07 (ver SPEC-019 no repositório central; antes disso nunca existiram, apesar do frontend já as chamar).
+
 ## SPEC-007 — SSO entre sistemas
 
 - Este app é origem ao abrir o Financeiro pelo modal pós-aprovação e destino quando o CRM abre `Gerar Orçamento`.
