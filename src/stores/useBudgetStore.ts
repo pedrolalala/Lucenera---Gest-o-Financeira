@@ -60,6 +60,7 @@ export interface Budget {
   condicoes_pagamento: string | null
   forma_pagamento: string | null
   prazo_inicio_cobranca_dias: number | null
+  data_inicio_pagamento: string | null
   prazo_pagamento_dias: number[] | null
   frete_tipo: string | null
   frete_valor: number | null

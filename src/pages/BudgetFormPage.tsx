@@ -111,10 +111,13 @@ const formSchema = z
       .max(120)
       .optional()
       .default(1),
-    prazo_inicio_cobranca_dias: z.coerce
-      .number({ invalid_type_error: 'Informe o prazo em dias' })
-      .int('Deve ser um valor inteiro')
-      .min(0, 'O prazo não pode ser negativo'),
+    data_inicio_pagamento: z
+      .date({ required_error: 'Data de início do pagamento é obrigatória' })
+      .refine((date) => {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        return date >= today
+      }, 'A data de início deve ser hoje ou uma data futura'),
     frete_tipo: z.enum(['com_frete', 'sem_frete'], {
       required_error: 'Selecione o frete',
       invalid_type_error: 'Selecione o frete',
@@ -232,7 +235,7 @@ export default function BudgetFormPage() {
       desconto_global: 0,
       forma_pagamento: '',
       parcelas: 1,
-      prazo_inicio_cobranca_dias: 0,
+      data_inicio_pagamento: undefined,
       frete_valor: 0,
       observacoes: '',
       validade: null,
@@ -364,7 +367,9 @@ export default function BudgetFormPage() {
             desconto_global: budget.desconto_global ?? 0,
             forma_pagamento: budget.forma_pagamento || '',
             parcelas: parsedParcelas,
-            prazo_inicio_cobranca_dias: budget.prazo_inicio_cobranca_dias ?? 0,
+            data_inicio_pagamento: budget.data_inicio_pagamento
+              ? new Date(budget.data_inicio_pagamento)
+              : undefined,
             frete_tipo:
               (budget.frete_tipo as 'com_frete' | 'sem_frete' | undefined) ??
               undefined,
@@ -636,7 +641,17 @@ export default function BudgetFormPage() {
       )
         ? values.parcelas || 1
         : 1
-      const prazoDias = values.prazo_inicio_cobranca_dias
+      const dataInicioDate = new Date(values.data_inicio_pagamento)
+      dataInicioDate.setHours(0, 0, 0, 0)
+      const hojeBase = new Date()
+      hojeBase.setHours(0, 0, 0, 0)
+      const prazoDias = Math.max(
+        0,
+        Math.round(
+          (dataInicioDate.getTime() - hojeBase.getTime()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      )
       const prazoPagamentoDias = Array.from(
         { length: totalParcelas },
         (_, i) => prazoDias * (i + 1),
@@ -657,6 +672,10 @@ export default function BudgetFormPage() {
         desconto_global: values.desconto_global ?? 0,
         forma_pagamento: values.forma_pagamento || null,
         prazo_inicio_cobranca_dias: prazoDias,
+        data_inicio_pagamento: format(
+          values.data_inicio_pagamento,
+          'yyyy-MM-dd',
+        ),
         prazo_pagamento_dias: prazoPagamentoDias,
         condicoes_pagamento: prazoPagamentoDias.join('/'),
         frete_tipo: values.frete_tipo,
@@ -1608,45 +1627,88 @@ export default function BudgetFormPage() {
 
                   <FormField
                     control={form.control}
-                    name="prazo_inicio_cobranca_dias"
+                    name="data_inicio_pagamento"
                     render={({ field }) => {
                       const parcelas = ['boleto', 'cartao'].includes(
                         form.watch('forma_pagamento') || '',
                       )
                         ? form.watch('parcelas') || 1
                         : 1
-                      const prazo = Number(field.value) || 0
-                      const vencimentos = Array.from(
-                        { length: parcelas },
-                        (_, i) => prazo * (i + 1),
-                      )
+                      const dataInicio = field.value as Date | undefined
+                      const vencimentos: Date[] = []
+                      if (dataInicio) {
+                        const dInicio = new Date(dataInicio)
+                        dInicio.setHours(0, 0, 0, 0)
+                        const hojeCalc = new Date()
+                        hojeCalc.setHours(0, 0, 0, 0)
+                        const intervaloDias = Math.max(
+                          0,
+                          Math.round(
+                            (dInicio.getTime() - hojeCalc.getTime()) /
+                              (1000 * 60 * 60 * 24),
+                          ),
+                        )
+                        for (let i = 0; i < parcelas; i++) {
+                          const d = new Date(dInicio)
+                          d.setDate(d.getDate() + intervaloDias * i)
+                          vencimentos.push(d)
+                        }
+                      }
                       return (
-                        <FormItem>
+                        <FormItem className="flex flex-col">
                           <FormLabel>
-                            Prazo para Início da Cobrança (dias)
+                            Data de Início do Pagamento{' '}
+                            <span className="text-red-500">*</span>
                           </FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="1"
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(parseInt(e.target.value) || 0)
-                              }
-                            />
-                          </FormControl>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <FormControl>
+                                <Button
+                                  variant={'outline'}
+                                  className={cn(
+                                    'w-full pl-3 text-left font-normal',
+                                    !field.value && 'text-muted-foreground',
+                                  )}
+                                >
+                                  {field.value ? (
+                                    format(field.value, 'PPP', { locale: ptBR })
+                                  ) : (
+                                    <span>Selecione a data</span>
+                                  )}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-auto p-0"
+                              align="start"
+                            >
+                              <Calendar
+                                mode="single"
+                                selected={field.value || undefined}
+                                onSelect={field.onChange}
+                                disabled={(date) =>
+                                  date <
+                                  new Date(new Date().setHours(0, 0, 0, 0))
+                                }
+                                initialFocus
+                                locale={ptBR}
+                              />
+                            </PopoverContent>
+                          </Popover>
                           <p className="text-xs text-muted-foreground">
-                            Dias após a aprovação até o vencimento da primeira
-                            cobrança. Confirme com o e-mail/negociação do
-                            cliente, como no fluxo do Connect.
-                            {prazo > 0 && (
+                            Data do vencimento da primeira cobrança. Confirme
+                            com o e-mail/negociação do cliente, como no fluxo do
+                            Connect.
+                            {vencimentos.length > 0 && (
                               <>
                                 {' '}
-                                Vencimentos calculados: {vencimentos.join(
-                                  '/',
-                                )}{' '}
-                                dias.
+                                Vencimentos calculados:{' '}
+                                {vencimentos
+                                  .map((d) =>
+                                    format(d, 'dd/MM/yyyy', { locale: ptBR }),
+                                  )
+                                  .join(' · ')}
                               </>
                             )}
                           </p>
