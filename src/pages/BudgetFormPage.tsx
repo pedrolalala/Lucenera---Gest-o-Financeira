@@ -93,7 +93,10 @@ const formSchema = z
       .string({ required_error: 'Selecione um cliente' })
       .min(1, 'Selecione um cliente'),
     arquiteto_id: z.string().optional().nullable(),
-    vendedor_id: z.string().optional().nullable(),
+    vendedor_id: z
+      .string({ required_error: 'Selecione um vendedor' })
+      .min(1, 'Selecione um vendedor')
+      .refine((v) => v !== 'none', { message: 'Selecione um vendedor' }),
     status: z.string().default('rascunho'),
     data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
     desconto_global: z.coerce
@@ -169,6 +172,17 @@ const formSchema = z
     })
   })
 
+const STATUS_OPTIONS = [
+  { value: 'rascunho', label: 'Rascunho' },
+  { value: 'enviado_cliente', label: 'Enviado para o Cliente' },
+  { value: 'Aprovação Financeira', label: 'Revisão Financeira Pendente' },
+  { value: 'Orçamento Aprovado', label: 'Orçamento Aprovado' },
+  { value: 'aprovado', label: 'Aprovado pelo Cliente (legado)' },
+  { value: 'recusado_cliente', label: 'Recusado pelo Cliente' },
+  { value: 'recusado', label: 'Recusado' },
+  { value: 'expirado', label: 'Expirado' },
+]
+
 export default function BudgetFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -229,7 +243,7 @@ export default function BudgetFormPage() {
       projeto_codigo: '',
       cliente_id: '',
       arquiteto_id: 'none',
-      vendedor_id: 'none',
+      vendedor_id: '',
       status: 'rascunho',
       data_emissao: new Date(),
       desconto_global: 0,
@@ -1304,11 +1318,12 @@ export default function BudgetFormPage() {
                   name="vendedor_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Vendedor</FormLabel>
+                      <FormLabel>
+                        Vendedor <span className="text-red-500">*</span>
+                      </FormLabel>
                       <FormControl>
                         <SearchableSelect
                           options={[
-                            { value: 'none', label: 'Nenhum' },
                             ...sortedVendedores.map((v) => ({
                               value: v.id,
                               label: v.nome,
@@ -1327,9 +1342,9 @@ export default function BudgetFormPage() {
                                 ]
                               : []),
                           ]}
-                          value={field.value || 'none'}
+                          value={field.value || ''}
                           onChange={field.onChange}
-                          placeholder="Nenhum"
+                          placeholder="Selecione um vendedor..."
                           searchPlaceholder="Buscar vendedor..."
                           emptyText="Nenhum vendedor encontrado."
                         />

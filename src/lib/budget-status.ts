@@ -19,6 +19,14 @@ export function buildClientApprovalLink(
 
 export function getStatusLabel(status: string | null | undefined): string {
   const labels: Record<string, string> = {
+    'Aprovação Financeira': 'Revisão Financeira Pendente',
+    'Orçamento Aprovado': 'Orçamento Aprovado',
+    Finalizado: 'Finalizado',
+    'Obra Finalizada': 'Obra Finalizada',
+    enviado_cliente: 'Enviado para o Cliente',
+    recusado_cliente: 'Recusado pelo Cliente',
+    aprovado: 'Aprovado pelo Cliente',
+    aprovado_financeiro: 'Orçamento Aprovado',
     rascunho: 'Rascunho',
     enviado_cliente: 'Enviado para o Cliente',
     recusado_cliente: 'Recusado pelo Cliente',

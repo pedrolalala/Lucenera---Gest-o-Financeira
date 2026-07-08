@@ -157,7 +157,7 @@ export function FinancialApprovalTab() {
           </div>
           <div>
             <h3 className="font-bold text-amber-900 text-sm uppercase tracking-wide">
-              Aprovação Financeira de Orçamentos
+              Revisão Financeira de Orçamentos
             </h3>
             <p className="text-sm text-amber-800 mt-1">
               Revise ou edite o orçamento na mesma tela do fluxo comum. A
@@ -211,7 +211,7 @@ export function FinancialApprovalTab() {
           <p className="text-sm text-gray-500">
             {searchTerm
               ? 'Tente buscar com outros termos.'
-              : 'Orçamentos em "Aprovação Financeira" aparecerão aqui.'}
+              : 'Orçamentos em "Revisão Financeira Pendente" aparecerão aqui.'}
           </p>
         </div>
       ) : (
