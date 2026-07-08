@@ -1939,15 +1939,6 @@ export default function BudgetFormPage() {
             onSuccess={handleProductCreateConfirm}
           />
 
-          <ProductCreateModal
-            open={isProductCreateOpen}
-            onOpenChange={(v: boolean) => {
-              setIsProductCreateOpen(v)
-              if (!v) setProductCreateTarget(null)
-            }}
-            onSuccess={handleProductCreateConfirm}
-          />
-
           <BatchPdfImport
             open={isBatchImportOpen}
             onOpenChange={setIsBatchImportOpen}
