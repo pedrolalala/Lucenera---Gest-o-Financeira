@@ -93,10 +93,7 @@ const formSchema = z
       .string({ required_error: 'Selecione um cliente' })
       .min(1, 'Selecione um cliente'),
     arquiteto_id: z.string().optional().nullable(),
-    vendedor_id: z
-      .string({ required_error: 'Selecione um vendedor' })
-      .min(1, 'Selecione um vendedor')
-      .refine((v) => v !== 'none', { message: 'Selecione um vendedor' }),
+    vendedor_id: z.string().optional().nullable(),
     status: z.string().default('rascunho'),
     data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
     desconto_global: z.coerce
@@ -172,18 +169,6 @@ const formSchema = z
     })
   })
 
-const STATUS_OPTIONS = [
-  { value: 'rascunho', label: 'Rascunho' },
-  { value: 'enviado_cliente', label: 'Enviado para o Cliente' },
-  { value: 'Aprovação da Equipe', label: 'Revisão da Equipe (Pós-Visita)' },
-  { value: 'Aprovação Financeira', label: 'Revisão Financeira Pendente' },
-  { value: 'Orçamento Aprovado', label: 'Orçamento Aprovado' },
-  { value: 'aprovado', label: 'Aprovado pelo Cliente (legado)' },
-  { value: 'recusado_cliente', label: 'Recusado pelo Cliente' },
-  { value: 'recusado', label: 'Recusado' },
-  { value: 'expirado', label: 'Expirado' },
-]
-
 export default function BudgetFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -244,7 +229,7 @@ export default function BudgetFormPage() {
       projeto_codigo: '',
       cliente_id: '',
       arquiteto_id: 'none',
-      vendedor_id: '',
+      vendedor_id: 'none',
       status: 'rascunho',
       data_emissao: new Date(),
       desconto_global: 0,
@@ -1319,12 +1304,11 @@ export default function BudgetFormPage() {
                   name="vendedor_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        Vendedor <span className="text-red-500">*</span>
-                      </FormLabel>
+                      <FormLabel>Vendedor</FormLabel>
                       <FormControl>
                         <SearchableSelect
                           options={[
+                            { value: 'none', label: 'Nenhum' },
                             ...sortedVendedores.map((v) => ({
                               value: v.id,
                               label: v.nome,
@@ -1343,9 +1327,9 @@ export default function BudgetFormPage() {
                                 ]
                               : []),
                           ]}
-                          value={field.value || ''}
+                          value={field.value || 'none'}
                           onChange={field.onChange}
-                          placeholder="Selecione um vendedor..."
+                          placeholder="Nenhum"
                           searchPlaceholder="Buscar vendedor..."
                           emptyText="Nenhum vendedor encontrado."
                         />
@@ -1952,15 +1936,6 @@ export default function BudgetFormPage() {
                   ''
                 : ''
             }
-            onSuccess={handleProductCreateConfirm}
-          />
-
-          <ProductCreateModal
-            open={isProductCreateOpen}
-            onOpenChange={(v: boolean) => {
-              setIsProductCreateOpen(v)
-              if (!v) setProductCreateTarget(null)
-            }}
             onSuccess={handleProductCreateConfirm}
           />
 

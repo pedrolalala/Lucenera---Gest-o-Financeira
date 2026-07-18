@@ -2897,6 +2897,7 @@ export type Database = {
           created_at: string | null
           data_base_vencimento: string | null
           data_emissao: string | null
+          data_inicio_pagamento: string | null
           desconto_global: number | null
           empresa_id: string
           enviado_cliente_em: string | null
@@ -2929,6 +2930,7 @@ export type Database = {
           created_at?: string | null
           data_base_vencimento?: string | null
           data_emissao?: string | null
+          data_inicio_pagamento?: string | null
           desconto_global?: number | null
           empresa_id: string
           enviado_cliente_em?: string | null
@@ -2963,6 +2965,7 @@ export type Database = {
           created_at?: string | null
           data_base_vencimento?: string | null
           data_emissao?: string | null
+          data_inicio_pagamento?: string | null
           desconto_global?: number | null
           empresa_id?: string
           enviado_cliente_em?: string | null
