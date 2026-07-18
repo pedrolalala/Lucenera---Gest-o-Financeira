@@ -3,6 +3,8 @@ export const CLIENT_APPROVAL_BASE_URL =
 
 export const FINANCIAL_APPROVAL_STATUS = 'Aprovação Financeira'
 
+export const TEAM_APPROVAL_STATUS = 'Aprovação da Equipe'
+
 export const APPROVED_STATUSES: string[] = [
   'Orçamento Aprovado',
   'aprovado_financeiro',
@@ -24,6 +26,7 @@ export function buildClientApprovalLink(
 
 export function getStatusLabel(status: string | null | undefined): string {
   const labels: Record<string, string> = {
+    'Aprovação da Equipe': 'Revisão da Equipe (Pós-Visita)',
     'Aprovação Financeira': 'Revisão Financeira Pendente',
     'Orçamento Aprovado': 'Orçamento Aprovado',
     Finalizado: 'Finalizado',
@@ -41,6 +44,7 @@ export function getStatusLabel(status: string | null | undefined): string {
 
 export function getStatusBadgeClass(status: string | null | undefined): string {
   const classes: Record<string, string> = {
+    'Aprovação da Equipe': 'bg-purple-50 text-purple-700 border-purple-200',
     'Aprovação Financeira': 'bg-amber-50 text-amber-700 border-amber-300',
     'Orçamento Aprovado': 'bg-green-50 text-green-700 border-green-200',
     Finalizado: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -73,4 +77,10 @@ export function isFinancialApprovalStatus(
   status: string | null | undefined,
 ): boolean {
   return status === 'Aprovação Financeira'
+}
+
+export function isTeamApprovalStatus(
+  status: string | null | undefined,
+): boolean {
+  return status === TEAM_APPROVAL_STATUS
 }

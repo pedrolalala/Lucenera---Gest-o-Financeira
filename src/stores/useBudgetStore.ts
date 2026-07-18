@@ -123,6 +123,11 @@ interface BudgetState {
   approveBudgetClient: (budget: Budget) => Promise<any>
   enviarOrcamentoCliente: (budgetId: string) => Promise<{ token: string }>
   aprovarManualmenteCliente: (budgetId: string) => Promise<void>
+  equipeAprovarOrcamento: (budget: Budget, observacao?: string) => Promise<any>
+  equipeDevolverOrcamentoCliente: (
+    budget: Budget,
+    motivo: string,
+  ) => Promise<any>
 }
 
 const useBudgetStore = create<BudgetState>((set, get) => ({
@@ -413,6 +418,40 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     }
 
     await get().fetchBudgets()
+  },
+
+  equipeAprovarOrcamento: async (budget, observacao) => {
+    const { data, error } = await (supabase as any).rpc(
+      'equipe_aprovar_orcamento',
+      { p_orcamento_id: budget.id, p_observacao: observacao || null },
+    )
+
+    if (error) {
+      console.error('Error in team approval:', error)
+      throw new Error(error.message || 'Erro ao aprovar orçamento pela equipe.')
+    }
+
+    await get().fetchBudgets()
+
+    return data
+  },
+
+  equipeDevolverOrcamentoCliente: async (budget, motivo) => {
+    const { data, error } = await (supabase as any).rpc(
+      'equipe_devolver_orcamento_cliente',
+      { p_orcamento_id: budget.id, p_motivo: motivo },
+    )
+
+    if (error) {
+      console.error('Error returning budget to client:', error)
+      throw new Error(
+        error.message || 'Erro ao devolver orçamento ao cliente.',
+      )
+    }
+
+    await get().fetchBudgets()
+
+    return data
   },
 }))
 

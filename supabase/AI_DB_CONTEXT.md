@@ -99,7 +99,7 @@ RPCs/funções relevantes:
 - O fluxo aprovado usa `orcamento_id` como chave de rastreio.
 - Não usar `venda_id` no fluxo orçamento aprovado -> financeiro.
 - Ao aprovar orçamento, chamar a RPC `aprovar_orcamento_financeiro(p_orcamento_id uuid)`.
-- O contrato oficial de status é `enviado_cliente -> Aprovação Financeira -> Orçamento Aprovado`; `aprovado`, `aprovado_cliente` e `aprovado_financeiro` são legados/compatibilidade.
+- O contrato oficial de status (SPEC-031, 2026-07-18) é `enviado_cliente -> Aprovação da Equipe -> Aprovação Financeira -> Orçamento Aprovado`; `aprovado`, `aprovado_cliente` e `aprovado_financeiro` são legados/compatibilidade. Antes da SPEC-031 a aprovação do cliente ia direto para `Aprovação Financeira` — as 5 funções de aprovação do cliente (`aprovar_orcamento_cliente_publico`, `aprovar_orcamento_cliente_manual`, `aprovar_orcamento_cliente`, `adm_aprovar_pelo_cliente`, `cliente_aprovar_orcamento`) agora terminam em `Aprovação da Equipe`.
 - A RPC deve preparar itens aprovados, parcelas e boletos.
 - Cadastro de produto feito dentro de Orçamentos deve chamar `criar_produto_orcamento(p_payload jsonb)` e gravar em `public.produtos`, nunca em catálogo paralelo.
 - Produtos criados no orçamento devem ser vinculados ao item por `orcamento_itens.produto_id` e trazer snapshot visual de `codigo_produto`, `referencia`, `nome` e `sku` na UI.
@@ -125,6 +125,16 @@ RPCs/funções relevantes:
 - Editar `valor_total`, `forma_pagamento`, `frete_tipo`, `frete_valor`, `condicoes_pagamento`, `prazo_pagamento_dias`, `desconto_global` ou os itens de um orçamento já em `Aprovação Financeira`/`Orçamento Aprovado` reinicia o ciclo automaticamente (volta para `enviado_cliente`, limpa aprovação anterior, gera novo token).
 - Exceção: a tela de Aprovação Financeira usa a RPC `financeiro_editar_orcamento(p_orcamento_id, p_forma_pagamento, p_valor_total, p_itens, p_reiniciar_aprovacao)`, que permite ao usuário optar por **não** reiniciar o ciclo ao corrigir valores (modal de confirmação em `FinancialApprovalEditDialog.tsx`). Não fazer `UPDATE`/`upsert` direto em `orcamentos`/`orcamento_itens` nessa tela — sempre passar por essa RPC.
 - `buscar_orcamento_para_aprovacao(p_orcamento_id, p_token)` e `recusar_orcamento_cliente_publico(p_orcamento_id, p_token, p_motivo)` são as RPCs usadas pelo link público (`ClientApproval.tsx`) — existem desde 2026-07-07 (ver SPEC-019 no repositório central; antes disso nunca existiram, apesar do frontend já as chamar).
+
+## SPEC-031 — Etapa "Aprovação da Equipe" (2026-07-18)
+
+- Novo status `'Aprovação da Equipe'` entre `enviado_cliente` e `Aprovação Financeira`: depois que o cliente aprova, a equipe visita a obra e decide se confirma (segue pro financeiro) ou se precisa trocar peça/cor (devolve ao cliente para nova aprovação).
+- `requer_revisao_financeira` deixou de ser setado na aprovação do cliente (era `true` antes da SPEC-031) — agora só é setado `true` dentro de `equipe_aprovar_orcamento`, quando o orçamento de fato entra na fila financeira.
+- RPC `equipe_aprovar_orcamento(p_orcamento_id uuid, p_observacao text)`: `Aprovação da Equipe -> Aprovação Financeira`. Exige `status = 'Aprovação da Equipe'`.
+- RPC `equipe_devolver_orcamento_cliente(p_orcamento_id uuid, p_motivo text)`: `Aprovação da Equipe -> enviado_cliente`. `p_motivo` obrigatório (fica em `historico_status_orcamentos.observacao`); gera `token_aprovacao_cliente` novo (invalida o link antigo) e limpa `aprovado_cliente_em`/`aprovado_cliente_origem`.
+- Permissão das duas RPCs: `usuarios.role IN ('admin','gerente')` OU `hub_pode_executar(auth.uid(), 'orcamentos', 'aprovacao_equipe', 'editar')` — módulo `aprovacao_equipe` cadastrado em `public.modulos` para o sistema `orcamentos` (SPEC-006), reaproveitando a ação `'editar'` já existente (não há ação `'aprovar'` no CHECK constraint do Hub). Conceder o módulo a um papel/usuário é feito pela tela de administração de permissões do Hub — esta migration só cadastra o módulo no catálogo, não concede a ninguém.
+- Frontend: aba nova "Aprovação da Equipe" em `Budgets.tsx` (`TeamApprovalTab.tsx`), visível a todos, mas com os botões de ação desabilitados se o usuário não passar no check de `hub_pode_executar` (chamado direto via `supabase.rpc`, sem hook — não existe hook de permissão reutilizável no sistema ainda).
+- Rótulo de UI do novo status: `'Revisão da Equipe (Pós-Visita)'` (não confundir com `'Revisão Financeira Pendente'`, que é o rótulo de `'Aprovação Financeira'`).
 
 ## SPEC-007 — SSO entre sistemas
 

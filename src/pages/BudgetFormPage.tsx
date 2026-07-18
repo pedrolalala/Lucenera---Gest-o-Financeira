@@ -175,6 +175,7 @@ const formSchema = z
 const STATUS_OPTIONS = [
   { value: 'rascunho', label: 'Rascunho' },
   { value: 'enviado_cliente', label: 'Enviado para o Cliente' },
+  { value: 'Aprovação da Equipe', label: 'Revisão da Equipe (Pós-Visita)' },
   { value: 'Aprovação Financeira', label: 'Revisão Financeira Pendente' },
   { value: 'Orçamento Aprovado', label: 'Orçamento Aprovado' },
   { value: 'aprovado', label: 'Aprovado pelo Cliente (legado)' },

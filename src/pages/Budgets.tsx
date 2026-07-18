@@ -14,6 +14,7 @@ import {
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
 import { ApprovalsTab } from '@/components/budgets/ApprovalsTab'
 import { FinancialApprovalTab } from '@/components/budgets/FinancialApprovalTab'
+import { TeamApprovalTab } from '@/components/budgets/TeamApprovalTab'
 import { ClientApprovalTab } from '@/components/budgets/ClientApprovalTab'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
@@ -25,6 +26,7 @@ const STATUS_OPTIONS = [
   { label: 'Enviado para o Cliente', value: 'enviado_cliente' },
   { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
   { label: 'Aprovado pelo Cliente', value: 'aprovado' },
+  { label: 'Revisão da Equipe (Pós-Visita)', value: 'Aprovação da Equipe' },
   { label: 'Revisão Financeira Pendente', value: 'Aprovação Financeira' },
   { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
   { label: 'Finalizado', value: 'Finalizado' },
@@ -91,6 +93,9 @@ export default function Budgets() {
           <TabsTrigger value="aprovacao-cliente">
             Aprovação do cliente
           </TabsTrigger>
+          <TabsTrigger value="aprovacao-equipe">
+            Aprovação da Equipe
+          </TabsTrigger>
           {(role === 'admin' || role === 'gerente') && (
             <TabsTrigger value="aprovacao-financeira">
               Revisão Financeira Pendente
@@ -136,6 +141,10 @@ export default function Budgets() {
 
         <TabsContent value="aprovacao-cliente" className="mt-0">
           <ClientApprovalTab />
+        </TabsContent>
+
+        <TabsContent value="aprovacao-equipe" className="mt-0">
+          <TeamApprovalTab />
         </TabsContent>
 
         {(role === 'admin' || role === 'gerente') && (
