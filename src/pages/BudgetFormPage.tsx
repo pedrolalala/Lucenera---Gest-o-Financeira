@@ -77,6 +77,7 @@ import {
   BudgetItemCard,
   type ProductMeta,
 } from '@/components/budgets/BudgetItemCard'
+import { BudgetItemsHeader } from '@/components/budgets/BudgetItemsHeader'
 import type { ParsedPdfResult } from '@/lib/pdf-import'
 import type { ProductCatalogItem } from '@/services/productCatalogService'
 
@@ -1539,6 +1540,8 @@ export default function BudgetFormPage() {
                   </div>
                 </div>
               )}
+
+              {fields.length > 0 && <BudgetItemsHeader />}
 
               <div className="space-y-4">
                 {fields.map((field, index) => {

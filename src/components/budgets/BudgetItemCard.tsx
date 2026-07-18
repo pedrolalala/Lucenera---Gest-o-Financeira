@@ -13,6 +13,12 @@ import { Trash2, PackageSearch, PackagePlus } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 
+// SPEC-032: rótulos por campo só aparecem em telas < lg — em lg: e acima o
+// cabeçalho único (BudgetItemsHeader.tsx) já mostra o nome da coluna uma
+// única vez, então repetir aqui só ocuparia espaço vertical à toa.
+const fieldLabelClass =
+  'lg:hidden text-[10px] text-gray-500 font-medium uppercase'
+
 export interface ProductMeta {
   codigo_produto: number | null
   referencia: string | null
@@ -95,7 +101,7 @@ export function BudgetItemCard({
               name={`itens.${index}.custom_id`}
               render={({ field: f }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+                  <FormLabel className={fieldLabelClass}>
                     Luminária
                   </FormLabel>
                   <FormControl>
@@ -126,7 +132,7 @@ export function BudgetItemCard({
           {/* Código Produto - Read-only, from codigo_produto column */}
           <div className="shrink-0 lg:w-[110px]">
             <FormItem>
-              <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+              <FormLabel className={fieldLabelClass}>
                 Código Produto
               </FormLabel>
               <Input
@@ -145,7 +151,7 @@ export function BudgetItemCard({
           {/* Código de Referência - Read-only, from sku column */}
           <div className="shrink-0 lg:w-[130px]">
             <FormItem>
-              <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+              <FormLabel className={fieldLabelClass}>
                 Código de Referência
               </FormLabel>
               <Input
@@ -165,7 +171,7 @@ export function BudgetItemCard({
                 name={`itens.${index}.produto_id`}
                 render={({ field: f }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+                    <FormLabel className={fieldLabelClass}>
                       Produto
                     </FormLabel>
                     <FormControl>
@@ -185,7 +191,7 @@ export function BudgetItemCard({
                 name={`itens.${index}.descricao`}
                 render={({ field: f }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+                    <FormLabel className={fieldLabelClass}>
                       Descrição do Produto
                     </FormLabel>
                     <div className="flex gap-2">
@@ -232,7 +238,7 @@ export function BudgetItemCard({
               name={`itens.${index}.quantidade`}
               render={({ field: f }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+                  <FormLabel className={fieldLabelClass}>
                     Qtd
                   </FormLabel>
                   <FormControl>
@@ -265,7 +271,7 @@ export function BudgetItemCard({
               name={`itens.${index}.preco_unitario`}
               render={({ field: f }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+                  <FormLabel className={fieldLabelClass}>
                     Preço Unit.
                   </FormLabel>
                   <FormControl>
@@ -290,7 +296,7 @@ export function BudgetItemCard({
               name={`itens.${index}.desconto`}
               render={({ field: f }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] text-gray-500 font-medium uppercase">
+                  <FormLabel className={fieldLabelClass}>
                     Desc %
                   </FormLabel>
                   <FormControl>
@@ -314,7 +320,7 @@ export function BudgetItemCard({
 
           {/* Subtotal - Read-only display */}
           <div className="shrink-0 lg:w-28 flex flex-col gap-0.5 justify-end pb-1">
-            <span className="text-[9px] uppercase font-bold text-gray-400">
+            <span className="lg:hidden text-[9px] uppercase font-bold text-gray-400">
               Subtotal
             </span>
             <span className="text-sm font-semibold text-gray-900 bg-gray-50 px-2 py-1.5 rounded-md text-right">
