@@ -150,6 +150,12 @@ RPCs/funções relevantes:
 - `newBudget?.status === 'enviado_cliente'` em `BudgetFormPage.tsx` (pós-criação) deixou de ser alcançável a partir da criação (mantido como fallback defensivo) — a criação agora sempre resulta em `status = 'rascunho'`, e o toast do caminho normal orienta o usuário a usar a aba "Rascunho".
 - Migration: `supabase/db/migrations/20260727_066_spec051_fase_rascunho_orcamento/` (redigida no repositório central, **aplicada no Supabase real em 2026-07-27** — confirmado por leitura direta do `pg_get_functiondef`/`pg_get_triggerdef`).
 
+## SPEC-070 — Voltar Orçamento para Rascunho (2026-08-06)
+
+- Nova RPC `voltar_orcamento_rascunho(p_orcamento_id uuid, p_motivo text)`: transição `enviado_cliente|recusado_cliente -> rascunho`, restrita a `usuarios.role IN ('admin','gerente')` (sem fallback via `hub_pode_executar`, diferente de `equipe_devolver_orcamento_cliente`). `p_motivo` obrigatório, gravado em `historico_status_orcamentos.observacao`. Seta `status = 'rascunho'` e `token_aprovacao_cliente = NULL` (invalida o link já enviado ao cliente; nenhum token novo é gerado até o reenvio via `enviar_orcamento_para_cliente`). `enviado_cliente_em`/`enviado_cliente_por`/`recusado_cliente_em` não são apagados.
+- Migration redigida no repositório central, **ainda NÃO aplicada no Supabase real**: `supabase/db/migrations/20260806_082_spec070_voltar_orcamento_rascunho/001_voltar_orcamento_rascunho.sql`.
+- Frontend: nova action `voltarOrcamentoRascunho(budget, motivo)` em `useBudgetStore.ts`. Botão "Voltar para Rascunho" (ícone `Undo2`) em `BudgetTableRow.tsx` e `ClientApprovalTab.tsx`, visível para `enviado_cliente`/`recusado_cliente`, restrito à mesma checagem `canApproveFinancial` (`canApproveQuotes || role === 'admin' || role === 'gerente'`) já usada em `BudgetTableRow.tsx` — não usar `canManageClient`/`APPROVAL_ROLES`, que incluem `operador`. Dialog de motivo obrigatório no mesmo padrão de `TeamApprovalTab.tsx` ("Devolver ao Cliente"). Após sucesso, o orçamento sai da aba "Aprovação do Cliente" e aparece na aba "Rascunho" automaticamente, só pela mudança de `status` (sem código extra).
+
 ## SPEC-007 — SSO entre sistemas
 
 - Este app é origem ao abrir o Financeiro pelo modal pós-aprovação e destino quando o CRM abre `Gerar Orçamento`.

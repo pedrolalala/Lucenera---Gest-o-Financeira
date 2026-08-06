@@ -12,11 +12,21 @@ import {
   AlertTriangle,
   Search,
   X,
+  Undo2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { searchBudgetsByContactsAndProjects } from '@/lib/budget-search'
 import {
   Table,
@@ -49,13 +59,20 @@ export function ClientApprovalTab() {
     initialized,
     enviarOrcamentoCliente,
     aprovarManualmenteCliente,
+    voltarOrcamentoRascunho,
   } = useBudgetStore()
-  const { role } = useAuth()
+  const { role, canApproveQuotes } = useAuth()
   const navigate = useNavigate()
   const [actionId, setActionId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [voltarRascunhoBudget, setVoltarRascunhoBudget] =
+    useState<Budget | null>(null)
+  const [motivoVoltarRascunho, setMotivoVoltarRascunho] = useState('')
+  const [isVoltandoRascunho, setIsVoltandoRascunho] = useState(false)
 
   const canManage = role !== null && APPROVAL_ROLES.includes(role)
+  const canApproveFinancial =
+    canApproveQuotes || role === 'admin' || role === 'gerente'
 
   const clientBudgets = useMemo(
     () =>
@@ -118,6 +135,33 @@ export function ClientApprovalTab() {
       })
     } finally {
       setActionId(null)
+    }
+  }
+
+  const handleOpenVoltarRascunho = (budget: Budget) => {
+    setVoltarRascunhoBudget(budget)
+    setMotivoVoltarRascunho('')
+  }
+
+  const handleConfirmVoltarRascunho = async () => {
+    if (!voltarRascunhoBudget || !motivoVoltarRascunho.trim()) return
+    setIsVoltandoRascunho(true)
+    try {
+      await voltarOrcamentoRascunho(
+        voltarRascunhoBudget,
+        motivoVoltarRascunho.trim(),
+      )
+      toast.success('Orçamento voltou para Rascunho', {
+        description: 'O link de aprovação enviado ao cliente foi invalidado.',
+      })
+      setVoltarRascunhoBudget(null)
+      setMotivoVoltarRascunho('')
+    } catch (error: any) {
+      toast.error('Falha ao voltar orçamento para rascunho', {
+        description: error?.message,
+      })
+    } finally {
+      setIsVoltandoRascunho(false)
     }
   }
 
@@ -298,6 +342,17 @@ export function ClientApprovalTab() {
                                 Aprovar Manualmente
                               </Button>
                             )}
+                            {canApproveFinancial && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                                onClick={() => handleOpenVoltarRascunho(budget)}
+                              >
+                                <Undo2 className="h-4 w-4 mr-1" />
+                                Voltar para Rascunho
+                              </Button>
+                            )}
                           </>
                         )}
                         {budget.status === 'recusado_cliente' && canManage && (
@@ -315,6 +370,18 @@ export function ClientApprovalTab() {
                             Reenviar
                           </Button>
                         )}
+                        {budget.status === 'recusado_cliente' &&
+                          canApproveFinancial && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                              onClick={() => handleOpenVoltarRascunho(budget)}
+                            >
+                              <Undo2 className="h-4 w-4 mr-1" />
+                              Voltar para Rascunho
+                            </Button>
+                          )}
                         {!canManage && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -344,6 +411,69 @@ export function ClientApprovalTab() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={!!voltarRascunhoBudget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setVoltarRascunhoBudget(null)
+            setMotivoVoltarRascunho('')
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <Undo2 className="h-5 w-5" />
+              Voltar para Rascunho
+            </DialogTitle>
+            <DialogDescription>
+              O orçamento voltará para a fase de Rascunho e o link de aprovação
+              enviado ao cliente deixará de funcionar. Descreva o motivo (ex.:
+              "Cliente pediu alteração no item X").
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">
+              Motivo (obrigatório)
+            </label>
+            <Textarea
+              value={motivoVoltarRascunho}
+              onChange={(e) => setMotivoVoltarRascunho(e.target.value)}
+              placeholder="Motivo da alteração..."
+              rows={4}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setVoltarRascunhoBudget(null)
+                setMotivoVoltarRascunho('')
+              }}
+              disabled={isVoltandoRascunho}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmVoltarRascunho}
+              disabled={!motivoVoltarRascunho.trim() || isVoltandoRascunho}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {isVoltandoRascunho ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                'Confirmar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

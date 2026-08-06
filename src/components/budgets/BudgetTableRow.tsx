@@ -13,6 +13,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import { format } from 'date-fns'
 import {
   Edit,
@@ -25,6 +34,7 @@ import {
   Copy,
   UserCheck,
   Send,
+  Undo2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
@@ -60,6 +70,7 @@ export function BudgetTableRow({
     approveBudgetAndMigrate,
     enviarOrcamentoCliente,
     aprovarManualmenteCliente,
+    voltarOrcamentoRascunho,
   } = useBudgetStore()
   const { canApproveQuotes, role } = useAuth()
   const [isApproving, setIsApproving] = useState(false)
@@ -69,6 +80,9 @@ export function BudgetTableRow({
     null,
   )
   const [isSending, setIsSending] = useState(false)
+  const [showVoltarRascunho, setShowVoltarRascunho] = useState(false)
+  const [motivoVoltarRascunho, setMotivoVoltarRascunho] = useState('')
+  const [isVoltandoRascunho, setIsVoltandoRascunho] = useState(false)
 
   const normalizedStatus = normalizeStatus(status)
   const canManageClient =
@@ -152,6 +166,25 @@ export function BudgetTableRow({
       })
     } finally {
       setIsSending(false)
+    }
+  }
+
+  const handleConfirmVoltarRascunho = async () => {
+    if (!motivoVoltarRascunho.trim()) return
+    try {
+      setIsVoltandoRascunho(true)
+      await voltarOrcamentoRascunho(budget, motivoVoltarRascunho.trim())
+      toast.success('Orçamento voltou para Rascunho', {
+        description: 'O link de aprovação enviado ao cliente foi invalidado.',
+      })
+      setShowVoltarRascunho(false)
+      setMotivoVoltarRascunho('')
+    } catch (error: any) {
+      toast.error('Falha ao voltar orçamento para rascunho', {
+        description: error?.message,
+      })
+    } finally {
+      setIsVoltandoRascunho(false)
     }
   }
 
@@ -328,6 +361,17 @@ export function BudgetTableRow({
                     )}
                   </Button>
                 )}
+                {canApproveFinancial && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                    title="Voltar para Rascunho"
+                    onClick={() => setShowVoltarRascunho(true)}
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </Button>
+                )}
               </>
             )}
 
@@ -345,6 +389,18 @@ export function BudgetTableRow({
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
+              </Button>
+            )}
+
+            {normalizedStatus === 'recusado_cliente' && canApproveFinancial && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                title="Voltar para Rascunho"
+                onClick={() => setShowVoltarRascunho(true)}
+              >
+                <Undo2 className="h-4 w-4" />
               </Button>
             )}
 
@@ -440,6 +496,67 @@ export function BudgetTableRow({
         open={showFinanceModal}
         onOpenChange={setShowFinanceModal}
       />
+
+      <Dialog
+        open={showVoltarRascunho}
+        onOpenChange={(open) => {
+          setShowVoltarRascunho(open)
+          if (!open) setMotivoVoltarRascunho('')
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <Undo2 className="h-5 w-5" />
+              Voltar para Rascunho
+            </DialogTitle>
+            <DialogDescription>
+              O orçamento voltará para a fase de Rascunho e o link de aprovação
+              enviado ao cliente deixará de funcionar. Descreva o motivo (ex.:
+              "Cliente pediu alteração no item X").
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">
+              Motivo (obrigatório)
+            </label>
+            <Textarea
+              value={motivoVoltarRascunho}
+              onChange={(e) => setMotivoVoltarRascunho(e.target.value)}
+              placeholder="Motivo da alteração..."
+              rows={4}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowVoltarRascunho(false)
+                setMotivoVoltarRascunho('')
+              }}
+              disabled={isVoltandoRascunho}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmVoltarRascunho}
+              disabled={!motivoVoltarRascunho.trim() || isVoltandoRascunho}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {isVoltandoRascunho ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                'Confirmar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
