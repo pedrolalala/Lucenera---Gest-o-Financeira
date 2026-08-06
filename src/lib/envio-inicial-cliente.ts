@@ -93,21 +93,30 @@ export function buildBudgetMailtoUrl(
 }
 
 /**
- * Executa o comportamento novo do envio inicial (SPEC-067): baixa o PDF do
- * orçamento e, em seguida, abre o cliente de e-mail padrão do usuário via
- * `mailto:` pré-preenchido. Usa `window.location.href` (não `window.open`)
- * para não sofrer bloqueio de pop-up após o `await` do download.
+ * Executa o comportamento novo do envio inicial (SPEC-067): abre o cliente
+ * de e-mail padrão do usuário via `mailto:` pré-preenchido e, em seguida,
+ * baixa o PDF do orçamento.
  *
- * Se o download do PDF falhar, a Promise rejeita e o `mailto:` NÃO é
- * aberto — quem chama decide o toast de erro (P-5 da SPEC-067). O status
- * do orçamento (já alterado pela RPC `enviar_orcamento_para_cliente`) não
- * é revertido por esta função.
+ * O `mailto:` é aberto ANTES do download (não depois) de propósito: o
+ * navegador só honra a navegação para um esquema externo como `mailto:`
+ * enquanto ainda houver "ativação de usuário" válida a partir do clique
+ * original, e essa ativação expira depois de chamadas de rede demoradas
+ * (a geração do PDF passa por uma Edge Function, que não é instantânea).
+ * Abrir o `mailto:` o mais perto possível do clique é o que garante que
+ * ele realmente abra. O download do PDF (via `<a download>`) não sofre
+ * dessa restrição, então pode acontecer depois sem prejuízo.
+ *
+ * Consequência (P-5 revisada, 2026-08-06): se o download do PDF falhar
+ * depois, o `mailto:` já foi aberto — quem chama mostra só um toast de
+ * erro do PDF, sem afetar o e-mail já aberto. O status do orçamento (já
+ * alterado pela RPC `enviar_orcamento_para_cliente`) não é revertido por
+ * esta função.
  */
 export async function sendInitialBudgetPdfAndEmail(
   budget: BudgetEmailInfo,
   token: string,
 ): Promise<void> {
-  await downloadBudgetPdf(budget)
   const mailtoUrl = buildBudgetMailtoUrl(budget, token)
   window.location.href = mailtoUrl
+  await downloadBudgetPdf(budget)
 }
