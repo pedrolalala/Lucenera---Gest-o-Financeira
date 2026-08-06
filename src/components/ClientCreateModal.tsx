@@ -62,6 +62,9 @@ const schema = z.object({
   razao_social: z.string().optional(),
   inscricao_estadual: z.string().optional(),
   inscricao_municipal: z.string().optional(),
+  // SPEC-052: campo de texto livre por enquanto — o print de referência do Vinicius com as
+  // opções exatas do regime tributário nunca chegou. Trocar para Select fixo quando as opções
+  // forem confirmadas.
   regime_apuracao: z.string().optional(),
   limite_credito: z.coerce.number().min(0).optional(),
   nao_residente: z.boolean().default(false),
@@ -79,6 +82,18 @@ const schema = z.object({
   bairro: z.string().optional(),
   cidade: z.string().optional(),
   estado: z.string().max(2).optional(),
+  cep_entrega: z.string().optional(),
+  endereco_entrega: z.string().optional(),
+  numero_entrega: z.string().optional(),
+  bairro_entrega: z.string().optional(),
+  cidade_entrega: z.string().optional(),
+  estado_entrega: z.string().max(2).optional(),
+  cep_cobranca: z.string().optional(),
+  endereco_cobranca: z.string().optional(),
+  numero_cobranca: z.string().optional(),
+  bairro_cobranca: z.string().optional(),
+  cidade_cobranca: z.string().optional(),
+  estado_cobranca: z.string().max(2).optional(),
   data_nascimento: z.string().optional(),
   especialidade: z.string().optional(),
   observacoes: z.string().optional(),
@@ -143,6 +158,18 @@ export function ClientCreateModal({
       bairro: '',
       cidade: '',
       estado: '',
+      cep_entrega: '',
+      endereco_entrega: '',
+      numero_entrega: '',
+      bairro_entrega: '',
+      cidade_entrega: '',
+      estado_entrega: '',
+      cep_cobranca: '',
+      endereco_cobranca: '',
+      numero_cobranca: '',
+      bairro_cobranca: '',
+      cidade_cobranca: '',
+      estado_cobranca: '',
       data_nascimento: '',
       especialidade: '',
       observacoes: '',
@@ -164,6 +191,91 @@ export function ClientCreateModal({
   }, [open, form])
 
   const watchTipoPessoa = form.watch('tipo_pessoa')
+
+  // Busca automática de CEP (ViaCEP), SPEC-052. Preenche apenas o bloco de endereço
+  // (principal/entrega/cobrança) correspondente ao CEP digitado, sem cruzar dados entre blocos.
+  const buscarEnderecoPorCep = async (
+    cepValue: string,
+    keys: {
+      endereco: 'endereco' | 'endereco_entrega' | 'endereco_cobranca'
+      bairro: 'bairro' | 'bairro_entrega' | 'bairro_cobranca'
+      cidade: 'cidade' | 'cidade_entrega' | 'cidade_cobranca'
+      estado: 'estado' | 'estado_entrega' | 'estado_cobranca'
+    },
+  ) => {
+    const digits = (cepValue || '').replace(/\D/g, '')
+    if (digits.length !== 8) return
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      const data = await response.json()
+      if (!data || data.erro) {
+        toast.warning('CEP não encontrado', {
+          description: 'Preencha o endereço manualmente.',
+        })
+        return
+      }
+      form.setValue(keys.endereco, data.logradouro || '', {
+        shouldDirty: true,
+      })
+      form.setValue(keys.bairro, data.bairro || '', { shouldDirty: true })
+      form.setValue(keys.cidade, data.localidade || '', {
+        shouldDirty: true,
+      })
+      form.setValue(keys.estado, (data.uf || '').toUpperCase(), {
+        shouldDirty: true,
+      })
+    } catch {
+      toast.warning('Não foi possível consultar o CEP', {
+        description:
+          'Verifique sua conexão. Você pode preencher o endereço manualmente.',
+      })
+    }
+  }
+
+  // Busca automática de CNPJ (BrasilAPI), SPEC-052. Só preenche nome / nome da empresa se os
+  // campos ainda estiverem vazios, para não sobrescrever algo já digitado pelo usuário.
+  const buscarDadosPorCnpj = async (cpfCnpjValue: string) => {
+    const digits = (cpfCnpjValue || '').replace(/\D/g, '')
+    if (digits.length !== 14) return
+    try {
+      const response = await fetch(
+        `https://brasilapi.com.br/api/cnpj/v1/${digits}`,
+      )
+      if (!response.ok) {
+        toast.warning('CNPJ não encontrado', {
+          description: 'Preencha os dados da empresa manualmente.',
+        })
+        return
+      }
+      const data = await response.json()
+      // Diferente do CRM, este formulário já tem um campo `razao_social`
+      // dedicado (contatos.razao_social) — a razão social retornada pela
+      // BrasilAPI vai para ele, não para `nome` (que aqui funciona como
+      // nome completo/fantasia, distinto de razão social).
+      if (!form.getValues('razao_social')) {
+        form.setValue('razao_social', data.razao_social || '', {
+          shouldDirty: true,
+        })
+      }
+      if (!form.getValues('nome')) {
+        form.setValue('nome', data.nome_fantasia || data.razao_social || '', {
+          shouldDirty: true,
+        })
+      }
+      if (!form.getValues('nome_empresa')) {
+        form.setValue(
+          'nome_empresa',
+          data.nome_fantasia || data.razao_social || '',
+          { shouldDirty: true },
+        )
+      }
+    } catch {
+      toast.warning('Não foi possível consultar o CNPJ', {
+        description:
+          'Verifique sua conexão. Você pode preencher os dados manualmente.',
+      })
+    }
+  }
 
   async function onSubmit(values: z.infer<typeof schema>) {
     try {
@@ -238,6 +350,18 @@ export function ClientCreateModal({
         bairro: values.bairro || null,
         cidade: values.cidade || null,
         estado: values.estado?.toUpperCase() || null,
+        cep_entrega: values.cep_entrega || null,
+        endereco_entrega: values.endereco_entrega || null,
+        numero_entrega: values.numero_entrega || null,
+        bairro_entrega: values.bairro_entrega || null,
+        cidade_entrega: values.cidade_entrega || null,
+        estado_entrega: values.estado_entrega?.toUpperCase() || null,
+        cep_cobranca: values.cep_cobranca || null,
+        endereco_cobranca: values.endereco_cobranca || null,
+        numero_cobranca: values.numero_cobranca || null,
+        bairro_cobranca: values.bairro_cobranca || null,
+        cidade_cobranca: values.cidade_cobranca || null,
+        estado_cobranca: values.estado_cobranca?.toUpperCase() || null,
         razao_social: values.razao_social || null,
         inscricao_estadual: values.inscricao_estadual || null,
         inscricao_municipal: values.inscricao_municipal || null,
@@ -418,11 +542,16 @@ export function ClientCreateModal({
                               : '00.000.000/0000-00'
                           }
                           {...field}
-                          onChange={(e) =>
-                            field.onChange(
-                              formatCpfCnpj(e.target.value, watchTipoPessoa),
+                          onChange={(e) => {
+                            const formatted = formatCpfCnpj(
+                              e.target.value,
+                              watchTipoPessoa,
                             )
-                          }
+                            field.onChange(formatted)
+                            if (watchTipoPessoa === 'juridica') {
+                              buscarDadosPorCnpj(formatted)
+                            }
+                          }}
                         />
                       </FormControl>
                       <FormMessage />
@@ -447,7 +576,7 @@ export function ClientCreateModal({
                   name="nome_empresa"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome da Empresa</FormLabel>
+                      <FormLabel>Nome Fantasia</FormLabel>
                       <FormControl>
                         <Input placeholder="Opcional" {...field} />
                       </FormControl>
@@ -504,9 +633,12 @@ export function ClientCreateModal({
                   name="regime_apuracao"
                   render={({ field }) => (
                     <FormItem>
+                      {/* SPEC-052: campo de texto livre por enquanto — o print de referência
+                          com as opções exatas do regime tributário nunca chegou. Trocar para
+                          Select fixo quando as opções forem confirmadas com o Vinicius. */}
                       <FormLabel>Regime de Apuração</FormLabel>
                       <FormControl>
-                        <Input placeholder="Opcional" {...field} />
+                        <Input placeholder="Ex: Simples Nacional" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -622,7 +754,14 @@ export function ClientCreateModal({
                           {...field}
                           onChange={(e) => {
                             const v = e.target.value.replace(/\D/g, '')
-                            field.onChange(v.replace(/(\d{5})(\d)/, '$1-$2'))
+                            const formatted = v.replace(/(\d{5})(\d)/, '$1-$2')
+                            field.onChange(formatted)
+                            buscarEnderecoPorCep(formatted, {
+                              endereco: 'endereco',
+                              bairro: 'bairro',
+                              cidade: 'cidade',
+                              estado: 'estado',
+                            })
                           }}
                         />
                       </FormControl>
@@ -685,6 +824,216 @@ export function ClientCreateModal({
                 <FormField
                   control={form.control}
                   name="estado"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>UF</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="SP"
+                          maxLength={2}
+                          {...field}
+                          onChange={(e) =>
+                            field.onChange(e.target.value.toUpperCase())
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="md:col-span-2 pt-4">
+                  <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">
+                    Endereço de Entrega
+                  </h3>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="cep_entrega"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CEP</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="00000-000"
+                          maxLength={9}
+                          {...field}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, '')
+                            const formatted = v.replace(/(\d{5})(\d)/, '$1-$2')
+                            field.onChange(formatted)
+                            buscarEnderecoPorCep(formatted, {
+                              endereco: 'endereco_entrega',
+                              bairro: 'bairro_entrega',
+                              cidade: 'cidade_entrega',
+                              estado: 'estado_entrega',
+                            })
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="numero_entrega"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Número</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Opcional" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endereco_entrega"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Endereço</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Rua, Av..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="bairro_entrega"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bairro</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Opcional" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="cidade_entrega"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cidade</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Opcional" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="estado_entrega"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>UF</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="SP"
+                          maxLength={2}
+                          {...field}
+                          onChange={(e) =>
+                            field.onChange(e.target.value.toUpperCase())
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="md:col-span-2 pt-4">
+                  <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">
+                    Endereço de Cobrança
+                  </h3>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="cep_cobranca"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CEP</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="00000-000"
+                          maxLength={9}
+                          {...field}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, '')
+                            const formatted = v.replace(/(\d{5})(\d)/, '$1-$2')
+                            field.onChange(formatted)
+                            buscarEnderecoPorCep(formatted, {
+                              endereco: 'endereco_cobranca',
+                              bairro: 'bairro_cobranca',
+                              cidade: 'cidade_cobranca',
+                              estado: 'estado_cobranca',
+                            })
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="numero_cobranca"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Número</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Opcional" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endereco_cobranca"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Endereço</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Rua, Av..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="bairro_cobranca"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bairro</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Opcional" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="cidade_cobranca"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cidade</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Opcional" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="estado_cobranca"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>UF</FormLabel>

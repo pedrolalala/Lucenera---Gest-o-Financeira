@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Loader2, PackagePlus, Save } from 'lucide-react'
+import { Loader2, PackagePlus, Plus, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -30,6 +31,8 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  createFornecedorQuick,
+  createMarcaQuick,
   createProductFromBudget,
   getNextProductSku,
   getProductCatalogOptions,
@@ -39,7 +42,6 @@ import {
 } from '@/services/productCatalogService'
 
 const schema = z.object({
-  codigo_produto: z.coerce.number().int().min(1, 'Obrigatório'),
   sku: z.string().optional(),
   nome: z.string().trim().min(2, 'Obrigatório'),
   marca_id: z.string().min(1, 'Obrigatório'),
@@ -141,6 +143,218 @@ function TextField({
   )
 }
 
+// SPEC-053: modal simples de criação rápida de marca, aberto pelo botão "+"
+// ao lado do Select de Marca. Não sai do modal de criação de produto.
+function MarcaQuickCreateDialog({
+  open,
+  onOpenChange,
+  fornecedores,
+  onCreated,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  fornecedores: SupplierOption[]
+  onCreated: (marca: ProductOption) => void
+}) {
+  const [nome, setNome] = useState('')
+  const [fornecedorId, setFornecedorId] = useState('none')
+  const [prazoEntregaDias, setPrazoEntregaDias] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setNome('')
+      setFornecedorId('none')
+      setPrazoEntregaDias('')
+    }
+  }, [open])
+
+  const handleSave = useCallback(async () => {
+    if (!nome.trim()) {
+      toast.error('Nome é obrigatório')
+      return
+    }
+    setSaving(true)
+    try {
+      const marca = await createMarcaQuick({
+        nome,
+        fornecedor_id: fornecedorId === 'none' ? null : fornecedorId,
+        prazo_entrega_dias: prazoEntregaDias ? Number(prazoEntregaDias) : null,
+      })
+      toast.success('Marca criada', { description: marca.nome })
+      onCreated(marca)
+      onOpenChange(false)
+    } catch (error: any) {
+      toast.error('Falha ao criar marca', { description: error?.message })
+    } finally {
+      setSaving(false)
+    }
+  }, [nome, fornecedorId, prazoEntregaDias, onCreated, onOpenChange])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nova Marca</DialogTitle>
+          <DialogDescription>
+            Cadastro rápido, sem sair da criação de produto.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Nome *</label>
+            <Input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              className="h-8 text-sm"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Fornecedor</label>
+            <Select value={fornecedorId} onValueChange={setFornecedorId}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nenhum</SelectItem>
+                {fornecedores.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.razao_social || f.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium">
+              Prazo de entrega (dias)
+            </label>
+            <Input
+              type="number"
+              min="0"
+              value={prazoEntregaDias}
+              onChange={(e) => setPrazoEntregaDias(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSave} disabled={saving}>
+            {saving ? 'Salvando...' : 'Salvar Marca'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// SPEC-053: modal simples de criação rápida de fornecedor (contatos.tipo =
+// 'fornecedor'), aberto pelo botão "+" ao lado do Select de Fornecedor.
+function FornecedorQuickCreateDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreated: (fornecedor: SupplierOption) => void
+}) {
+  const [nome, setNome] = useState('')
+  const [cnpj, setCnpj] = useState('')
+  const [razaoSocial, setRazaoSocial] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setNome('')
+      setCnpj('')
+      setRazaoSocial('')
+    }
+  }, [open])
+
+  const handleSave = useCallback(async () => {
+    if (!nome.trim()) {
+      toast.error('Nome é obrigatório')
+      return
+    }
+    setSaving(true)
+    try {
+      const fornecedor = await createFornecedorQuick({
+        nome,
+        cnpj: cnpj || null,
+        razao_social: razaoSocial || null,
+      })
+      toast.success('Fornecedor criado', { description: fornecedor.nome })
+      onCreated(fornecedor)
+      onOpenChange(false)
+    } catch (error: any) {
+      toast.error('Falha ao criar fornecedor', { description: error?.message })
+    } finally {
+      setSaving(false)
+    }
+  }, [nome, cnpj, razaoSocial, onCreated, onOpenChange])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Novo Fornecedor</DialogTitle>
+          <DialogDescription>
+            Cadastro rápido, sem sair da criação de produto.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Nome *</label>
+            <Input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              className="h-8 text-sm"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Razão Social</label>
+            <Input
+              value={razaoSocial}
+              onChange={(e) => setRazaoSocial(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium">CNPJ</label>
+            <Input
+              value={cnpj}
+              onChange={(e) => setCnpj(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSave} disabled={saving}>
+            {saving ? 'Salvando...' : 'Salvar Fornecedor'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function ProductCreateModal({
   open,
   onOpenChange,
@@ -152,11 +366,12 @@ export function ProductCreateModal({
   const [marcas, setMarcas] = useState<ProductOption[]>([])
   const [categorias, setCategorias] = useState<ProductOption[]>([])
   const [fornecedores, setFornecedores] = useState<SupplierOption[]>([])
+  const [marcaModalOpen, setMarcaModalOpen] = useState(false)
+  const [fornecedorModalOpen, setFornecedorModalOpen] = useState(false)
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      codigo_produto: 0,
       sku: '',
       nome: initialName || '',
       marca_id: '',
@@ -195,6 +410,32 @@ export function ProductCreateModal({
   const fornecedorOptions = useMemo(
     () => [{ id: 'none', nome: 'Nenhum', razao_social: null }, ...fornecedores],
     [fornecedores],
+  )
+
+  const handleMarcaCreated = useCallback(
+    (marca: ProductOption) => {
+      setMarcas((prev) =>
+        [...prev, marca].sort((a, b) => a.nome.localeCompare(b.nome)),
+      )
+      setValue('marca_id', marca.id, {
+        shouldValidate: true,
+        shouldDirty: true,
+      })
+    },
+    [setValue],
+  )
+
+  const handleFornecedorCreated = useCallback(
+    (fornecedor: SupplierOption) => {
+      setFornecedores((prev) =>
+        [...prev, fornecedor].sort((a, b) => a.nome.localeCompare(b.nome)),
+      )
+      setValue('fornecedor_principal_id', fornecedor.id, {
+        shouldValidate: true,
+        shouldDirty: true,
+      })
+    },
+    [setValue],
   )
 
   useEffect(() => {
@@ -282,7 +523,11 @@ export function ProductCreateModal({
           mascara_produto: values.mascara_produto?.trim() || null,
           status_comercial: values.status_comercial || 'Normal',
         })
-        toast.success('Produto criado no catálogo')
+        toast.success('Produto criado no catálogo', {
+          description: product.codigo_produto
+            ? `Código gerado: ${product.codigo_produto}`
+            : undefined,
+        })
         onSuccess(product)
         onOpenChange(false)
       } catch (error: any) {
@@ -319,11 +564,17 @@ export function ProductCreateModal({
                   Dados básicos
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <NumberField
-                    control={form.control}
-                    name="codigo_produto"
-                    label="Código *"
-                  />
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Código *
+                    </label>
+                    <Input
+                      readOnly
+                      disabled
+                      className="h-8 text-sm bg-slate-100 text-slate-500"
+                      value="gerado automaticamente ao salvar"
+                    />
+                  </div>
                   <TextField
                     control={form.control}
                     name="sku"
@@ -337,23 +588,37 @@ export function ProductCreateModal({
                   render={({ field }) => (
                     <FormItem className="space-y-1">
                       <FormLabel className="text-xs">Marca *</FormLabel>
-                      <Select
-                        value={field.value || undefined}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {marcas.map((marca) => (
-                            <SelectItem key={marca.id} value={marca.id}>
-                              {marca.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-1">
+                        <div className="min-w-0 flex-1">
+                          <Select
+                            value={field.value || undefined}
+                            onValueChange={field.onChange}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Selecione..." />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {marcas.map((marca) => (
+                                <SelectItem key={marca.id} value={marca.id}>
+                                  {marca.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => setMarcaModalOpen(true)}
+                          title="Cadastrar nova marca"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <FormMessage className="text-[10px]" />
                     </FormItem>
                   )}
@@ -391,26 +656,40 @@ export function ProductCreateModal({
                   render={({ field }) => (
                     <FormItem className="space-y-1">
                       <FormLabel className="text-xs">Fornecedor</FormLabel>
-                      <Select
-                        value={field.value || 'none'}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="h-8 text-sm">
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {fornecedorOptions.map((fornecedor) => (
-                            <SelectItem
-                              key={fornecedor.id}
-                              value={fornecedor.id}
-                            >
-                              {fornecedor.razao_social || fornecedor.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-1">
+                        <div className="min-w-0 flex-1">
+                          <Select
+                            value={field.value || 'none'}
+                            onValueChange={field.onChange}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Selecione..." />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {fornecedorOptions.map((fornecedor) => (
+                                <SelectItem
+                                  key={fornecedor.id}
+                                  value={fornecedor.id}
+                                >
+                                  {fornecedor.razao_social || fornecedor.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => setFornecedorModalOpen(true)}
+                          title="Cadastrar novo fornecedor"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <FormMessage className="text-[10px]" />
                     </FormItem>
                   )}
@@ -597,6 +876,18 @@ export function ProductCreateModal({
           </form>
         </Form>
       </DialogContent>
+
+      <MarcaQuickCreateDialog
+        open={marcaModalOpen}
+        onOpenChange={setMarcaModalOpen}
+        fornecedores={fornecedores}
+        onCreated={handleMarcaCreated}
+      />
+      <FornecedorQuickCreateDialog
+        open={fornecedorModalOpen}
+        onOpenChange={setFornecedorModalOpen}
+        onCreated={handleFornecedorCreated}
+      />
     </Dialog>
   )
 }

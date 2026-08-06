@@ -43,7 +43,10 @@ export function useOptions() {
       try {
         const [empRes, cliRes, arqRes, funcRes, prodRes, revendaRes, projRes] =
           await Promise.all([
-            supabase.from('empresas').select('id, nome').order('nome'),
+            supabase
+              .from('empresas')
+              .select('id, nome, codigo, cnpj')
+              .order('nome'),
             supabase
               .from('contatos')
               .select('id, nome, nome_empresa, codigo_legado, razao_social')

@@ -84,3 +84,7 @@ export function isTeamApprovalStatus(
 ): boolean {
   return status === TEAM_APPROVAL_STATUS
 }
+
+export function isDraftStatus(status: string | null | undefined): boolean {
+  return status === 'rascunho'
+}

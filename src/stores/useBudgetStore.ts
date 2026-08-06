@@ -75,6 +75,10 @@ export interface Budget {
   recusado_cliente_em: string | null
   motivo_recusa_cliente: string | null
   token_aprovacao_cliente: string | null
+  /** SPEC-050: cod_orcamento original do XML Connect importado, se houver. */
+  origem_connect_cod_orcamento?: number | null
+  /** SPEC-050: quando este orçamento foi criado a partir de um import Connect. */
+  origem_connect_importado_em?: string | null
   created_at: string
   empresa?: { nome: string }
   cliente?: {
@@ -392,7 +396,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
 
   enviarOrcamentoCliente: async (budgetId) => {
     const { data, error } = await (supabase as any).rpc(
-      'enviar_orcamento_cliente',
+      'enviar_orcamento_para_cliente',
       { p_orcamento_id: budgetId },
     )
 
@@ -444,9 +448,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
 
     if (error) {
       console.error('Error returning budget to client:', error)
-      throw new Error(
-        error.message || 'Erro ao devolver orçamento ao cliente.',
-      )
+      throw new Error(error.message || 'Erro ao devolver orçamento ao cliente.')
     }
 
     await get().fetchBudgets()

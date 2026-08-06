@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   Copy,
   UserCheck,
+  Send,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
@@ -274,6 +275,23 @@ export function BudgetTableRow({
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
             <FiscalSummaryDialog budget={budget} />
+
+            {normalizedStatus === 'rascunho' && (
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                title="Enviar para o Cliente"
+                onClick={handleEnviarCliente}
+                disabled={isSending}
+              >
+                {isSending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-1" />
+                )}
+                Enviar para o Cliente
+              </Button>
+            )}
 
             {normalizedStatus === 'enviado_cliente' && (
               <>

@@ -12,6 +12,8 @@ import {
   ArrowLeft,
   Save,
   Upload,
+  Download,
+  FileCode,
   PackageSearch,
   ShieldAlert,
 } from 'lucide-react'
@@ -73,6 +75,7 @@ import {
 } from '@/components/budgets/ProductSearchModal'
 import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
 import { BatchPdfImport } from '@/components/budgets/BatchPdfImport'
+import { ImportConnectXmlModal } from '@/components/budgets/ImportConnectXmlModal'
 import {
   BudgetItemCard,
   type ProductMeta,
@@ -80,6 +83,8 @@ import {
 import { BudgetItemsHeader } from '@/components/budgets/BudgetItemsHeader'
 import type { ParsedPdfResult } from '@/lib/pdf-import'
 import type { ProductCatalogItem } from '@/services/productCatalogService'
+import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
+import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
 
 const formSchema = z
   .object({
@@ -129,6 +134,8 @@ const formSchema = z
       .default(0),
     observacoes: z.string().optional().nullable(),
     validade: z.date().optional().nullable(),
+    // SPEC-064: rótulo Ribeirão/São Paulo, só visualização.
+    perfil: z.string().optional().nullable(),
     itens: z
       .array(
         z.object({
@@ -178,6 +185,13 @@ export default function BudgetFormPage() {
 
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
   const [isBatchImportOpen, setIsBatchImportOpen] = useState(false)
+  const [isXmlImportOpen, setIsXmlImportOpen] = useState(false)
+  const [pendingXmlImport, setPendingXmlImport] =
+    useState<ResolvedXmlBudget | null>(null)
+  const [connectOrigin, setConnectOrigin] = useState<{
+    cod_orcamento: number
+    importado_em: string
+  } | null>(null)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
@@ -213,6 +227,14 @@ export default function BudgetFormPage() {
     responsavel_sistema_nome?: string
     empresa_nome?: string
     isLoading?: boolean
+    // SPEC-061: distingue "projeto sem esse vínculo na origem" de um erro
+    // de busca — texto genérico "Não encontrado" parecia bug do formulário.
+    clienteMissing?: boolean
+    empresaMissing?: boolean
+    // SPEC-061: true quando o Arquiteto foi pré-selecionado por
+    // correspondência única de nome (fallback via "Nome Arquiteto" legado),
+    // não por vínculo direto (arquiteto_id).
+    arquitetoAutoLinked?: boolean
   } | null>(null)
   const [showApprovalDialog, setShowApprovalDialog] = useState(false)
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
@@ -240,6 +262,7 @@ export default function BudgetFormPage() {
       frete_valor: 0,
       observacoes: '',
       validade: null,
+      perfil: '',
       itens: [],
     },
   })
@@ -380,6 +403,7 @@ export default function BudgetFormPage() {
               ? new Date(budget.data_emissao)
               : new Date(),
             validade: budget.validade ? new Date(budget.validade) : null,
+            perfil: budget.perfil || '',
             itens: sortItemsByCircuitId(
               budget.itens?.map((i) => ({
                 uid: crypto.randomUUID(),
@@ -455,8 +479,15 @@ export default function BudgetFormPage() {
         return
       }
 
-      let clienteNome = 'Não encontrado'
-      let empresaNome = 'Não encontrado'
+      // SPEC-061: "Não encontrado" (busca falhou) é diferente de "projeto
+      // nunca teve esse vínculo na origem" — só o segundo caso é normal e
+      // não deveria parecer um bug do formulário.
+      let clienteNome = projeto.cliente_id
+        ? 'Não encontrado'
+        : 'Projeto sem cliente vinculado na origem — selecione manualmente'
+      let empresaNome = projeto.empresa_id
+        ? 'Não encontrado'
+        : 'Projeto sem empresa vinculada na origem — selecione manualmente'
       let responsavelSisNome = 'Não encontrado'
 
       if (projeto.cliente_id) {
@@ -494,6 +525,8 @@ export default function BudgetFormPage() {
         responsavel_sistema_nome: responsavelSisNome,
         empresa_nome: empresaNome,
         isLoading: false,
+        clienteMissing: !projeto.cliente_id,
+        empresaMissing: !projeto.empresa_id,
       })
 
       if (projeto.empresa_id) {
@@ -515,6 +548,29 @@ export default function BudgetFormPage() {
           shouldValidate: true,
           shouldDirty: true,
         })
+      } else if (projeto['Nome Arquiteto']) {
+        // SPEC-061: fallback de autopreenchimento por nome — quando o
+        // projeto só tem o texto legado "Nome Arquiteto" (sem arquiteto_id
+        // vinculado), busca em contatos por correspondência única (exata,
+        // case-insensitive) e pré-seleciona. Ambíguo ou zero resultados:
+        // não inventa vínculo, campo fica vazio para seleção manual.
+        const nomeArquiteto = String(projeto['Nome Arquiteto']).trim()
+        if (nomeArquiteto) {
+          const { data: arqMatches } = await supabase
+            .from('contatos')
+            .select('id')
+            .eq('tipo', 'arquiteto')
+            .ilike('nome', nomeArquiteto)
+          if (arqMatches && arqMatches.length === 1) {
+            form.setValue('arquiteto_id', arqMatches[0].id, {
+              shouldValidate: true,
+              shouldDirty: true,
+            })
+            setProjectDetails((prev) =>
+              prev ? { ...prev, arquitetoAutoLinked: true } : prev,
+            )
+          }
+        }
       }
 
       const targetVendedorId = projeto.vendedor_id || projeto.responsavel_id
@@ -686,8 +742,19 @@ export default function BudgetFormPage() {
         validade: values.validade
           ? format(values.validade, 'yyyy-MM-dd')
           : null,
+        // SPEC-064: rótulo Ribeirão/São Paulo, só visualização — não
+        // influencia cálculo, aprovação nem nenhum outro fluxo.
+        perfil: values.perfil || null,
         valor_total: valorTotal,
         requer_revisao_financeira: hasUnregisteredItems,
+        // SPEC-050: só grava a origem Connect quando este orçamento veio de
+        // um import de XML aplicado nesta sessão de edição.
+        ...(connectOrigin
+          ? {
+              origem_connect_cod_orcamento: connectOrigin.cod_orcamento,
+              origem_connect_importado_em: connectOrigin.importado_em,
+            }
+          : {}),
       }
 
       if (isEditing && budgetToEdit) {
@@ -718,9 +785,13 @@ export default function BudgetFormPage() {
               },
             )
           } else {
+            // SPEC-051: a criação sempre nasce em rascunho agora — a
+            // promoção automática para enviado_cliente foi removida do
+            // banco. O envio ao cliente passa a ser sempre uma ação
+            // separada, feita na aba "Rascunho".
             toast.info('Orçamento salvo como rascunho.', {
               description:
-                'Preencha a forma de pagamento e os campos obrigatórios para enviá-lo ao cliente.',
+                'Vá até a aba "Rascunho" e use o botão "Enviar para o Cliente" quando estiver pronto para avançar o fluxo de aprovação.',
               duration: 6000,
             })
           }
@@ -971,6 +1042,119 @@ export default function BudgetFormPage() {
     )
   }
 
+  // SPEC-050: aplica o resultado já resolvido do import de XML Connect ao
+  // formulário. `clienteIdOverride` é usado quando o cliente não foi
+  // encontrado no XML e acabou de ser cadastrado via ClientCreateModal
+  // (fluxo de retomada, P-2).
+  const applyResolvedXmlImport = (
+    resolved: ResolvedXmlBudget,
+    clienteIdOverride?: string,
+  ) => {
+    const clienteId = clienteIdOverride || resolved.cliente_id
+    if (!clienteId) {
+      toast.error(
+        'Cliente ainda não resolvido. Cadastre o cliente antes de aplicar o import.',
+      )
+      return
+    }
+    if (!resolved.empresa_id) {
+      toast.error(
+        'Empresa não resolvida. Cadastre a empresa antes de aplicar o import.',
+      )
+      return
+    }
+
+    const currentValues = form.getValues()
+    form.reset({
+      ...currentValues,
+      empresa_id: resolved.empresa_id,
+      cliente_id: clienteId,
+      data_emissao: resolved.raw.data_emissao || currentValues.data_emissao,
+    })
+
+    const newItens = resolved.itens.map((item) => ({
+      uid: crypto.randomUUID(),
+      custom_id: item.custom_id,
+      produto_id: item.produto_id || '',
+      // Diferente do import de PDF: aqui a descrição do XML é sempre
+      // preservada, mesmo quando o produto foi casado.
+      descricao: item.desc_produto,
+      quantidade: item.quantidade,
+      preco_unitario: item.preco_unitario,
+      desconto: item.desconto,
+    }))
+    const existingItems = form.getValues('itens') || []
+    replace(sortItemsByCircuitId([...existingItems, ...newItens]))
+
+    if (resolved.raw.cod_orcamento != null) {
+      setConnectOrigin({
+        cod_orcamento: resolved.raw.cod_orcamento,
+        importado_em: new Date().toISOString(),
+      })
+    }
+
+    toast.success(
+      `XML importado: ${resolved.itensCasados} item(ns) casado(s), ${resolved.itensAvulsos} avulso(s). Revise os dados antes de salvar.`,
+    )
+  }
+
+  const handleXmlImportApply = (resolved: ResolvedXmlBudget) => {
+    applyResolvedXmlImport(resolved)
+  }
+
+  const handleXmlImportNeedsClient = (resolved: ResolvedXmlBudget) => {
+    setPendingXmlImport(resolved)
+    setIsClientModalOpen(true)
+    toast.info(
+      'Cliente do XML não encontrado. Cadastre o cliente para retomar o import.',
+    )
+  }
+
+  const handleExportXml = () => {
+    if (!budgetToEdit) return
+
+    const values = form.getValues()
+    const empresaSelecionada = empresas.find((e) => e.id === values.empresa_id)
+    const clienteSelecionado = clientes.find((c) => c.id === values.cliente_id)
+
+    const xml = buildConnectXmlExport(
+      {
+        numero: budgetToEdit.numero,
+        empresaCodigo:
+          (empresaSelecionada as any)?.codigo != null
+            ? Number((empresaSelecionada as any).codigo)
+            : null,
+        empresaCnpj: (empresaSelecionada as any)?.cnpj || null,
+        clienteCodigoLegado:
+          (clienteSelecionado as any)?.codigo_legado != null
+            ? Number((clienteSelecionado as any).codigo_legado)
+            : null,
+        dataEmissao: values.data_emissao,
+      },
+      values.itens.map((item) => ({
+        custom_id: item.custom_id,
+        produto_id: item.produto_id,
+        descricao: item.descricao,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario,
+        desconto: item.desconto,
+      })),
+      (produtoId) => {
+        const info = getProductInfo(produtoId)
+        if (!info) return null
+        return {
+          codigo_produto: info.codigo_produto,
+          referencia: info.referencia,
+          nome: info.nome,
+        }
+      },
+    )
+
+    const filename = `orcamento_${budgetToEdit.numero || budgetToEdit.id}.xml`
+    downloadXmlFile(xml, filename)
+    toast.success('XML exportado com sucesso.')
+  }
+
   const handleFinancialApproval = async () => {
     if (!budgetToEdit) return
     try {
@@ -1037,6 +1221,12 @@ export default function BudgetFormPage() {
                 Aprovar Financeiro
               </Button>
             )}
+          {isEditing && budgetToEdit && (
+            <Button type="button" variant="outline" onClick={handleExportXml}>
+              <Download className="w-4 h-4 mr-2" />
+              Exportar XML
+            </Button>
+          )}
           <Button variant="outline" asChild>
             <Link to="/budgets">Cancelar</Link>
           </Button>
@@ -1167,7 +1357,13 @@ export default function BudgetFormPage() {
                           <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
                             Empresa
                           </p>
-                          <p className="font-medium text-slate-900">
+                          <p
+                            className={
+                              projectDetails.empresaMissing
+                                ? 'font-medium text-amber-700'
+                                : 'font-medium text-slate-900'
+                            }
+                          >
                             {projectDetails.empresa_nome}
                           </p>
                         </div>
@@ -1175,7 +1371,13 @@ export default function BudgetFormPage() {
                           <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
                             Cliente
                           </p>
-                          <p className="font-medium text-slate-900">
+                          <p
+                            className={
+                              projectDetails.clienteMissing
+                                ? 'font-medium text-amber-700'
+                                : 'font-medium text-slate-900'
+                            }
+                          >
                             {projectDetails.cliente_nome}
                           </p>
                         </div>
@@ -1186,6 +1388,12 @@ export default function BudgetFormPage() {
                           <p className="font-medium text-slate-900">
                             {projectDetails.arquiteto_nome}
                           </p>
+                          {projectDetails.arquitetoAutoLinked && (
+                            <p className="text-[10px] text-emerald-700 mt-0.5">
+                              Vinculado automaticamente pelo nome do projeto —
+                              confira antes de salvar.
+                            </p>
+                          )}
                         </div>
                         <div>
                           <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
@@ -1782,6 +1990,31 @@ export default function BudgetFormPage() {
 
                   <FormField
                     control={form.control}
+                    name="perfil"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Perfil</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value || undefined}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Não informado" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="ribeirao">Ribeirão</SelectItem>
+                            <SelectItem value="sao_paulo">São Paulo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="desconto_global"
                     render={({ field }) => (
                       <FormItem>
@@ -1909,6 +2142,12 @@ export default function BudgetFormPage() {
               form.setValue('cliente_id', newClient.id, {
                 shouldValidate: true,
               })
+              // SPEC-050 (P-2): retoma o import de XML pendente com o
+              // cliente recém-cadastrado.
+              if (pendingXmlImport) {
+                applyResolvedXmlImport(pendingXmlImport, newClient.id)
+                setPendingXmlImport(null)
+              }
             }}
           />
 
@@ -1948,7 +2187,26 @@ export default function BudgetFormPage() {
             onBatchComplete={handleBatchComplete}
           />
 
-          <div className="flex justify-end mt-6">
+          <ImportConnectXmlModal
+            open={isXmlImportOpen}
+            onOpenChange={setIsXmlImportOpen}
+            empresas={empresas}
+            clientes={clientes}
+            produtos={produtos}
+            onApply={handleXmlImportApply}
+            onClienteNaoEncontrado={handleXmlImportNeedsClient}
+          />
+
+          <div className="flex justify-end gap-2 mt-6 flex-wrap">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsXmlImportOpen(true)}
+              className="w-full sm:w-auto"
+            >
+              <FileCode className="w-4 h-4 mr-2" />
+              Importar XML (Connect)
+            </Button>
             <Button
               type="button"
               variant="secondary"

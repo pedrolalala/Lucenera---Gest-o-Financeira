@@ -12,7 +12,9 @@ export interface SupplierOption {
 }
 
 export interface ProductCatalogPayload {
-  codigo_produto: number
+  // SPEC-053: codigo_produto não é mais enviado pelo payload — é gerado pelo
+  // DEFAULT nextval(produtos_codigo_produto_seq) da coluna produtos.codigo_produto
+  // (migration 20260727_068), e a RPC criar_produto_orcamento parou de exigi-lo.
   sku?: string | null
   nome: string
   marca_id: string
@@ -44,6 +46,9 @@ export interface ProductCatalogItem extends ProductCatalogPayload {
   id: string
   ativo: boolean
   source?: 'produtos'
+  // Gerado pelo servidor (sequence), presente no retorno da RPC/INSERT, não
+  // no payload de entrada.
+  codigo_produto?: number | null
 }
 
 export async function getProductCatalogOptions() {
@@ -70,6 +75,65 @@ export async function getProductCatalogOptions() {
     categorias: (categoryRes.data || []) as ProductOption[],
     fornecedores: (supplierRes.data || []) as SupplierOption[],
   }
+}
+
+// SPEC-053: criação rápida de marca a partir do botão "+" em
+// ProductCreateModal, sem sair do modal de criação de produto.
+// `fornecedor_id`/`prazo_entrega_dias` existem em public.marcas (migrations
+// 20260716_049 SPEC-030 e 20260715_041), mas ainda não aparecem em
+// src/lib/supabase/types.ts (gerado antes dessas migrations) — por isso o
+// cast `as any` no insert, mesmo padrão já usado neste arquivo para RPCs
+// fora dos tipos gerados (get_next_sku).
+export interface MarcaQuickCreatePayload {
+  nome: string
+  fornecedor_id?: string | null
+  prazo_entrega_dias?: number | null
+}
+
+export async function createMarcaQuick(
+  payload: MarcaQuickCreatePayload,
+): Promise<ProductOption> {
+  const { data, error } = await (supabase.from('marcas') as any)
+    .insert([
+      {
+        nome: payload.nome.trim(),
+        fornecedor_id: payload.fornecedor_id || null,
+        prazo_entrega_dias: payload.prazo_entrega_dias ?? null,
+        ativo: true,
+      },
+    ])
+    .select('id, nome')
+    .single()
+  if (error) throw error
+  return data as ProductOption
+}
+
+// SPEC-053: criação rápida de fornecedor (contatos.tipo = 'fornecedor') a
+// partir do botão "+" em ProductCreateModal.
+export interface FornecedorQuickCreatePayload {
+  nome: string
+  cnpj?: string | null
+  razao_social?: string | null
+}
+
+export async function createFornecedorQuick(
+  payload: FornecedorQuickCreatePayload,
+): Promise<SupplierOption> {
+  const { data, error } = await supabase
+    .from('contatos')
+    .insert([
+      {
+        tipo: 'fornecedor',
+        nome: payload.nome.trim(),
+        cnpj: payload.cnpj?.trim() || null,
+        razao_social: payload.razao_social?.trim() || null,
+        ativo: true,
+      },
+    ])
+    .select('id, nome, razao_social')
+    .single()
+  if (error) throw error
+  return data as SupplierOption
 }
 
 export async function getNextProductSku(prefix = 'teste') {

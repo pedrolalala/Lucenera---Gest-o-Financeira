@@ -16,6 +16,7 @@ import { ApprovalsTab } from '@/components/budgets/ApprovalsTab'
 import { FinancialApprovalTab } from '@/components/budgets/FinancialApprovalTab'
 import { TeamApprovalTab } from '@/components/budgets/TeamApprovalTab'
 import { ClientApprovalTab } from '@/components/budgets/ClientApprovalTab'
+import { DraftBudgetsTab } from '@/components/budgets/DraftBudgetsTab'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
@@ -90,6 +91,7 @@ export default function Budgets() {
       <Tabs defaultValue="todos" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="todos">Todos</TabsTrigger>
+          <TabsTrigger value="rascunho">Rascunho</TabsTrigger>
           <TabsTrigger value="aprovacao-cliente">
             Aprovação do cliente
           </TabsTrigger>
@@ -137,6 +139,10 @@ export default function Budgets() {
           ) : (
             <BudgetsTable data={filteredBudgets} onEdit={handleEdit} />
           )}
+        </TabsContent>
+
+        <TabsContent value="rascunho" className="mt-0">
+          <DraftBudgetsTab />
         </TabsContent>
 
         <TabsContent value="aprovacao-cliente" className="mt-0">

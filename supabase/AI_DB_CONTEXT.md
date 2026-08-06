@@ -60,6 +60,8 @@ RPCs/funções relevantes:
 - `projeto_id`
 - `prazo_pagamento_dias`
 - `data_base_vencimento`
+- `origem_connect_cod_orcamento` (SPEC-050, integer, único quando não nulo): `cod_orcamento` do XML Connect que originou este orçamento, quando criado via import. Chave de idempotência do import — não reimportar um XML cujo `cod_orcamento` já exista aqui.
+- `origem_connect_importado_em` (SPEC-050, timestamptz): quando o import de XML foi aplicado.
 
 `orcamento_itens` possui:
 
@@ -99,10 +101,11 @@ RPCs/funções relevantes:
 - O fluxo aprovado usa `orcamento_id` como chave de rastreio.
 - Não usar `venda_id` no fluxo orçamento aprovado -> financeiro.
 - Ao aprovar orçamento, chamar a RPC `aprovar_orcamento_financeiro(p_orcamento_id uuid)`.
-- O contrato oficial de status (SPEC-031, 2026-07-18) é `enviado_cliente -> Aprovação da Equipe -> Aprovação Financeira -> Orçamento Aprovado`; `aprovado`, `aprovado_cliente` e `aprovado_financeiro` são legados/compatibilidade. Antes da SPEC-031 a aprovação do cliente ia direto para `Aprovação Financeira` — as 5 funções de aprovação do cliente (`aprovar_orcamento_cliente_publico`, `aprovar_orcamento_cliente_manual`, `aprovar_orcamento_cliente`, `adm_aprovar_pelo_cliente`, `cliente_aprovar_orcamento`) agora terminam em `Aprovação da Equipe`.
+- O contrato oficial de status (SPEC-051, 2026-07-27, sobre a base da SPEC-031) é `rascunho -> enviado_cliente -> Aprovação da Equipe -> Aprovação Financeira -> Orçamento Aprovado`; `aprovado`, `aprovado_cliente` e `aprovado_financeiro` são legados/compatibilidade. Antes da SPEC-031 a aprovação do cliente ia direto para `Aprovação Financeira` — as 5 funções de aprovação do cliente (`aprovar_orcamento_cliente_publico`, `aprovar_orcamento_cliente_manual`, `aprovar_orcamento_cliente`, `adm_aprovar_pelo_cliente`, `cliente_aprovar_orcamento`) agora terminam em `Aprovação da Equipe`.
+- `rascunho` é a fase real (não mais efêmera) em que um orçamento nasce e permanece enquanto está sendo montado. A transição `rascunho -> enviado_cliente` é **sempre manual**, via RPC `enviar_orcamento_para_cliente(p_orcamento_id uuid)` — nunca mais automática. Não existe mais nenhum trigger de banco que promova o status sozinho quando os campos obrigatórios e itens estão preenchidos (ver SPEC-051 abaixo).
 - A RPC deve preparar itens aprovados, parcelas e boletos.
 - Cadastro de produto feito dentro de Orçamentos deve chamar `criar_produto_orcamento(p_payload jsonb)` e gravar em `public.produtos`, nunca em catálogo paralelo.
-- Produtos criados no orçamento devem ser vinculados ao item por `orcamento_itens.produto_id` e trazer snapshot visual de `codigo_produto`, `referencia`, `nome` e `sku` na UI.
+- Produtos criados no orçamento devem ser vinculados ao item por `orcamento_itens.produto_id` e trazer snapshot visual de `codigo_produto`, `referencia`, `nome` e `sku` na UI. Desde a SPEC-053 (27/07/2026), `codigo_produto` é gerado automaticamente por `DEFAULT nextval(...)` na coluna (sequence Postgres) — a RPC `criar_produto_orcamento` não recebe nem valida mais esse campo vindo do payload; o frontend só exibe o valor retornado após a criação.
 - O financeiro deve exibir orçamento, projeto e cliente por relacionamento a partir de `orcamento_id`.
 - Vencimentos vêm da forma de pagamento e prazo registrados no orçamento; o financeiro valida, não presume manualmente.
 - `orcamentos.empresa_id` aponta para `empresas.id`, ou seja, empresa do grupo Lucenera responsável pela operação. Não confundir com a empresa/PJ de um cliente, fornecedor ou arquiteto, que é representada como registro em `contatos` e pode ser vinculada por `contatos.empresa_id -> contatos.id`.
@@ -114,7 +117,7 @@ RPCs/funções relevantes:
 - Não reimplementar aprovação no frontend.
 - Não inserir diretamente em `projeto_itens`, `projeto_parcelas` ou `boletos` se o fluxo é aprovação de orçamento; use a RPC existente.
 - Não aprovar orçamento por `project_id`.
-- Não criar produto por `insert` direto em `produtos` no frontend; use a RPC canônica para preservar validações de permissão, `codigo_produto`, `sku`, marca e categoria.
+- Não criar produto por `insert` direto em `produtos` no frontend; use a RPC canônica para preservar validações de permissão, `sku`, marca e categoria (`codigo_produto` não precisa mais de validação própria — é gerado pelo `DEFAULT` da coluna desde a SPEC-053).
 - Se a RPC retornar erro de schema, registre pendência de DB.
 - Se a tela precisa abrir modal financeiro, só exibir se houver permissão de acesso ao financeiro.
 - Se a demanda exigir alteração estrutural de banco, preencha `DB_CHANGE_REQUEST_TEMPLATE.md`.
@@ -135,6 +138,17 @@ RPCs/funções relevantes:
 - Permissão das duas RPCs: `usuarios.role IN ('admin','gerente')` OU `hub_pode_executar(auth.uid(), 'orcamentos', 'aprovacao_equipe', 'editar')` — módulo `aprovacao_equipe` cadastrado em `public.modulos` para o sistema `orcamentos` (SPEC-006), reaproveitando a ação `'editar'` já existente (não há ação `'aprovar'` no CHECK constraint do Hub). Conceder o módulo a um papel/usuário é feito pela tela de administração de permissões do Hub — esta migration só cadastra o módulo no catálogo, não concede a ninguém.
 - Frontend: aba nova "Aprovação da Equipe" em `Budgets.tsx` (`TeamApprovalTab.tsx`), visível a todos, mas com os botões de ação desabilitados se o usuário não passar no check de `hub_pode_executar` (chamado direto via `supabase.rpc`, sem hook — não existe hook de permissão reutilizável no sistema ainda).
 - Rótulo de UI do novo status: `'Revisão da Equipe (Pós-Visita)'` (não confundir com `'Revisão Financeira Pendente'`, que é o rótulo de `'Aprovação Financeira'`).
+
+## SPEC-051 — Fase explícita de Rascunho antes do envio ao cliente (2026-07-27)
+
+- Removida a auto-transição de `rascunho`/`aguardando_cliente`/`aguardando_aprovacao` para `enviado_cliente` que existia em `handle_orcamento_workflow()` (trigger `trg_orcamento_workflow`, `BEFORE INSERT OR UPDATE ON orcamentos`) — antes disso, bastava preencher `empresa_id`, `projeto_id`, `cliente_id`, `forma_pagamento` e ter pelo menos 1 item para o orçamento "escapar" sozinho do rascunho.
+- Removidos por completo o trigger `trg_orcamento_item_workflow` (`AFTER INSERT ON orcamento_itens`) e a função `handle_orcamento_item_workflow()` — era o gatilho mais direto do problema, porque disparava assim que o primeiro item era inserido (inclusive ao editar um rascunho e re-salvar itens via `replace_orcamento_itens`).
+- `enviar_orcamento_para_cliente(p_orcamento_id uuid)` passou a ser o único ponto de entrada para `enviado_cliente` e agora valida completude antes do `UPDATE`: `empresa_id`, `projeto_id`, `cliente_id`, `forma_pagamento` não nulos e pelo menos 1 linha em `orcamento_itens`; se faltar algo, `RAISE EXCEPTION` (`ERRCODE = 'P0003'`) com mensagem listando o que falta, sem alterar o orçamento.
+- Achado de bug pré-existente corrigido nesta SPEC: `src/stores/useBudgetStore.ts` (`enviarOrcamentoCliente`) chamava a RPC `enviar_orcamento_cliente` (sem "para"), que **não existe** no banco — só `enviar_orcamento_para_cliente` existe. O botão "Reenviar"/"Aprovar" de `ClientApprovalTab.tsx`/`BudgetTableRow.tsx` estava quebrado em produção antes desta correção.
+- Frontend: nova aba "Rascunho" em `Budgets.tsx` (`DraftBudgetsTab.tsx`), listando orçamentos com `status === 'rascunho'` (helper `isDraftStatus` em `budget-status.ts`), com ações Editar e "Enviar para o Cliente". Também adicionado o branch equivalente em `BudgetTableRow.tsx` (aba "Todos"). Por decisão do usuário (P-2), **qualquer usuário autenticado** pode acionar "Enviar para o Cliente" a partir do rascunho — sem a restrição de papel (`admin`/`gerente`/`operador`) usada nas demais ações de aprovação/reenvio do sistema.
+- Não existe botão "Salvar e Enviar" dentro do formulário de criação/edição (`BudgetFormPage.tsx`) — decisão explícita do usuário (P-4): o envio ao cliente é sempre uma ação separada, feita pela aba "Rascunho".
+- `newBudget?.status === 'enviado_cliente'` em `BudgetFormPage.tsx` (pós-criação) deixou de ser alcançável a partir da criação (mantido como fallback defensivo) — a criação agora sempre resulta em `status = 'rascunho'`, e o toast do caminho normal orienta o usuário a usar a aba "Rascunho".
+- Migration: `supabase/db/migrations/20260727_066_spec051_fase_rascunho_orcamento/` (redigida no repositório central, **aplicada no Supabase real em 2026-07-27** — confirmado por leitura direta do `pg_get_functiondef`/`pg_get_triggerdef`).
 
 ## SPEC-007 — SSO entre sistemas
 
