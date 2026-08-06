@@ -22,6 +22,7 @@ import {
   buildClientApprovalLink,
   isDraftStatus,
 } from '@/lib/budget-status'
+import { sendInitialBudgetPdfAndEmail } from '@/lib/envio-inicial-cliente'
 import { cn } from '@/lib/utils'
 
 // SPEC-051 (P-2): qualquer usuário autenticado pode enviar um rascunho ao
@@ -47,6 +48,9 @@ export function DraftBudgetsTab() {
 
   const handleEdit = (budget: Budget) => navigate(`/budgets/${budget.id}`)
 
+  // SPEC-067 — envio inicial de um rascunho: além do comportamento já
+  // existente (RPC + copiar link + toast), baixa o PDF do orçamento e abre
+  // um `mailto:` pré-preenchido para o cliente.
   const handleEnviar = async (budget: Budget) => {
     setActionId(budget.id)
     try {
@@ -57,6 +61,13 @@ export function DraftBudgetsTab() {
         description: link,
         duration: 8000,
       })
+      try {
+        await sendInitialBudgetPdfAndEmail(budget, result.token)
+      } catch (pdfError: any) {
+        toast.error('Falha ao gerar o PDF', {
+          description: pdfError?.message,
+        })
+      }
     } catch (error: any) {
       toast.error('Falha ao enviar orçamento', { description: error?.message })
     } finally {

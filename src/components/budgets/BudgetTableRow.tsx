@@ -30,7 +30,6 @@ import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { normalizeStatus, cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
-import { supabase } from '@/lib/supabase/client'
 import { FiscalSummaryDialog } from './FiscalSummaryDialog'
 import { FinanceResultModal } from './FinanceResultModal'
 import {
@@ -38,6 +37,10 @@ import {
   getStatusLabel,
   getStatusBadgeClass,
 } from '@/lib/budget-status'
+import {
+  downloadBudgetPdf,
+  sendInitialBudgetPdfAndEmail,
+} from '@/lib/envio-inicial-cliente'
 
 interface BudgetTableRowProps {
   budgetId: string
@@ -80,7 +83,12 @@ export function BudgetTableRow({
   const needsFinancialReview =
     budget.requer_revisao_financeira || hasUnregisteredItems
 
-  const handleEnviarCliente = async () => {
+  // SPEC-067 — `isEnvioInicial` distingue o envio inicial de um rascunho
+  // (botão "Enviar para o Cliente", ganha download de PDF + mailto) do
+  // reenvio (ícone RefreshCw para `enviado_cliente`/`recusado_cliente`,
+  // que continua sem esse comportamento). A store `enviarOrcamentoCliente`
+  // não conhece essa distinção — ela fica só aqui no componente.
+  const handleEnviarCliente = async (isEnvioInicial: boolean) => {
     try {
       setIsSending(true)
       const result = await enviarOrcamentoCliente(budgetId)
@@ -93,6 +101,15 @@ export function BudgetTableRow({
           duration: 8000,
         },
       )
+      if (isEnvioInicial) {
+        try {
+          await sendInitialBudgetPdfAndEmail(budget, result.token)
+        } catch (pdfError: any) {
+          toast.error('Falha ao gerar o PDF', {
+            description: pdfError?.message,
+          })
+        }
+      }
     } catch (error: any) {
       toast.error('Falha ao enviar orçamento', { description: error?.message })
     } finally {
@@ -190,32 +207,7 @@ export function BudgetTableRow({
   const handleDownloadPdf = async () => {
     try {
       setIsPrinting(true)
-      const { data: sessionData } = await supabase.auth.getSession()
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-report`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionData.session?.access_token}`,
-          },
-          body: JSON.stringify({
-            reportType: 'orcamento',
-            format: 'pdf',
-            filters: { id: budgetId },
-          }),
-        },
-      )
-      if (!response.ok) throw new Error('Erro ao gerar o PDF.')
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Orcamento_${budget.numero || budgetId.split('-')[0].toUpperCase()}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      window.URL.revokeObjectURL(url)
+      await downloadBudgetPdf(budget)
       toast.success('Orçamento baixado com sucesso!')
     } catch (error: any) {
       toast.error('Falha ao gerar o PDF', { description: error.message })
@@ -281,7 +273,7 @@ export function BudgetTableRow({
                 size="sm"
                 className="bg-blue-600 hover:bg-blue-700 text-white"
                 title="Enviar para o Cliente"
-                onClick={handleEnviarCliente}
+                onClick={() => handleEnviarCliente(true)}
                 disabled={isSending}
               >
                 {isSending ? (
@@ -310,7 +302,7 @@ export function BudgetTableRow({
                     size="icon"
                     className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
                     title="Reenviar ao Cliente (regenerar token)"
-                    onClick={handleEnviarCliente}
+                    onClick={() => handleEnviarCliente(false)}
                     disabled={isSending}
                   >
                     {isSending ? (
@@ -345,7 +337,7 @@ export function BudgetTableRow({
                 size="icon"
                 className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
                 title="Reenviar ao Cliente"
-                onClick={handleEnviarCliente}
+                onClick={() => handleEnviarCliente(false)}
                 disabled={isSending}
               >
                 {isSending ? (
