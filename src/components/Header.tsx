@@ -30,7 +30,10 @@ export function Header() {
       </div>
 
       <Button variant="ghost" size="icon" asChild className="rounded-full">
-        <a href="https://central-lucenera.goskip.app/" title="Voltar para a Central Lucenera">
+        <a
+          href="https://central-lucenera-dashboard-1c9ba.goskip.app/dashboard"
+          title="Voltar para a Central Lucenera"
+        >
           <Building2 className="w-5 h-5 text-gray-600" />
         </a>
       </Button>
