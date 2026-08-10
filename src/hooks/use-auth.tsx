@@ -15,6 +15,7 @@ interface AuthContextType {
   user: User | null
   session: Session | null
   role: Role | null
+  hasAccess: boolean | null
   canApproveQuotes: boolean
   signUp: (
     email: string,
@@ -40,9 +41,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [role, setRole] = useState<Role | null>(null)
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null)
   const [canApproveQuotes, setCanApproveQuotes] = useState(false)
   const [loading, setLoading] = useState(true)
   const userIdRef = useRef<string | null>(null)
+  // Fica true só depois que a resolução inicial (consumeCodeFromUrl +
+  // getSession) terminou — ver comentário no efeito de auth state abaixo.
+  const initializedRef = useRef(false)
+
+  // SPEC-069: além do role legado (visitante/viewer já bloqueados no
+  // ProtectedRoute), consulta a mesma RPC que o Hub usa (hub_pode_executar,
+  // SPEC-006) para o sistema inteiro ('orcamentos', sem módulo/ação
+  // específicos) — cobre os 6 papéis novos da matriz.
+  useEffect(() => {
+    if (!user?.id) {
+      setHasAccess(null)
+      return
+    }
+    supabase
+      .rpc('hub_pode_executar', {
+        p_usuario_id: user.id,
+        p_system_slug: 'orcamentos',
+        p_modulo_chave: null,
+        p_acao: null,
+      })
+      .then(({ data }) => setHasAccess(Boolean(data)))
+  }, [user?.id])
 
   const fetchUserInfo = async (
     userId: string,
@@ -84,7 +108,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (error) {
         console.error('Error in getRole:', error)
       } finally {
-        if (mounted) {
+        // Só resolve "loading" se a inicialização (troca do sso_code, se
+        // houver) já terminou — ver efeito abaixo.
+        if (mounted && initializedRef.current) {
           setLoading(false)
         }
       }
@@ -92,7 +118,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (user?.id) {
       getRole()
-    } else {
+    } else if (initializedRef.current) {
       // If no user, ensure loading is false
       setLoading(false)
     }
@@ -105,24 +131,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let mounted = true
 
-    // Set up auth state listener FIRST
+    // Acesso vindo da Central chega com ?sso_code na URL. onAuthStateChange
+    // dispara um evento inicial com a sessão que já existia ANTES da troca
+    // desse código terminar (normalmente nula, numa aba nova) — se esse
+    // evento resolvesse "loading" pra false direto (como acontecia antes),
+    // o ProtectedRoute achava que ninguém tinha logado e mandava pra tela
+    // de login antes da troca terminar, "bugando" o clique vindo da
+    // Central. `initializedRef` bloqueia isso: só depois que a resolução
+    // inicial abaixo (consumeCodeFromUrl + getSession) rodar uma vez é que
+    // eventos de auth state passam a poder resolver loading de verdade.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!mounted) return
 
-      setSession(session)
-      const newUser = session?.user ?? null
+      setSession(nextSession)
+      const newUser = nextSession?.user ?? null
 
       // If we have a new user (different ID), we should show loading until role is fetched
       if (newUser && newUser.id !== userIdRef.current) {
-        setLoading(true)
+        if (initializedRef.current) setLoading(true)
         userIdRef.current = newUser.id
       } else if (!newUser) {
         // If logged out, clear everything
         setRole(null)
         setCanApproveQuotes(false)
-        setLoading(false)
+        if (initializedRef.current) setLoading(false)
         userIdRef.current = null
       }
 
@@ -131,19 +165,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Initial session check
     consumeCodeFromUrl('orcamentos').finally(() =>
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
         if (!mounted) return
 
-        setSession(session)
-        const newUser = session?.user ?? null
+        setSession(initialSession)
+        const newUser = initialSession?.user ?? null
 
         if (newUser) {
           // Loading is true by default, so we just set the ref
           userIdRef.current = newUser.id
-        } else {
-          setLoading(false)
         }
         setUser(newUser)
+        initializedRef.current = true
+        // Sem usuário: nada mais vai resolver loading (o efeito de role só
+        // roda com user?.id truthy), resolve aqui. Com usuário: o efeito de
+        // role acima cuida de resolver loading depois de buscar o papel.
+        if (!newUser) setLoading(false)
       }),
     )
 
@@ -192,6 +229,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     user,
     session,
     role,
+    hasAccess,
     canApproveQuotes,
     signUp,
     signIn,
