@@ -1,4 +1,4 @@
-import { Search, Settings } from 'lucide-react'
+import { Building2, Search, Settings } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
@@ -28,6 +28,12 @@ export function Header() {
           </div>
         </div>
       </div>
+
+      <Button variant="ghost" size="icon" asChild className="rounded-full">
+        <a href="https://central-lucenera.goskip.app/" title="Voltar para a Central Lucenera">
+          <Building2 className="w-5 h-5 text-gray-600" />
+        </a>
+      </Button>
 
       {role === 'admin' && (
         <Button variant="ghost" size="icon" asChild className="rounded-full">
