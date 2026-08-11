@@ -79,6 +79,8 @@ export interface Budget {
   origem_connect_cod_orcamento?: number | null
   /** SPEC-050: quando este orçamento foi criado a partir de um import Connect. */
   origem_connect_importado_em?: string | null
+  natureza_operacao?: 'venda' | 'devolucao' | 'outros' | 'sac'
+  subgrupo?: string | null
   created_at: string
   empresa?: { nome: string }
   cliente?: {

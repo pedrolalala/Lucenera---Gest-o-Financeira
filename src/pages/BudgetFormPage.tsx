@@ -16,6 +16,10 @@ import {
   FileCode,
   PackageSearch,
   ShieldAlert,
+  ShoppingCart,
+  Undo2,
+  Package,
+  Headset,
 } from 'lucide-react'
 
 import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
@@ -86,6 +90,37 @@ import type { ProductCatalogItem } from '@/services/productCatalogService'
 import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
 import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
 
+const TIPO_OPERACAO_OPTIONS = [
+  { value: 'venda', label: 'Venda', icon: ShoppingCart },
+  { value: 'devolucao', label: 'Devol.', icon: Undo2 },
+  { value: 'outros', label: 'Outros', icon: Package },
+  { value: 'sac', label: 'SAC', icon: Headset },
+] as const
+
+const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
+  venda: ['VENDAS', 'ENTREGA FUTURA'],
+  devolucao: ['TROCA DEV', 'CASA COR ENTRADA'],
+  outros: [
+    'CASA COR SAIDA',
+    'REMESSA TRANSP',
+    'RETORNO',
+    'TRANSFERENCIA',
+    'GARANTIA',
+    'OUTRAS ENTRADAS',
+    'OUTRAS SAIDAS',
+    'ACERTO CITEL',
+    'INVENTARIO',
+    'SAIDA INDUSTRIALIZACAO',
+    'BONIFICACAO',
+    'USO E CONSUMO',
+    'DESCARTE',
+    'REMESSA CONSERTO',
+    'DEV EM GARANTIA',
+    'DEV COMPRA',
+  ],
+  sac: ['SAC'],
+}
+
 const formSchema = z
   .object({
     empresa_id: z
@@ -136,6 +171,10 @@ const formSchema = z
     validade: z.date().optional().nullable(),
     // SPEC-064: rótulo Ribeirão/São Paulo, só visualização.
     perfil: z.string().optional().nullable(),
+    natureza_operacao: z
+      .enum(['venda', 'devolucao', 'outros', 'sac'])
+      .default('venda'),
+    subgrupo: z.string().min(1, 'Selecione o Tipo'),
     itens: z
       .array(
         z.object({
@@ -263,6 +302,8 @@ export default function BudgetFormPage() {
       observacoes: '',
       validade: null,
       perfil: '',
+      natureza_operacao: 'venda',
+      subgrupo: '',
       itens: [],
     },
   })
@@ -404,6 +445,9 @@ export default function BudgetFormPage() {
               : new Date(),
             validade: budget.validade ? new Date(budget.validade) : null,
             perfil: budget.perfil || '',
+            natureza_operacao:
+              (budget as any).natureza_operacao || 'venda',
+            subgrupo: (budget as any).subgrupo || '',
             itens: sortItemsByCircuitId(
               budget.itens?.map((i) => ({
                 uid: crypto.randomUUID(),
@@ -745,6 +789,8 @@ export default function BudgetFormPage() {
         // SPEC-064: rótulo Ribeirão/São Paulo, só visualização — não
         // influencia cálculo, aprovação nem nenhum outro fluxo.
         perfil: values.perfil || null,
+        natureza_operacao: values.natureza_operacao,
+        subgrupo: values.subgrupo,
         valor_total: valorTotal,
         requer_revisao_financeira: hasUnregisteredItems,
         // SPEC-050: só grava a origem Connect quando este orçamento veio de
@@ -1243,6 +1289,97 @@ export default function BudgetFormPage() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tipo de Operação</CardTitle>
+              <CardDescription>
+                Natureza do orçamento e o subgrupo correspondente.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="natureza_operacao"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Operação</FormLabel>
+                    <FormControl>
+                      <div className="flex items-center gap-2 bg-slate-50 border rounded-lg p-1 w-fit flex-wrap">
+                        {TIPO_OPERACAO_OPTIONS.map((opt) => {
+                          const Icon = opt.icon
+                          const isActive = field.value === opt.value
+                          return (
+                            <Button
+                              key={opt.value}
+                              type="button"
+                              size="sm"
+                              variant={isActive ? 'default' : 'ghost'}
+                              disabled={isEditing}
+                              className="gap-1.5"
+                              onClick={() => {
+                                field.onChange(opt.value)
+                                const opcoes =
+                                  SUBGRUPOS_POR_TIPO[opt.value] || []
+                                form.setValue(
+                                  'subgrupo',
+                                  opcoes.length === 1 ? opcoes[0] : '',
+                                  { shouldValidate: true },
+                                )
+                              }}
+                            >
+                              <Icon className="w-4 h-4" />
+                              {opt.label}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="subgrupo"
+                render={({ field }) => {
+                  const opcoes =
+                    SUBGRUPOS_POR_TIPO[form.watch('natureza_operacao')] || []
+                  return (
+                    <FormItem className="max-w-sm">
+                      <FormLabel>Tipo</FormLabel>
+                      {opcoes.length === 1 ? (
+                        <FormControl>
+                          <Input value={opcoes[0]} disabled readOnly />
+                        </FormControl>
+                      ) : (
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value || undefined}
+                          disabled={isEditing}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {opcoes.map((o) => (
+                              <SelectItem key={o} value={o}>
+                                {o}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )
+                }}
+              />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Informações Gerais</CardTitle>
