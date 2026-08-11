@@ -257,7 +257,7 @@ export function BudgetTableRow({
 
   return (
     <>
-      <TableRow>
+      <TableRow onDoubleClick={() => onEdit(budget)} className="cursor-pointer">
         <TableCell className="font-medium text-gray-600">
           {budget.data_emissao &&
           !isNaN(new Date(budget.data_emissao).getTime())

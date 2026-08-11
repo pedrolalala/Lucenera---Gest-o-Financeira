@@ -72,7 +72,11 @@ export function TransactionsTable({ data, onEdit }: TransactionsTableProps) {
         </TableHeader>
         <TableBody>
           {data.map((transaction) => (
-            <TableRow key={transaction.id}>
+            <TableRow
+              key={transaction.id}
+              onDoubleClick={() => onEdit(transaction)}
+              className="cursor-pointer"
+            >
               <TableCell className="font-medium text-gray-600">
                 {format(new Date(transaction.data), 'dd/MM/yyyy')}
               </TableCell>

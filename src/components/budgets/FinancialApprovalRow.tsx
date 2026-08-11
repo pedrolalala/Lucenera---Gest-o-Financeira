@@ -49,7 +49,7 @@ export function FinancialApprovalRow({
   else if (!validation.ready) disabledReason = validation.issues.join('; ')
 
   return (
-    <TableRow>
+    <TableRow onDoubleClick={() => onEdit(budget)} className="cursor-pointer">
       <TableCell className="text-sm text-gray-600">
         {budget.data_emissao && !isNaN(new Date(budget.data_emissao).getTime())
           ? format(new Date(budget.data_emissao), 'dd/MM/yyyy')

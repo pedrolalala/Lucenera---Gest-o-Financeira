@@ -173,7 +173,11 @@ export function DraftBudgetsTab() {
               </TableHeader>
               <TableBody>
                 {filteredBudgets.map((budget) => (
-                  <TableRow key={budget.id}>
+                  <TableRow
+                    key={budget.id}
+                    onDoubleClick={() => handleEdit(budget)}
+                    className="cursor-pointer"
+                  >
                     <TableCell className="text-sm text-gray-600">
                       {budget.data_emissao &&
                       !isNaN(new Date(budget.data_emissao).getTime())
