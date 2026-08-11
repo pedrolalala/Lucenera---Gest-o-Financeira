@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { Loader2, ShieldAlert } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
+import { useCepLookup, useCnpjLookup } from '@/hooks/use-document-lookup'
 import {
   Dialog,
   DialogContent,
@@ -60,6 +61,9 @@ const schema = z.object({
   rg: z.string().optional(),
   nome_empresa: z.string().optional(),
   razao_social: z.string().optional(),
+  // SPEC-052 (achado 2026-08-04): distinto de regime_apuracao, confirmado por
+  // print do sistema de referência do usuário.
+  tipo_cliente: z.string().optional(),
   inscricao_estadual: z.string().optional(),
   inscricao_municipal: z.string().optional(),
   // SPEC-052: campo de texto livre por enquanto — o print de referência do Vinicius com as
@@ -68,7 +72,13 @@ const schema = z.object({
   regime_apuracao: z.string().optional(),
   limite_credito: z.coerce.number().min(0).optional(),
   nao_residente: z.boolean().default(false),
-  email: z.string().email('Email inválido').optional().or(z.literal('')),
+  // SPEC-061 (2026-08-05): e-mail obrigatório — decisão do usuário. Coluna
+  // `contatos.email` continua nullable no banco (dados legados/importados).
+  email: z
+    .string()
+    .trim()
+    .min(1, 'E-mail é obrigatório')
+    .email('Email inválido'),
   email_financeiro: z
     .string()
     .email('Email inválido')
@@ -79,18 +89,23 @@ const schema = z.object({
   cep: z.string().optional(),
   endereco: z.string().optional(),
   numero: z.string().optional(),
+  // SPEC-061: campo "Complemento" nos 3 blocos de endereço — hoje só
+  // existia número em cada bloco, sem complemento.
+  complemento: z.string().optional(),
   bairro: z.string().optional(),
   cidade: z.string().optional(),
   estado: z.string().max(2).optional(),
   cep_entrega: z.string().optional(),
   endereco_entrega: z.string().optional(),
   numero_entrega: z.string().optional(),
+  complemento_entrega: z.string().optional(),
   bairro_entrega: z.string().optional(),
   cidade_entrega: z.string().optional(),
   estado_entrega: z.string().max(2).optional(),
   cep_cobranca: z.string().optional(),
   endereco_cobranca: z.string().optional(),
   numero_cobranca: z.string().optional(),
+  complemento_cobranca: z.string().optional(),
   bairro_cobranca: z.string().optional(),
   cidade_cobranca: z.string().optional(),
   estado_cobranca: z.string().max(2).optional(),
@@ -129,6 +144,11 @@ export function ClientCreateModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [vendedores, setVendedores] = useState<any[]>([])
   const { user, role } = useAuth()
+  const { buscar: buscarCep, loading: loadingCep } = useCepLookup()
+  const { buscar: buscarCnpj, loading: loadingCnpj } = useCnpjLookup()
+  const numeroRef = useRef<HTMLInputElement>(null)
+  const numeroEntregaRef = useRef<HTMLInputElement>(null)
+  const numeroCobrancaRef = useRef<HTMLInputElement>(null)
 
   const AUTHORIZED_ROLES = ['admin', 'gerente', 'operador']
   const isWriteAllowed = AUTHORIZED_ROLES.includes(role || '')
@@ -143,6 +163,7 @@ export function ClientCreateModal({
       rg: '',
       nome_empresa: '',
       razao_social: '',
+      tipo_cliente: '',
       inscricao_estadual: '',
       inscricao_municipal: '',
       regime_apuracao: '',
@@ -155,18 +176,21 @@ export function ClientCreateModal({
       cep: '',
       endereco: '',
       numero: '',
+      complemento: '',
       bairro: '',
       cidade: '',
       estado: '',
       cep_entrega: '',
       endereco_entrega: '',
       numero_entrega: '',
+      complemento_entrega: '',
       bairro_entrega: '',
       cidade_entrega: '',
       estado_entrega: '',
       cep_cobranca: '',
       endereco_cobranca: '',
       numero_cobranca: '',
+      complemento_cobranca: '',
       bairro_cobranca: '',
       cidade_cobranca: '',
       estado_cobranca: '',
@@ -181,9 +205,16 @@ export function ClientCreateModal({
   useEffect(() => {
     if (open) {
       form.reset()
+      // SPEC-061 (2026-08-05): Vendedor/Vendedor Padrão passam a vir de
+      // `funcionarios` (mesma fonte já usada pelo campo "Vendedor" da tela
+      // principal de Novo Orçamento) — antes vinha de `usuarios`. FK de
+      // `contatos.vendedor_id`/`vendedor_padrao_id` já migrada para apontar
+      // para `funcionarios(id)`.
       supabase
-        .from('usuarios')
+        .from('funcionarios')
         .select('id, nome')
+        .eq('status', 'Ativo')
+        .order('nome')
         .then(({ data }) => {
           if (data) setVendedores(data)
         })
@@ -192,9 +223,11 @@ export function ClientCreateModal({
 
   const watchTipoPessoa = form.watch('tipo_pessoa')
 
-  // Busca automática de CEP (ViaCEP), SPEC-052. Preenche apenas o bloco de endereço
-  // (principal/entrega/cobrança) correspondente ao CEP digitado, sem cruzar dados entre blocos.
-  const buscarEnderecoPorCep = async (
+  // Busca automática de CEP (ViaCEP + fallback BrasilAPI, ver cepService).
+  // Preenche apenas o bloco de endereço (principal/entrega/cobrança)
+  // correspondente ao CEP digitado, sem cruzar dados entre blocos, e move
+  // o foco pro campo de Número em seguida (CEP não retorna número).
+  const buscarEnderecoBloco = (
     cepValue: string,
     keys: {
       endereco: 'endereco' | 'endereco_entrega' | 'endereco_cobranca'
@@ -202,79 +235,82 @@ export function ClientCreateModal({
       cidade: 'cidade' | 'cidade_entrega' | 'cidade_cobranca'
       estado: 'estado' | 'estado_entrega' | 'estado_cobranca'
     },
+    numeroInputRef: React.RefObject<HTMLInputElement>,
   ) => {
-    const digits = (cepValue || '').replace(/\D/g, '')
-    if (digits.length !== 8) return
-    try {
-      const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
-      const data = await response.json()
-      if (!data || data.erro) {
-        toast.warning('CEP não encontrado', {
-          description: 'Preencha o endereço manualmente.',
+    buscarCep(
+      cepValue,
+      (endereco) => {
+        form.setValue(keys.endereco, endereco.logradouro, {
+          shouldDirty: true,
         })
-        return
-      }
-      form.setValue(keys.endereco, data.logradouro || '', {
-        shouldDirty: true,
-      })
-      form.setValue(keys.bairro, data.bairro || '', { shouldDirty: true })
-      form.setValue(keys.cidade, data.localidade || '', {
-        shouldDirty: true,
-      })
-      form.setValue(keys.estado, (data.uf || '').toUpperCase(), {
-        shouldDirty: true,
-      })
-    } catch {
-      toast.warning('Não foi possível consultar o CEP', {
-        description:
-          'Verifique sua conexão. Você pode preencher o endereço manualmente.',
-      })
-    }
+        form.setValue(keys.bairro, endereco.bairro, { shouldDirty: true })
+        form.setValue(keys.cidade, endereco.cidade, { shouldDirty: true })
+        form.setValue(keys.estado, endereco.uf, { shouldDirty: true })
+        numeroInputRef.current?.focus()
+      },
+      (message) => toast.warning('CEP', { description: message }),
+    )
   }
 
-  // Busca automática de CNPJ (BrasilAPI), SPEC-052. Só preenche nome / nome da empresa se os
-  // campos ainda estiverem vazios, para não sobrescrever algo já digitado pelo usuário.
-  const buscarDadosPorCnpj = async (cpfCnpjValue: string) => {
-    const digits = (cpfCnpjValue || '').replace(/\D/g, '')
-    if (digits.length !== 14) return
-    try {
-      const response = await fetch(
-        `https://brasilapi.com.br/api/cnpj/v1/${digits}`,
-      )
-      if (!response.ok) {
-        toast.warning('CNPJ não encontrado', {
-          description: 'Preencha os dados da empresa manualmente.',
-        })
-        return
-      }
-      const data = await response.json()
-      // Diferente do CRM, este formulário já tem um campo `razao_social`
-      // dedicado (contatos.razao_social) — a razão social retornada pela
-      // BrasilAPI vai para ele, não para `nome` (que aqui funciona como
-      // nome completo/fantasia, distinto de razão social).
-      if (!form.getValues('razao_social')) {
-        form.setValue('razao_social', data.razao_social || '', {
-          shouldDirty: true,
-        })
-      }
-      if (!form.getValues('nome')) {
-        form.setValue('nome', data.nome_fantasia || data.razao_social || '', {
-          shouldDirty: true,
-        })
-      }
-      if (!form.getValues('nome_empresa')) {
-        form.setValue(
-          'nome_empresa',
-          data.nome_fantasia || data.razao_social || '',
-          { shouldDirty: true },
-        )
-      }
-    } catch {
-      toast.warning('Não foi possível consultar o CNPJ', {
-        description:
-          'Verifique sua conexão. Você pode preencher os dados manualmente.',
-      })
-    }
+  // Busca automática de CNPJ (BrasilAPI + fallback ReceitaWS, ver
+  // cnpjService). Só preenche campos que ainda estiverem vazios, pra não
+  // sobrescrever algo já digitado pelo usuário. Se vier endereço junto
+  // (BrasilAPI retorna), aproveita pra completar o bloco principal também.
+  const buscarDadosPorCnpj = (cpfCnpjValue: string) => {
+    buscarCnpj(
+      cpfCnpjValue,
+      (dados) => {
+        // Diferente do CRM, este formulário já tem um campo `razao_social`
+        // dedicado (contatos.razao_social) — a razão social retornada vai
+        // para ele, não para `nome` (que aqui funciona como nome
+        // completo/fantasia, distinto de razão social).
+        if (!form.getValues('razao_social')) {
+          form.setValue('razao_social', dados.razaoSocial, {
+            shouldDirty: true,
+          })
+        }
+        if (!form.getValues('nome')) {
+          form.setValue('nome', dados.nomeFantasia, { shouldDirty: true })
+        }
+        if (!form.getValues('nome_empresa')) {
+          form.setValue('nome_empresa', dados.nomeFantasia, {
+            shouldDirty: true,
+          })
+        }
+        if (dados.logradouro && !form.getValues('endereco')) {
+          form.setValue('endereco', dados.logradouro, { shouldDirty: true })
+        }
+        if (dados.bairro && !form.getValues('bairro')) {
+          form.setValue('bairro', dados.bairro, { shouldDirty: true })
+        }
+        if (dados.cidade && !form.getValues('cidade')) {
+          form.setValue('cidade', dados.cidade, { shouldDirty: true })
+        }
+        if (dados.uf && !form.getValues('estado')) {
+          form.setValue('estado', dados.uf, { shouldDirty: true })
+        }
+        if (dados.numero && !form.getValues('numero')) {
+          form.setValue('numero', dados.numero, { shouldDirty: true })
+        }
+        if (dados.cep && !form.getValues('cep')) {
+          form.setValue('cep', dados.cep, { shouldDirty: true })
+        } else if (dados.cep && !dados.logradouro) {
+          // CNPJ retornou CEP mas sem endereço detalhado — complementa
+          // com a busca de CEP normal.
+          buscarEnderecoBloco(
+            dados.cep,
+            {
+              endereco: 'endereco',
+              bairro: 'bairro',
+              cidade: 'cidade',
+              estado: 'estado',
+            },
+            numeroRef,
+          )
+        }
+      },
+      (message) => toast.warning('CNPJ', { description: message }),
+    )
   }
 
   async function onSubmit(values: z.infer<typeof schema>) {
@@ -347,21 +383,25 @@ export function ClientCreateModal({
         cep: values.cep || null,
         endereco: values.endereco || null,
         numero: values.numero || null,
+        complemento: values.complemento || null,
         bairro: values.bairro || null,
         cidade: values.cidade || null,
         estado: values.estado?.toUpperCase() || null,
         cep_entrega: values.cep_entrega || null,
         endereco_entrega: values.endereco_entrega || null,
         numero_entrega: values.numero_entrega || null,
+        complemento_entrega: values.complemento_entrega || null,
         bairro_entrega: values.bairro_entrega || null,
         cidade_entrega: values.cidade_entrega || null,
         estado_entrega: values.estado_entrega?.toUpperCase() || null,
         cep_cobranca: values.cep_cobranca || null,
         endereco_cobranca: values.endereco_cobranca || null,
         numero_cobranca: values.numero_cobranca || null,
+        complemento_cobranca: values.complemento_cobranca || null,
         bairro_cobranca: values.bairro_cobranca || null,
         cidade_cobranca: values.cidade_cobranca || null,
         estado_cobranca: values.estado_cobranca?.toUpperCase() || null,
+        tipo_cliente: values.tipo_cliente || null,
         razao_social: values.razao_social || null,
         inscricao_estadual: values.inscricao_estadual || null,
         inscricao_municipal: values.inscricao_municipal || null,
@@ -533,6 +573,11 @@ export function ClientCreateModal({
                     <FormItem>
                       <FormLabel>
                         {watchTipoPessoa === 'fisica' ? 'CPF' : 'CNPJ'}
+                        {loadingCnpj && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            Buscando...
+                          </span>
+                        )}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -542,6 +587,7 @@ export function ClientCreateModal({
                               : '00.000.000/0000-00'
                           }
                           {...field}
+                          disabled={loadingCnpj}
                           onChange={(e) => {
                             const formatted = formatCpfCnpj(
                               e.target.value,
@@ -604,6 +650,34 @@ export function ClientCreateModal({
                 </div>
                 <FormField
                   control={form.control}
+                  name="tipo_cliente"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tipo Cliente</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="consumidor">Consumidor</SelectItem>
+                          <SelectItem value="nao_contribuinte">
+                            Não Contribuinte
+                          </SelectItem>
+                          <SelectItem value="industria">Indústria</SelectItem>
+                          <SelectItem value="revendedor">Revendedor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="inscricao_estadual"
                   render={({ field }) => (
                     <FormItem>
@@ -633,13 +707,28 @@ export function ClientCreateModal({
                   name="regime_apuracao"
                   render={({ field }) => (
                     <FormItem>
-                      {/* SPEC-052: campo de texto livre por enquanto — o print de referência
-                          com as opções exatas do regime tributário nunca chegou. Trocar para
-                          Select fixo quando as opções forem confirmadas com o Vinicius. */}
+                      {/* SPEC-052: opções confirmadas pelo usuário em 2026-08-04
+                          (Simples Nacional e Regime Normal), migration com CHECK
+                          já aplicada. */}
                       <FormLabel>Regime de Apuração</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ex: Simples Nacional" {...field} />
-                      </FormControl>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="simples_nacional">
+                            Simples Nacional
+                          </SelectItem>
+                          <SelectItem value="regime_normal">
+                            Regime Normal
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -689,9 +778,15 @@ export function ClientCreateModal({
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>E-mail</FormLabel>
+                      <FormLabel>
+                        E-mail <span className="text-red-500">*</span>
+                      </FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder="Opcional" {...field} />
+                        <Input
+                          type="email"
+                          placeholder="email@exemplo.com"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -746,22 +841,34 @@ export function ClientCreateModal({
                   name="cep"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>CEP</FormLabel>
+                      <FormLabel>
+                        CEP
+                        {loadingCep && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            Buscando...
+                          </span>
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           placeholder="00000-000"
                           maxLength={9}
                           {...field}
+                          disabled={loadingCep}
                           onChange={(e) => {
                             const v = e.target.value.replace(/\D/g, '')
                             const formatted = v.replace(/(\d{5})(\d)/, '$1-$2')
                             field.onChange(formatted)
-                            buscarEnderecoPorCep(formatted, {
-                              endereco: 'endereco',
-                              bairro: 'bairro',
-                              cidade: 'cidade',
-                              estado: 'estado',
-                            })
+                            buscarEnderecoBloco(
+                              formatted,
+                              {
+                                endereco: 'endereco',
+                                bairro: 'bairro',
+                                cidade: 'cidade',
+                                estado: 'estado',
+                              },
+                              numeroRef,
+                            )
                           }}
                         />
                       </FormControl>
@@ -789,7 +896,29 @@ export function ClientCreateModal({
                     <FormItem>
                       <FormLabel>Número</FormLabel>
                       <FormControl>
-                        <Input placeholder="Opcional" {...field} />
+                        <Input
+                          placeholder="Opcional"
+                          {...field}
+                          ref={(el) => {
+                            field.ref(el)
+                            ;(
+                              numeroRef as React.MutableRefObject<HTMLInputElement | null>
+                            ).current = el
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="complemento"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Complemento</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Apto, Bloco, Sala..." {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -851,22 +980,34 @@ export function ClientCreateModal({
                   name="cep_entrega"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>CEP</FormLabel>
+                      <FormLabel>
+                        CEP
+                        {loadingCep && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            Buscando...
+                          </span>
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           placeholder="00000-000"
                           maxLength={9}
                           {...field}
+                          disabled={loadingCep}
                           onChange={(e) => {
                             const v = e.target.value.replace(/\D/g, '')
                             const formatted = v.replace(/(\d{5})(\d)/, '$1-$2')
                             field.onChange(formatted)
-                            buscarEnderecoPorCep(formatted, {
-                              endereco: 'endereco_entrega',
-                              bairro: 'bairro_entrega',
-                              cidade: 'cidade_entrega',
-                              estado: 'estado_entrega',
-                            })
+                            buscarEnderecoBloco(
+                              formatted,
+                              {
+                                endereco: 'endereco_entrega',
+                                bairro: 'bairro_entrega',
+                                cidade: 'cidade_entrega',
+                                estado: 'estado_entrega',
+                              },
+                              numeroEntregaRef,
+                            )
                           }}
                         />
                       </FormControl>
@@ -881,7 +1022,29 @@ export function ClientCreateModal({
                     <FormItem>
                       <FormLabel>Número</FormLabel>
                       <FormControl>
-                        <Input placeholder="Opcional" {...field} />
+                        <Input
+                          placeholder="Opcional"
+                          {...field}
+                          ref={(el) => {
+                            field.ref(el)
+                            ;(
+                              numeroEntregaRef as React.MutableRefObject<HTMLInputElement | null>
+                            ).current = el
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="complemento_entrega"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Complemento</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Apto, Bloco, Sala..." {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -956,22 +1119,34 @@ export function ClientCreateModal({
                   name="cep_cobranca"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>CEP</FormLabel>
+                      <FormLabel>
+                        CEP
+                        {loadingCep && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            Buscando...
+                          </span>
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           placeholder="00000-000"
                           maxLength={9}
                           {...field}
+                          disabled={loadingCep}
                           onChange={(e) => {
                             const v = e.target.value.replace(/\D/g, '')
                             const formatted = v.replace(/(\d{5})(\d)/, '$1-$2')
                             field.onChange(formatted)
-                            buscarEnderecoPorCep(formatted, {
-                              endereco: 'endereco_cobranca',
-                              bairro: 'bairro_cobranca',
-                              cidade: 'cidade_cobranca',
-                              estado: 'estado_cobranca',
-                            })
+                            buscarEnderecoBloco(
+                              formatted,
+                              {
+                                endereco: 'endereco_cobranca',
+                                bairro: 'bairro_cobranca',
+                                cidade: 'cidade_cobranca',
+                                estado: 'estado_cobranca',
+                              },
+                              numeroCobrancaRef,
+                            )
                           }}
                         />
                       </FormControl>
@@ -986,7 +1161,29 @@ export function ClientCreateModal({
                     <FormItem>
                       <FormLabel>Número</FormLabel>
                       <FormControl>
-                        <Input placeholder="Opcional" {...field} />
+                        <Input
+                          placeholder="Opcional"
+                          {...field}
+                          ref={(el) => {
+                            field.ref(el)
+                            ;(
+                              numeroCobrancaRef as React.MutableRefObject<HTMLInputElement | null>
+                            ).current = el
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="complemento_cobranca"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Complemento</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Apto, Bloco, Sala..." {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
