@@ -16,7 +16,6 @@ import {
   FileCode,
   PackageSearch,
   ShieldAlert,
-  ShoppingCart,
   Undo2,
   Package,
   Headset,
@@ -78,6 +77,10 @@ import {
   type ProductSearchItem,
 } from '@/components/budgets/ProductSearchModal'
 import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
+import {
+  DevolucaoItemSearchModal,
+  type DevolucaoSelection,
+} from '@/components/budgets/DevolucaoItemSearchModal'
 import { BatchPdfImport } from '@/components/budgets/BatchPdfImport'
 import { ImportConnectXmlModal } from '@/components/budgets/ImportConnectXmlModal'
 import {
@@ -90,13 +93,8 @@ import type { ProductCatalogItem } from '@/services/productCatalogService'
 import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
 import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
 
-const TIPO_OPERACAO_OPTIONS = [
-  { value: 'venda', label: 'Venda', icon: ShoppingCart },
-  { value: 'devolucao', label: 'Devol.', icon: Undo2 },
-  { value: 'outros', label: 'Outros', icon: Package },
-  { value: 'sac', label: 'SAC', icon: Headset },
-] as const
-
+// SPEC-074: subgrupos do campo "Tipo", dependentes do Tipo de Operação
+// selecionado (natureza_operacao). Lista fixa, não normalizada em tabela.
 const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
   venda: ['VENDAS', 'ENTREGA FUTURA'],
   devolucao: ['TROCA DEV', 'CASA COR ENTRADA'],
@@ -123,6 +121,17 @@ const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
 
 const formSchema = z
   .object({
+    // SPEC-071: natureza da operação — venda (padrão, comportamento atual
+    // intocado) ou devolução (itens amarrados a uma venda de origem,
+    // aprovação gera crédito negativo em vez de cobrança). Só editável na
+    // criação — trava depois que o orçamento existe.
+    // SPEC-074: ampliado pra incluir "outros" e "sac", que não têm
+    // comportamento especial de itens (se comportam como venda).
+    natureza_operacao: z
+      .enum(['venda', 'devolucao', 'outros', 'sac'])
+      .default('venda'),
+    // SPEC-074: subgrupo do campo "Tipo", ver SUBGRUPOS_POR_TIPO acima.
+    subgrupo: z.string().min(1, 'Selecione o Tipo'),
     empresa_id: z
       .string({ required_error: 'Selecione uma empresa' })
       .min(1, 'Selecione uma empresa'),
@@ -137,10 +146,21 @@ const formSchema = z
     vendedor_id: z.string().optional().nullable(),
     status: z.string().default('rascunho'),
     data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
+    // SPEC-068: desconto aceita percentual OU valor fechado em R$, conforme
+    // desconto_tipo. A validação de "não pode passar de 100" só faz sentido
+    // para percentual — em R$ o teto real é o subtotal, checado no submit.
     desconto_global: z.coerce
       .number()
       .min(0, 'O desconto não pode ser negativo')
-      .max(100, 'O desconto não pode ser maior que 100%')
+      .nullish()
+      .transform((v) => (v === null || v === undefined ? 0 : v))
+      .default(0),
+    desconto_tipo: z.enum(['percentual', 'valor']).default('percentual'),
+    // SPEC-068: sinal é sempre valor fixo em R$, informativo no documento —
+    // não gera parcela financeira nem afeta a aprovação.
+    valor_sinal: z.coerce
+      .number()
+      .min(0, 'O sinal não pode ser negativo')
       .nullish()
       .transform((v) => (v === null || v === undefined ? 0 : v))
       .default(0),
@@ -171,10 +191,6 @@ const formSchema = z
     validade: z.date().optional().nullable(),
     // SPEC-064: rótulo Ribeirão/São Paulo, só visualização.
     perfil: z.string().optional().nullable(),
-    natureza_operacao: z
-      .enum(['venda', 'devolucao', 'outros', 'sac'])
-      .default('venda'),
-    subgrupo: z.string().min(1, 'Selecione o Tipo'),
     itens: z
       .array(
         z.object({
@@ -193,6 +209,9 @@ const formSchema = z
             .min(0)
             .default(0),
           sub_ordem: z.number().optional(),
+          // SPEC-071: só preenchido em item de devolução — aponta pro
+          // projeto_itens da venda de origem que está sendo devolvida.
+          projeto_item_origem_id: z.string().optional().nullable(),
         }),
       )
       .min(1, 'Adicione pelo menos um item'),
@@ -211,6 +230,19 @@ const formSchema = z
           path: ['itens', index, 'produto_id'],
           code: z.ZodIssueCode.custom,
           message: 'Selecione um produto ou informe uma descrição',
+        })
+      }
+      // SPEC-071: todo item de um orçamento de devolução precisa vir da
+      // busca de venda de origem (garante projeto_item_origem_id).
+      if (
+        data.natureza_operacao === 'devolucao' &&
+        !item.projeto_item_origem_id
+      ) {
+        ctx.addIssue({
+          path: ['itens', index, 'produto_id'],
+          code: z.ZodIssueCode.custom,
+          message:
+            'Item de devolução precisa ser adicionado pela busca de venda de origem',
         })
       }
     })
@@ -241,6 +273,9 @@ export default function BudgetFormPage() {
   const [productCreateTarget, setProductCreateTarget] = useState<{
     index?: number
   } | null>(null)
+  // SPEC-071: modal de busca de venda de origem, usado só quando
+  // natureza_operacao === 'devolucao'.
+  const [isDevolucaoSearchOpen, setIsDevolucaoSearchOpen] = useState(false)
   const {
     empresas,
     clientes,
@@ -287,6 +322,8 @@ export default function BudgetFormPage() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      natureza_operacao: 'venda',
+      subgrupo: '',
       empresa_id: '',
       projeto_codigo: '',
       cliente_id: '',
@@ -295,6 +332,8 @@ export default function BudgetFormPage() {
       status: 'rascunho',
       data_emissao: new Date(),
       desconto_global: 0,
+      desconto_tipo: 'percentual',
+      valor_sinal: 0,
       forma_pagamento: '',
       parcelas: 1,
       data_inicio_pagamento: undefined,
@@ -302,8 +341,6 @@ export default function BudgetFormPage() {
       observacoes: '',
       validade: null,
       perfil: '',
-      natureza_operacao: 'venda',
-      subgrupo: '',
       itens: [],
     },
   })
@@ -371,7 +408,7 @@ export default function BudgetFormPage() {
               *,
               itens:orcamento_itens(
                 id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem,
-                descricao,
+                descricao, projeto_item_origem_id,
                 produto:produtos(codigo_produto, referencia, nome, sku)
               )
             `,
@@ -423,6 +460,8 @@ export default function BudgetFormPage() {
           setProductMetaMap(metaMap)
           setBudgetToEdit(budget)
           form.reset({
+            natureza_operacao: (budget as any).natureza_operacao || 'venda',
+            subgrupo: (budget as any).subgrupo || '',
             empresa_id: budget.empresa_id,
             projeto_codigo: projetoCodigo,
             cliente_id: budget.cliente_id || '',
@@ -430,6 +469,8 @@ export default function BudgetFormPage() {
             vendedor_id: budget.vendedor_id || 'none',
             status: budget.status || 'enviado_cliente',
             desconto_global: budget.desconto_global ?? 0,
+            desconto_tipo: (budget as any).desconto_tipo || 'percentual',
+            valor_sinal: (budget as any).valor_sinal ?? 0,
             forma_pagamento: budget.forma_pagamento || '',
             parcelas: parsedParcelas,
             data_inicio_pagamento: budget.data_inicio_pagamento
@@ -445,9 +486,6 @@ export default function BudgetFormPage() {
               : new Date(),
             validade: budget.validade ? new Date(budget.validade) : null,
             perfil: budget.perfil || '',
-            natureza_operacao:
-              (budget as any).natureza_operacao || 'venda',
-            subgrupo: (budget as any).subgrupo || '',
             itens: sortItemsByCircuitId(
               budget.itens?.map((i) => ({
                 uid: crypto.randomUUID(),
@@ -458,6 +496,8 @@ export default function BudgetFormPage() {
                 preco_unitario: i.preco_unitario,
                 desconto: i.desconto || 0,
                 sub_ordem: i.sub_ordem ?? 0,
+                projeto_item_origem_id:
+                  (i as any).projeto_item_origem_id ?? null,
               })) || [],
             ),
           })
@@ -473,8 +513,12 @@ export default function BudgetFormPage() {
     loadBudget()
   }, [id, isEditing, budgets, form, navigate])
 
+  const naturezaOperacao = form.watch('natureza_operacao') || 'venda'
+  const clienteIdAtual = form.watch('cliente_id')
   const watchItens = form.watch('itens')
   const descontoGlobalPerc = form.watch('desconto_global') || 0
+  const descontoTipo = form.watch('desconto_tipo') || 'percentual'
+  const valorSinal = form.watch('valor_sinal') || 0
   const freteTipo = form.watch('frete_tipo')
   const freteValor = form.watch('frete_valor') || 0
 
@@ -485,9 +529,19 @@ export default function BudgetFormPage() {
     return acc + q * p * (1 - d / 100)
   }, 0)
 
-  const valorComDesconto = valorSubtotal * (1 - descontoGlobalPerc / 100)
+  // SPEC-068: desconto_global guarda o número digitado (10 para "10%" OU
+  // 150 para "R$150,00"); desconto_tipo define como interpretá-lo. O valor
+  // em R$ nunca passa do subtotal (evita desconto "valor" negativo/absurdo).
+  const descontoValorReais =
+    descontoTipo === 'valor'
+      ? Math.min(Math.max(descontoGlobalPerc, 0), valorSubtotal)
+      : valorSubtotal * (Math.min(descontoGlobalPerc, 100) / 100)
+  const descontoPercentualEquivalente =
+    valorSubtotal > 0 ? (descontoValorReais / valorSubtotal) * 100 : 0
+  const valorComDesconto = valorSubtotal - descontoValorReais
   const valorTotal =
     valorComDesconto + (freteTipo === 'com_frete' ? freteValor : 0)
+  const saldoRestanteAposSinal = valorTotal - valorSinal
 
   const customIdsKey = watchItens.map((i) => i.custom_id || '').join('|')
 
@@ -537,10 +591,19 @@ export default function BudgetFormPage() {
       if (projeto.cliente_id) {
         const { data: cli } = await supabase
           .from('contatos')
-          .select('nome')
+          .select('nome, razao_social')
           .eq('id', projeto.cliente_id)
           .single()
-        if (cli) clienteNome = cli.nome
+        // SPEC-068: "nome" aqui é o Nome Completo/Fantasia; combina com a
+        // Razão Social quando ela existe e é diferente, com fallback para
+        // PF/registros sem fantasia (nunca mostra código de projeto).
+        if (cli) {
+          const razaoSocial = cli.razao_social?.trim()
+          clienteNome =
+            razaoSocial && razaoSocial !== cli.nome
+              ? `${razaoSocial} - ${cli.nome}`
+              : cli.nome
+        }
       }
 
       if (projeto.empresa_id) {
@@ -617,8 +680,15 @@ export default function BudgetFormPage() {
         }
       }
 
-      const targetVendedorId = projeto.vendedor_id || projeto.responsavel_id
-      if (targetVendedorId) {
+      // SPEC-068: vendedor vem do RESPONSÁVEL DA OBRA do projeto
+      // (`responsavel_obra_id`), com fallback para `responsavel_id` quando a
+      // obra não tem responsável definido. `projeto.vendedor_id` não existe
+      // na tabela `projetos` (referência morta removida). Autopreenchimento
+      // só ocorre ao criar um orçamento novo — nunca sobrescreve uma escolha
+      // manual já feita ao editar um orçamento existente.
+      const targetVendedorId =
+        projeto.responsavel_obra_id || projeto.responsavel_id
+      if (targetVendedorId && !isEditing) {
         form.setValue('vendedor_id', targetVendedorId, {
           shouldValidate: true,
           shouldDirty: true,
@@ -763,6 +833,10 @@ export default function BudgetFormPage() {
       )
 
       const payload = {
+        // SPEC-071: só editável na criação — trava depois que o orçamento
+        // existe (o campo fica desabilitado na UI quando isEditing).
+        natureza_operacao: values.natureza_operacao,
+        subgrupo: values.subgrupo,
         empresa_id: values.empresa_id,
         projeto_id: projeto.id,
         cliente_id: values.cliente_id,
@@ -771,6 +845,8 @@ export default function BudgetFormPage() {
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
         status: isEditing ? values.status : 'rascunho',
         desconto_global: values.desconto_global ?? 0,
+        desconto_tipo: values.desconto_tipo || 'percentual',
+        valor_sinal: values.valor_sinal ?? 0,
         forma_pagamento: values.forma_pagamento || null,
         prazo_inicio_cobranca_dias: prazoDias,
         data_inicio_pagamento: format(
@@ -789,8 +865,6 @@ export default function BudgetFormPage() {
         // SPEC-064: rótulo Ribeirão/São Paulo, só visualização — não
         // influencia cálculo, aprovação nem nenhum outro fluxo.
         perfil: values.perfil || null,
-        natureza_operacao: values.natureza_operacao,
-        subgrupo: values.subgrupo,
         valor_total: valorTotal,
         requer_revisao_financeira: hasUnregisteredItems,
         // SPEC-050: só grava a origem Connect quando este orçamento veio de
@@ -961,6 +1035,65 @@ export default function BudgetFormPage() {
 
   const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
     applyProductSelection(products)
+  }
+
+  // SPEC-071: mesma lógica de applyProductSelection, mas a origem é uma
+  // venda já aprovada (projeto_itens) em vez do catálogo de produtos — cada
+  // linha carrega projeto_item_origem_id, obrigatório pelo superRefine do
+  // schema quando natureza_operacao === 'devolucao'.
+  const applyDevolucaoSelection = (selecoes: DevolucaoSelection[]) => {
+    if (selecoes.length === 0) {
+      setIsDevolucaoSearchOpen(false)
+      return
+    }
+
+    updateProductMeta(
+      selecoes
+        .filter((s) => s.venda.produto_id && isValidUUID(s.venda.produto_id))
+        .map((s) => ({
+          id: s.venda.produto_id as string,
+          nome: s.venda.produto || '',
+          sku: null,
+          referencia: null,
+          codigo_produto: s.venda.produto_codigo,
+          preco_venda: s.venda.preco_unitario,
+          valor_venda: s.venda.preco_unitario,
+          estoque_total: 0,
+          estoque_disponivel: 0,
+          marca_nome: null,
+          categoria_nome: null,
+          source: 'produtos',
+        })),
+    )
+
+    const currentItems = form.getValues('itens') || []
+    const maxL = currentItems.reduce((max, item) => {
+      const match = (item.custom_id || '').match(/L(\d+)/i)
+      return Math.max(max, match ? parseInt(match[1], 10) : 0)
+    }, 0)
+
+    const newItems = selecoes.map((s, idx) => ({
+      uid: crypto.randomUUID(),
+      custom_id: formatCircuitId(`L${maxL + idx + 1}`),
+      produto_id:
+        s.venda.produto_id && isValidUUID(s.venda.produto_id)
+          ? s.venda.produto_id
+          : '',
+      descricao: s.venda.produto || '',
+      quantidade: s.quantidade,
+      preco_unitario: s.venda.preco_unitario,
+      desconto: s.venda.desconto,
+      projeto_item_origem_id: s.venda.projeto_item_id,
+    }))
+
+    replace([...currentItems, ...newItems], { shouldFocus: false })
+
+    toast.success(
+      newItems.length === 1
+        ? '1 item de devolução adicionado com sucesso'
+        : `${newItems.length} itens de devolução adicionados com sucesso`,
+    )
+    setIsDevolucaoSearchOpen(false)
   }
 
   const handleProductCreateConfirm = (product: ProductCatalogItem) => {
@@ -1291,103 +1424,160 @@ export default function BudgetFormPage() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Tipo de Operação</CardTitle>
-              <CardDescription>
-                Natureza do orçamento e o subgrupo correspondente.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="natureza_operacao"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Operação</FormLabel>
-                    <FormControl>
-                      <div className="flex items-center gap-2 bg-slate-50 border rounded-lg p-1 w-fit flex-wrap">
-                        {TIPO_OPERACAO_OPTIONS.map((opt) => {
-                          const Icon = opt.icon
-                          const isActive = field.value === opt.value
-                          return (
-                            <Button
-                              key={opt.value}
-                              type="button"
-                              size="sm"
-                              variant={isActive ? 'default' : 'ghost'}
-                              disabled={isEditing}
-                              className="gap-1.5"
-                              onClick={() => {
-                                field.onChange(opt.value)
-                                const opcoes =
-                                  SUBGRUPOS_POR_TIPO[opt.value] || []
-                                form.setValue(
-                                  'subgrupo',
-                                  opcoes.length === 1 ? opcoes[0] : '',
-                                  { shouldValidate: true },
-                                )
-                              }}
-                            >
-                              <Icon className="w-4 h-4" />
-                              {opt.label}
-                            </Button>
-                          )
-                        })}
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="subgrupo"
-                render={({ field }) => {
-                  const opcoes =
-                    SUBGRUPOS_POR_TIPO[form.watch('natureza_operacao')] || []
-                  return (
-                    <FormItem className="max-w-sm">
-                      <FormLabel>Tipo</FormLabel>
-                      {opcoes.length === 1 ? (
-                        <FormControl>
-                          <Input value={opcoes[0]} disabled readOnly />
-                        </FormControl>
-                      ) : (
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value || undefined}
-                          disabled={isEditing}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {opcoes.map((o) => (
-                              <SelectItem key={o} value={o}>
-                                {o}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )
-                }}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>Informações Gerais</CardTitle>
               <CardDescription>
                 Detalhes do cliente e dados comerciais.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* SPEC-071: só editável na criação — trava depois que o
+                  orçamento existe, para não mudar de natureza no meio do
+                  pipeline de aprovação. SPEC-074: adicionados "Outros" e
+                  "SAC" (mesmo comportamento de "Venda" na aprovação
+                  financeira, ver payload/RPC) + campo "Tipo" com subgrupos
+                  dependentes do tipo selecionado. */}
+              <div className="flex flex-col gap-3 pb-4 border-b">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Tipo de Operação
+                  </span>
+                  <div className="inline-flex rounded-md border p-0.5 bg-muted/40">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={naturezaOperacao === 'venda' ? 'default' : 'ghost'}
+                      disabled={isEditing}
+                      className="rounded-sm"
+                      onClick={() => {
+                        form.setValue('natureza_operacao', 'venda', {
+                          shouldDirty: true,
+                        })
+                        const opcoes = SUBGRUPOS_POR_TIPO.venda
+                        form.setValue(
+                          'subgrupo',
+                          opcoes.length === 1 ? opcoes[0] : '',
+                          { shouldValidate: true },
+                        )
+                      }}
+                    >
+                      Venda
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={
+                        naturezaOperacao === 'devolucao' ? 'default' : 'ghost'
+                      }
+                      disabled={isEditing}
+                      className="rounded-sm"
+                      onClick={() => {
+                        form.setValue('natureza_operacao', 'devolucao', {
+                          shouldDirty: true,
+                        })
+                        const opcoes = SUBGRUPOS_POR_TIPO.devolucao
+                        form.setValue(
+                          'subgrupo',
+                          opcoes.length === 1 ? opcoes[0] : '',
+                          { shouldValidate: true },
+                        )
+                      }}
+                    >
+                      <Undo2 className="w-3.5 h-3.5 mr-1.5" /> Devolução
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={
+                        naturezaOperacao === 'outros' ? 'default' : 'ghost'
+                      }
+                      disabled={isEditing}
+                      className="rounded-sm"
+                      onClick={() => {
+                        form.setValue('natureza_operacao', 'outros', {
+                          shouldDirty: true,
+                        })
+                        const opcoes = SUBGRUPOS_POR_TIPO.outros
+                        form.setValue(
+                          'subgrupo',
+                          opcoes.length === 1 ? opcoes[0] : '',
+                          { shouldValidate: true },
+                        )
+                      }}
+                    >
+                      <Package className="w-3.5 h-3.5 mr-1.5" /> Outros
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={naturezaOperacao === 'sac' ? 'default' : 'ghost'}
+                      disabled={isEditing}
+                      className="rounded-sm"
+                      onClick={() => {
+                        form.setValue('natureza_operacao', 'sac', {
+                          shouldDirty: true,
+                        })
+                        const opcoes = SUBGRUPOS_POR_TIPO.sac
+                        form.setValue(
+                          'subgrupo',
+                          opcoes.length === 1 ? opcoes[0] : '',
+                          { shouldValidate: true },
+                        )
+                      }}
+                    >
+                      <Headset className="w-3.5 h-3.5 mr-1.5" /> SAC
+                    </Button>
+                  </div>
+                  {isEditing ? (
+                    <span className="text-xs text-muted-foreground">
+                      Não pode ser alterado após a criação do orçamento.
+                    </span>
+                  ) : naturezaOperacao === 'devolucao' ? (
+                    <span className="text-xs text-muted-foreground">
+                      Itens desta devolução precisam ser lançados a partir da
+                      busca de venda de origem, não do catálogo de produtos.
+                    </span>
+                  ) : null}
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="subgrupo"
+                  render={({ field }) => {
+                    const opcoes = SUBGRUPOS_POR_TIPO[naturezaOperacao] || []
+                    return (
+                      <FormItem className="max-w-sm">
+                        <FormLabel>Tipo</FormLabel>
+                        {opcoes.length === 1 ? (
+                          <FormControl>
+                            <Input value={opcoes[0]} disabled readOnly />
+                          </FormControl>
+                        ) : (
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || undefined}
+                            disabled={isEditing}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione..." />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {opcoes.map((o) => (
+                                <SelectItem key={o} value={o}>
+                                  {o}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )
+                  }}
+                />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -1585,16 +1775,27 @@ export default function BudgetFormPage() {
                         <div className="flex gap-2 items-center">
                           <div className="flex-1">
                             <SearchableSelect
-                              options={clientes.map((c) => ({
-                                value: c.id,
-                                label:
-                                  (c as any).razao_social?.trim() || c.nome,
-                                searchTerms: [
-                                  (c as any).razao_social,
-                                  c.nome,
-                                  c.nome_empresa,
-                                ].filter(Boolean) as string[],
-                              }))}
+                              options={clientes.map((c) => {
+                                // SPEC-068: combina Razão Social + Nome
+                                // Completo/Fantasia; nunca mostra código de
+                                // projeto ou outro identificador interno.
+                                const razaoSocial = (
+                                  c as any
+                                ).razao_social?.trim()
+                                const label =
+                                  razaoSocial && razaoSocial !== c.nome
+                                    ? `${razaoSocial} - ${c.nome}`
+                                    : c.nome
+                                return {
+                                  value: c.id,
+                                  label,
+                                  searchTerms: [
+                                    (c as any).razao_social,
+                                    c.nome,
+                                    c.nome_empresa,
+                                  ].filter(Boolean) as string[],
+                                }
+                              })}
                               value={field.value}
                               onChange={field.onChange}
                               placeholder="Selecione um cliente..."
@@ -1777,69 +1978,21 @@ export default function BudgetFormPage() {
                 </CardDescription>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    setProductSearchRowIndex(null)
-                    setIsProductSearchOpen(true)
-                  }}
-                >
-                  <PackageSearch className="w-4 h-4 mr-2" /> Buscar Produtos
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    append({
-                      uid: crypto.randomUUID(),
-                      custom_id: '',
-                      produto_id: '',
-                      descricao: '',
-                      quantidade: 1,
-                      preco_unitario: 0,
-                      desconto: 0,
-                    })
-                  }
-                >
-                  <Plus className="w-4 h-4 mr-2" /> Adicionar Item
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    append({
-                      uid: crypto.randomUUID(),
-                      custom_id: '',
-                      produto_id: '',
-                      descricao: '',
-                      quantidade: 1,
-                      preco_unitario: 0,
-                      desconto: 0,
-                    })
-                  }
-                >
-                  <Plus className="w-4 h-4 mr-2" /> Adicionar Item não
-                  Cadastrado
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {fields.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed rounded-lg bg-gray-50/50">
-                  <p className="text-gray-500 mb-2 font-medium">
-                    Nenhum item adicionado
-                  </p>
-                  <p className="text-sm text-gray-400 mb-4">
-                    Adicione produtos para compor este orçamento.
-                  </p>
-                  <div className="flex gap-2 flex-wrap">
+                {naturezaOperacao === 'devolucao' ? (
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={() => setIsDevolucaoSearchOpen(true)}
+                  >
+                    <Undo2 className="w-4 h-4 mr-2" /> Buscar Venda de Origem
+                  </Button>
+                ) : (
+                  <>
                     <Button
                       type="button"
                       variant="default"
+                      size="sm"
                       onClick={() => {
                         setProductSearchRowIndex(null)
                         setIsProductSearchOpen(true)
@@ -1849,7 +2002,8 @@ export default function BudgetFormPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="outline"
+                      size="sm"
                       onClick={() =>
                         append({
                           uid: crypto.randomUUID(),
@@ -1866,7 +2020,8 @@ export default function BudgetFormPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
+                      size="sm"
                       onClick={() =>
                         append({
                           uid: crypto.randomUUID(),
@@ -1882,6 +2037,79 @@ export default function BudgetFormPage() {
                       <Plus className="w-4 h-4 mr-2" /> Adicionar Item não
                       Cadastrado
                     </Button>
+                  </>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {fields.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed rounded-lg bg-gray-50/50">
+                  <p className="text-gray-500 mb-2 font-medium">
+                    Nenhum item adicionado
+                  </p>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Adicione produtos para compor este orçamento.
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {naturezaOperacao === 'devolucao' ? (
+                      <Button
+                        type="button"
+                        variant="default"
+                        onClick={() => setIsDevolucaoSearchOpen(true)}
+                      >
+                        <Undo2 className="w-4 h-4 mr-2" /> Buscar Venda de
+                        Origem
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          variant="default"
+                          onClick={() => {
+                            setProductSearchRowIndex(null)
+                            setIsProductSearchOpen(true)
+                          }}
+                        >
+                          <PackageSearch className="w-4 h-4 mr-2" /> Buscar
+                          Produtos
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() =>
+                            append({
+                              uid: crypto.randomUUID(),
+                              custom_id: '',
+                              produto_id: '',
+                              descricao: '',
+                              quantidade: 1,
+                              preco_unitario: 0,
+                              desconto: 0,
+                            })
+                          }
+                        >
+                          <Plus className="w-4 h-4 mr-2" /> Adicionar Item
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            append({
+                              uid: crypto.randomUUID(),
+                              custom_id: '',
+                              produto_id: '',
+                              descricao: '',
+                              quantidade: 1,
+                              preco_unitario: 0,
+                              desconto: 0,
+                            })
+                          }
+                        >
+                          <Plus className="w-4 h-4 mr-2" /> Adicionar Item não
+                          Cadastrado
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -2150,19 +2378,83 @@ export default function BudgetFormPage() {
                     )}
                   />
 
+                  <FormItem>
+                    <FormLabel>Desconto Global</FormLabel>
+                    <div className="flex gap-2">
+                      <FormField
+                        control={form.control}
+                        name="desconto_tipo"
+                        render={({ field }) => (
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || 'percentual'}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="w-28 shrink-0">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="percentual">%</SelectItem>
+                              <SelectItem value="valor">R$</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="desconto_global"
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  max={
+                                    descontoTipo === 'percentual'
+                                      ? 100
+                                      : undefined
+                                  }
+                                  placeholder="0"
+                                  className="pr-8"
+                                  {...field}
+                                  value={field.value === 0 ? '' : field.value}
+                                  onChange={(e) =>
+                                    field.onChange(Number(e.target.value) || 0)
+                                  }
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+                                  {descontoTipo === 'percentual' ? '%' : 'R$'}
+                                </span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {descontoTipo === 'percentual'
+                        ? `Equivale a ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(descontoValorReais)}.`
+                        : `Equivale a ${descontoPercentualEquivalente.toFixed(2)}%.`}{' '}
+                      Aplicado sobre o subtotal dos itens.
+                    </p>
+                  </FormItem>
+
                   <FormField
                     control={form.control}
-                    name="desconto_global"
+                    name="valor_sinal"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Desconto Global (%)</FormLabel>
+                        <FormLabel>Sinal (R$)</FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Input
                               type="number"
                               step="0.01"
                               min="0"
-                              max="100"
                               placeholder="0"
                               className="pr-8"
                               {...field}
@@ -2172,13 +2464,13 @@ export default function BudgetFormPage() {
                               }
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
-                              %
+                              R$
                             </span>
                           </div>
                         </FormControl>
                         <p className="text-xs text-gray-500 mt-1">
-                          Este desconto será aplicado ao valor total após o
-                          desconto dos itens.
+                          Valor fixo. Exibido no documento do orçamento para o
+                          cliente — não gera parcela financeira.
                         </p>
                         <FormMessage />
                       </FormItem>
@@ -2216,13 +2508,19 @@ export default function BudgetFormPage() {
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-sm text-gray-600">
-                      <span>Desconto global ({descontoGlobalPerc}%)</span>
+                      <span>
+                        Desconto global (
+                        {descontoTipo === 'percentual'
+                          ? `${descontoGlobalPerc}%`
+                          : `${descontoPercentualEquivalente.toFixed(2)}%`}
+                        )
+                      </span>
                       <span className="font-medium text-red-600">
                         -
                         {new Intl.NumberFormat('pt-BR', {
                           style: 'currency',
                           currency: 'BRL',
-                        }).format(valorSubtotal * (descontoGlobalPerc / 100))}
+                        }).format(descontoValorReais)}
                       </span>
                     </div>
                     {freteTipo === 'com_frete' && freteValor > 0 && (
@@ -2237,9 +2535,21 @@ export default function BudgetFormPage() {
                         </span>
                       </div>
                     )}
+                    {valorSinal > 0 && (
+                      <div className="flex justify-between items-center text-sm text-gray-600">
+                        <span>Sinal</span>
+                        <span className="font-medium text-amber-700">
+                          -
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(valorSinal)}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="pt-4 border-t border-gray-200">
+                  <div className="pt-4 border-t border-gray-200 space-y-2">
                     <div className="flex justify-between items-end">
                       <span className="text-gray-900 font-semibold">
                         Valor Total
@@ -2251,6 +2561,19 @@ export default function BudgetFormPage() {
                         }).format(valorTotal)}
                       </span>
                     </div>
+                    {valorSinal > 0 && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">
+                          Saldo restante após o sinal
+                        </span>
+                        <span className="font-semibold text-gray-900">
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(saldoRestanteAposSinal)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2296,6 +2619,13 @@ export default function BudgetFormPage() {
             }}
             onConfirm={handleProductSearchConfirm}
             onProductCreated={(product) => updateProductMeta([product])}
+          />
+
+          <DevolucaoItemSearchModal
+            open={isDevolucaoSearchOpen}
+            onOpenChange={setIsDevolucaoSearchOpen}
+            clienteId={clienteIdAtual}
+            onConfirm={applyDevolucaoSelection}
           />
 
           <ProductCreateModal

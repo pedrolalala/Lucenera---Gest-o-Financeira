@@ -37,6 +37,8 @@ export interface BudgetItem {
   ordem?: number
   sub_ordem?: number
   item_pai_id?: string
+  /** SPEC-071: só preenchido em item de devolução — projeto_itens da venda de origem. */
+  projeto_item_origem_id?: string | null
   produto?: {
     nome: string
     codigo_produto?: number
@@ -55,6 +57,10 @@ export interface Budget {
   arquiteto_id: string | null
   vendedor_id: string | null
   status: string
+  /** SPEC-071: 'venda' (padrão), 'devolucao', 'outros' ou 'sac' — trava na criação. */
+  natureza_operacao?: string
+  /** SPEC-074: subgrupo do campo "Tipo", dependente de natureza_operacao. */
+  subgrupo?: string | null
   data_emissao: string
   validade: string | null
   condicoes_pagamento: string | null
@@ -66,6 +72,8 @@ export interface Budget {
   frete_valor: number | null
   desconto_global: number | null
   observacoes: string | null
+  /** SPEC-064: rótulo Ribeirão/São Paulo, só visualização. */
+  perfil?: string | null
   valor_total: number
   requer_revisao_financeira: boolean | null
   enviado_cliente_em: string | null
@@ -79,8 +87,6 @@ export interface Budget {
   origem_connect_cod_orcamento?: number | null
   /** SPEC-050: quando este orçamento foi criado a partir de um import Connect. */
   origem_connect_importado_em?: string | null
-  natureza_operacao?: 'venda' | 'devolucao' | 'outros' | 'sac'
-  subgrupo?: string | null
   created_at: string
   empresa?: { nome: string }
   cliente?: {
@@ -134,7 +140,6 @@ interface BudgetState {
     budget: Budget,
     motivo: string,
   ) => Promise<any>
-  voltarOrcamentoRascunho: (budget: Budget, motivo: string) => Promise<any>
 }
 
 const useBudgetStore = create<BudgetState>((set, get) => ({
@@ -162,6 +167,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         ordem,
         sub_ordem,
         item_pai_id,
+        projeto_item_origem_id,
         produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade, porc_st)
       )
     `)
@@ -243,6 +249,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         ordem: extractCircuitNumber(i.custom_id),
         sub_ordem: subOrdens[idx],
         item_pai_id: i.item_pai_id || null,
+        projeto_item_origem_id: i.projeto_item_origem_id || null,
       }))
 
       const { error: itemsError } = await supabase
@@ -288,6 +295,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         ordem: extractCircuitNumber(i.custom_id),
         sub_ordem: subOrdens[idx],
         item_pai_id: i.item_pai_id || null,
+        projeto_item_origem_id: i.projeto_item_origem_id || null,
       }))
       const { error: rpcError } = await (supabase as any).rpc(
         'replace_orcamento_itens',
@@ -452,24 +460,6 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     if (error) {
       console.error('Error returning budget to client:', error)
       throw new Error(error.message || 'Erro ao devolver orçamento ao cliente.')
-    }
-
-    await get().fetchBudgets()
-
-    return data
-  },
-
-  voltarOrcamentoRascunho: async (budget, motivo) => {
-    const { data, error } = await (supabase as any).rpc(
-      'voltar_orcamento_rascunho',
-      { p_orcamento_id: budget.id, p_motivo: motivo },
-    )
-
-    if (error) {
-      console.error('Error returning budget to draft:', error)
-      throw new Error(
-        error.message || 'Erro ao voltar orçamento para rascunho.',
-      )
     }
 
     await get().fetchBudgets()
