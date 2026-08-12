@@ -52,6 +52,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import {
+  ArchitectSplitPicker,
+  type ArquitetoSplit,
+} from '@/components/ArchitectSplitPicker'
 import { ProjectCreateModal } from '@/components/ProjectCreateModal'
 import { ClientCreateModal } from '@/components/ClientCreateModal'
 import {
@@ -119,6 +123,28 @@ const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
   sac: ['SAC'],
 }
 
+// SPEC-077: monta o valor do ArchitectSplitPicker a partir do orçamento
+// carregado — usa a divisão nova (orcamento_arquitetos) quando existe;
+// cai para o campo singular legado (arquiteto_id/arquiteto.nome) como
+// rede de segurança para orçamento antigo que escapou do backfill.
+function orcamentoArquitetosParaPicker(budget: Budget): ArquitetoSplit[] {
+  if (budget.arquitetos && budget.arquitetos.length > 0) {
+    return budget.arquitetos
+      .filter((a) => a.arquiteto)
+      .map((a) => ({
+        arquiteto_id: a.arquiteto!.id,
+        nome: a.arquiteto!.nome,
+        percentual: Number(a.percentual),
+      }))
+  }
+  if (budget.arquiteto_id && budget.arquiteto?.nome) {
+    return [
+      { arquiteto_id: budget.arquiteto_id, nome: budget.arquiteto.nome, percentual: 100 },
+    ]
+  }
+  return []
+}
+
 const formSchema = z
   .object({
     // SPEC-071: natureza da operação — venda (padrão, comportamento atual
@@ -142,7 +168,25 @@ const formSchema = z
     cliente_id: z
       .string({ required_error: 'Selecione um cliente' })
       .min(1, 'Selecione um cliente'),
-    arquiteto_id: z.string().optional().nullable(),
+    // SPEC-077: divisão de lucro entre múltiplos arquitetos — segue opcional
+    // (nem todo orçamento tem arquiteto vinculado), mas quando preenchido a
+    // soma dos percentuais precisa fechar 100%.
+    arquitetos: z
+      .array(
+        z.object({
+          arquiteto_id: z.string(),
+          nome: z.string(),
+          percentual: z.number(),
+        }),
+      )
+      .default([])
+      .refine(
+        (arr) =>
+          arr.length === 0 ||
+          Math.abs(arr.reduce((s, a) => s + (a.percentual || 0), 0) - 100) <
+            0.01,
+        'A soma dos percentuais dos arquitetos deve ser 100%',
+      ),
     vendedor_id: z.string().optional().nullable(),
     status: z.string().default('rascunho'),
     data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
@@ -327,7 +371,7 @@ export default function BudgetFormPage() {
       empresa_id: '',
       projeto_codigo: '',
       cliente_id: '',
-      arquiteto_id: 'none',
+      arquitetos: [],
       vendedor_id: 'none',
       status: 'rascunho',
       data_emissao: new Date(),
@@ -465,7 +509,7 @@ export default function BudgetFormPage() {
             empresa_id: budget.empresa_id,
             projeto_codigo: projetoCodigo,
             cliente_id: budget.cliente_id || '',
-            arquiteto_id: budget.arquiteto_id || 'none',
+            arquitetos: orcamentoArquitetosParaPicker(budget),
             vendedor_id: budget.vendedor_id || 'none',
             status: budget.status || 'enviado_cliente',
             desconto_global: budget.desconto_global ?? 0,
@@ -568,7 +612,9 @@ export default function BudgetFormPage() {
     try {
       const { data: projeto, error } = await supabase
         .from('projetos')
-        .select('*')
+        .select(
+          '*, projeto_arquitetos(percentual, arquiteto:arquiteto_id(id, nome))',
+        )
         .eq('codigo', codigo)
         .single()
 
@@ -650,29 +696,50 @@ export default function BudgetFormPage() {
         })
       }
 
-      if (projeto.arquiteto_id) {
-        form.setValue('arquiteto_id', projeto.arquiteto_id, {
+      // SPEC-077: projeto com divisão de arquitetos já cadastrada (tabela
+      // projeto_arquitetos) — pré-popula o picker inteiro, percentuais
+      // inclusos.
+      if (projeto.projeto_arquitetos && projeto.projeto_arquitetos.length > 0) {
+        const splits: ArquitetoSplit[] = (projeto.projeto_arquitetos as any[])
+          .filter((pa) => pa.arquiteto)
+          .map((pa) => ({
+            arquiteto_id: pa.arquiteto.id,
+            nome: pa.arquiteto.nome,
+            percentual: Number(pa.percentual),
+          }))
+        form.setValue('arquitetos', splits, {
           shouldValidate: true,
           shouldDirty: true,
         })
       } else if (projeto['Nome Arquiteto']) {
         // SPEC-061: fallback de autopreenchimento por nome — quando o
-        // projeto só tem o texto legado "Nome Arquiteto" (sem arquiteto_id
-        // vinculado), busca em contatos por correspondência única (exata,
-        // case-insensitive) e pré-seleciona. Ambíguo ou zero resultados:
-        // não inventa vínculo, campo fica vazio para seleção manual.
+        // projeto só tem o texto legado "Nome Arquiteto" (sem vínculo em
+        // projeto_arquitetos), busca em contatos por correspondência única
+        // (exata, case-insensitive) e pré-seleciona com 100%. Ambíguo ou
+        // zero resultados: não inventa vínculo, campo fica vazio para
+        // seleção manual.
         const nomeArquiteto = String(projeto['Nome Arquiteto']).trim()
         if (nomeArquiteto) {
           const { data: arqMatches } = await supabase
             .from('contatos')
-            .select('id')
+            .select('id, nome')
             .eq('tipo', 'arquiteto')
             .ilike('nome', nomeArquiteto)
           if (arqMatches && arqMatches.length === 1) {
-            form.setValue('arquiteto_id', arqMatches[0].id, {
-              shouldValidate: true,
-              shouldDirty: true,
-            })
+            form.setValue(
+              'arquitetos',
+              [
+                {
+                  arquiteto_id: arqMatches[0].id,
+                  nome: arqMatches[0].nome,
+                  percentual: 100,
+                },
+              ],
+              {
+                shouldValidate: true,
+                shouldDirty: true,
+              },
+            )
             setProjectDetails((prev) =>
               prev ? { ...prev, arquitetoAutoLinked: true } : prev,
             )
@@ -840,8 +907,6 @@ export default function BudgetFormPage() {
         empresa_id: values.empresa_id,
         projeto_id: projeto.id,
         cliente_id: values.cliente_id,
-        arquiteto_id:
-          values.arquiteto_id === 'none' ? null : values.arquiteto_id,
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
         status: isEditing ? values.status : 'rascunho',
         desconto_global: values.desconto_global ?? 0,
@@ -877,11 +942,25 @@ export default function BudgetFormPage() {
           : {}),
       }
 
+      const arquitetosPayload = values.arquitetos.map((a) => ({
+        arquiteto_id: a.arquiteto_id,
+        percentual: a.percentual,
+      }))
+
       if (isEditing && budgetToEdit) {
-        await updateBudget(budgetToEdit.id, payload, values.itens)
+        await updateBudget(
+          budgetToEdit.id,
+          payload,
+          values.itens,
+          arquitetosPayload,
+        )
         toast.success('Orçamento atualizado com sucesso')
       } else {
-        const newBudgetId = await addBudget(payload, values.itens)
+        const newBudgetId = await addBudget(
+          payload,
+          values.itens,
+          arquitetosPayload,
+        )
         try {
           const { data: newBudget } = await supabase
             .from('orcamentos')
@@ -1129,13 +1208,17 @@ export default function BudgetFormPage() {
       if (found) clienteId = found.id
     }
 
-    let arquitetoId = form.getValues('arquiteto_id')
+    let arquitetosSplit = form.getValues('arquitetos')
     const arquitetoNome = results.find((r) => r.arquiteto_nome)?.arquiteto_nome
     if (arquitetoNome) {
       const found = arquitetos.find((a) =>
         a.nome.toLowerCase().includes(arquitetoNome.toLowerCase()),
       )
-      if (found) arquitetoId = found.id
+      if (found) {
+        arquitetosSplit = [
+          { arquiteto_id: found.id, nome: found.nome, percentual: 100 },
+        ]
+      }
     }
 
     let vendedorId = form.getValues('vendedor_id')
@@ -1168,7 +1251,7 @@ export default function BudgetFormPage() {
       ...form.getValues(),
       empresa_id: empresaId,
       cliente_id: clienteId,
-      arquiteto_id: arquitetoId || 'none',
+      arquitetos: arquitetosSplit,
       vendedor_id: vendedorId || 'none',
       status: results.find((r) => r.status)?.status || 'enviado_cliente',
       desconto_global:
@@ -1821,24 +1904,15 @@ export default function BudgetFormPage() {
 
                 <FormField
                   control={form.control}
-                  name="arquiteto_id"
+                  name="arquitetos"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Arquiteto / Profissional</FormLabel>
                       <FormControl>
-                        <SearchableSelect
-                          options={[
-                            { value: 'none', label: 'Nenhum' },
-                            ...arquitetos.map((a) => ({
-                              value: a.id,
-                              label: a.nome,
-                            })),
-                          ]}
-                          value={field.value || 'none'}
+                        <ArchitectSplitPicker
+                          value={field.value}
                           onChange={field.onChange}
-                          placeholder="Nenhum"
-                          searchPlaceholder="Buscar arquiteto..."
-                          emptyText="Nenhum arquiteto encontrado."
+                          options={arquitetos}
                         />
                       </FormControl>
                       <FormMessage />

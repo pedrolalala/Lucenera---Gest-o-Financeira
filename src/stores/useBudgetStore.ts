@@ -99,6 +99,9 @@ export interface Budget {
   vendedor?: { nome: string }
   projeto?: { nome: string; codigo: string }
   itens?: BudgetItem[]
+  /** SPEC-077: divisão de lucro entre múltiplos arquitetos — mantém
+   * arquiteto_id sincronizado (maior percentual) só por compatibilidade. */
+  arquitetos?: { percentual: number; arquiteto: { id: string; nome: string } | null }[]
 }
 
 export interface ApprovalResult {
@@ -123,11 +126,17 @@ interface BudgetState {
       'id' | 'created_at' | 'empresa' | 'cliente' | 'arquiteto' | 'itens'
     >,
     items: BudgetItem[],
+    arquitetos?: { arquiteto_id: string; percentual: number }[],
   ) => Promise<string>
   updateBudget: (
     id: string,
     budget: Partial<Budget>,
     items: BudgetItem[],
+    arquitetos?: { arquiteto_id: string; percentual: number }[],
+  ) => Promise<void>
+  replaceOrcamentoArquitetos: (
+    orcamentoId: string,
+    arquitetos: { arquiteto_id: string; percentual: number }[],
   ) => Promise<void>
   deleteBudget: (id: string) => Promise<void>
   approveBudgetAndMigrate: (budget: Budget) => Promise<ApprovalResult>
@@ -161,6 +170,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       empresa:empresas(nome),
       cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social, email, nome_empresa),
       arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
+      arquitetos:orcamento_arquitetos(percentual, arquiteto:arquiteto_id(id, nome)),
       projeto:projetos(nome, codigo),
       itens:orcamento_itens(
         id,
@@ -217,7 +227,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     set({ budgets: filtered, loading: false, initialized: true })
   },
 
-  addBudget: async (budget, items) => {
+  addBudget: async (budget, items, arquitetos) => {
     validateBudgetItems(items)
 
     const finalBudget = { ...budget }
@@ -270,12 +280,16 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       }
     }
 
+    if (arquitetos) {
+      await get().replaceOrcamentoArquitetos(data.id, arquitetos)
+    }
+
     await get().fetchBudgets()
 
     return data.id
   },
 
-  updateBudget: async (id, budget, items) => {
+  updateBudget: async (id, budget, items, arquitetos) => {
     validateBudgetItems(items)
 
     const { error } = await supabase
@@ -331,7 +345,23 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       }
     }
 
+    if (arquitetos) {
+      await get().replaceOrcamentoArquitetos(id, arquitetos)
+    }
+
     await get().fetchBudgets()
+  },
+
+  replaceOrcamentoArquitetos: async (orcamentoId, arquitetos) => {
+    const { error } = await (supabase as any).rpc('replace_orcamento_arquitetos', {
+      p_orcamento_id: orcamentoId,
+      p_arquitetos: arquitetos,
+    })
+
+    if (error) {
+      console.error('Error replacing budget architects:', error)
+      throw new Error(error.message || 'Erro ao salvar arquitetos do orçamento.')
+    }
   },
 
   deleteBudget: async (id) => {
