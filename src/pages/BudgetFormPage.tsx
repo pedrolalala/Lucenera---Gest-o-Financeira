@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -19,6 +19,8 @@ import {
   Undo2,
   Package,
   Headset,
+  MoreVertical,
+  LineChart,
 } from 'lucide-react'
 
 import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
@@ -94,6 +96,13 @@ import {
   type ProductMeta,
 } from '@/components/budgets/BudgetItemCard'
 import { BudgetItemsHeader } from '@/components/budgets/BudgetItemsHeader'
+import { GerenciamentoDialog } from '@/components/budgets/GerenciamentoDialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import type { ParsedPdfResult } from '@/lib/pdf-import'
 import type { ProductCatalogItem } from '@/services/productCatalogService'
 import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
@@ -370,6 +379,7 @@ export default function BudgetFormPage() {
     arquitetoAutoLinked?: boolean
   } | null>(null)
   const [showApprovalDialog, setShowApprovalDialog] = useState(false)
+  const [gerenciamentoOpen, setGerenciamentoOpen] = useState(false)
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
     null,
   )
@@ -417,6 +427,16 @@ export default function BudgetFormPage() {
     'Thais Gomes',
     'Teresinha do Amaral',
   ].map((n) => n.toLowerCase())
+
+  // SPEC-083: nome de exibição por produto pro painel de Gerenciamento
+  // (admin/gerente) — reaproveita o catálogo já carregado por useOptions().
+  const produtoNomesMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    produtos.forEach((p: any) => {
+      map[p.id] = p.originalNome || p.nome
+    })
+    return map
+  }, [produtos])
 
   const sortedVendedores = [...vendedores].sort((a, b) => {
     const idxA = PRIORITY_SELLERS.findIndex((n) =>
@@ -1661,6 +1681,23 @@ export default function BudgetFormPage() {
               <Download className="w-4 h-4 mr-2" />
               Exportar XML
             </Button>
+          )}
+          {(role === 'admin' || role === 'gerente') && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="icon">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => setGerenciamentoOpen(true)}
+                >
+                  <LineChart className="w-4 h-4 mr-2" />
+                  Gerenciamento
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <Button variant="outline" asChild>
             <Link to="/budgets">Cancelar</Link>
@@ -3018,6 +3055,21 @@ export default function BudgetFormPage() {
           }}
         />
       )}
+
+      <GerenciamentoDialog
+        open={gerenciamentoOpen}
+        onOpenChange={setGerenciamentoOpen}
+        itens={form.watch('itens')}
+        produtoNomes={produtoNomesMap}
+        descontoAtual={form.watch('desconto_global') || 0}
+        onAplicarDesconto={(pct) => {
+          form.setValue('desconto_tipo', 'percentual', { shouldDirty: true })
+          form.setValue('desconto_global', pct, {
+            shouldValidate: true,
+            shouldDirty: true,
+          })
+        }}
+      />
     </div>
   )
 }
