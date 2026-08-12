@@ -779,50 +779,62 @@ export default function BudgetFormPage() {
         }
       }
 
-      // SPEC-068: vendedor vem do RESPONSÁVEL DA OBRA do projeto
-      // (`responsavel_obra_id`), com fallback para `responsavel_id` quando a
-      // obra não tem responsável definido. `projeto.vendedor_id` não existe
-      // na tabela `projetos` (referência morta removida). Autopreenchimento
-      // só ocorre ao criar um orçamento novo — nunca sobrescreve uma escolha
-      // manual já feita ao editar um orçamento existente.
-      const targetVendedorId =
-        projeto.responsavel_obra_id || projeto.responsavel_id
-      if (targetVendedorId && !isEditing) {
-        form.setValue('vendedor_id', targetVendedorId, {
+      // Vendedor = Responsável do Projeto (`responsavel_funcionario_id`,
+      // SPEC-077) — não é o Arquiteto nem o Responsável da Obra
+      // (`responsavel_obra_id`, campo diferente), são conceitos
+      // independentes. Fallback pra correspondência única de nome
+      // (`responsavel_nome`, texto legado) quando o projeto é antigo e não
+      // tem o vínculo direto; se nada resolver, cai pro usuário logado.
+      // Sempre reresolve (inclusive limpando pra "none") a cada seleção de
+      // projeto — autopreenchimento só ocorre ao criar um orçamento novo,
+      // nunca sobrescreve uma escolha manual já feita ao editar um
+      // orçamento existente.
+      if (!isEditing) {
+        let targetVendedorId: string | null =
+          projeto.responsavel_funcionario_id || null
+
+        if (!targetVendedorId && projeto.responsavel_nome?.trim()) {
+          // `responsavel_nome` legado costuma ser só o primeiro nome (ex.:
+          // "Marina"), enquanto `funcionarios.nome` é o nome completo — por
+          // isso o match precisa ser parcial (%...%), não exato.
+          const { data: nomeMatches } = await supabase
+            .from('funcionarios')
+            .select('id')
+            .ilike('nome', `%${projeto.responsavel_nome.trim()}%`)
+          if (nomeMatches && nomeMatches.length === 1) {
+            targetVendedorId = nomeMatches[0].id
+          }
+        }
+
+        if (!targetVendedorId) {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser()
+          if (user) {
+            const { data: func } = await supabase
+              .from('funcionarios')
+              .select('id')
+              .eq('usuario_id', user.id)
+              .maybeSingle()
+            if (func) targetVendedorId = func.id
+          }
+        }
+
+        form.setValue('vendedor_id', targetVendedorId || 'none', {
           shouldValidate: true,
           shouldDirty: true,
         })
 
-        if (!sortedVendedores.some((v) => v.id === targetVendedorId)) {
-          let nome = ''
+        if (
+          targetVendedorId &&
+          !sortedVendedores.some((v) => v.id === targetVendedorId)
+        ) {
           const { data: vData } = await supabase
             .from('funcionarios')
             .select('nome')
             .eq('id', targetVendedorId)
             .maybeSingle()
-
-          if (vData?.nome) {
-            nome = vData.nome
-          } else {
-            const { data: uData } = await supabase
-              .from('usuarios')
-              .select('nome')
-              .eq('id', targetVendedorId)
-              .maybeSingle()
-
-            if (uData?.nome) {
-              nome = uData.nome
-            } else {
-              const { data: pData } = await supabase
-                .from('profiles')
-                .select('nome')
-                .eq('id', targetVendedorId)
-                .maybeSingle()
-
-              if (pData?.nome) nome = pData.nome
-            }
-          }
-          if (nome) setAssignedVendedorNome(nome)
+          if (vData?.nome) setAssignedVendedorNome(vData.nome)
         }
       }
 

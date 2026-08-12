@@ -1,6 +1,38 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
+const PAGE_SIZE = 1000
+
+// O PostgREST do projeto trunca silenciosamente qualquer resposta em 1000
+// linhas (db-max-rows), mesmo pedindo `.limit()` maior no código — sem
+// paginação manual, tabelas com mais de 1000 linhas (clientes, projetos,
+// produtos) perdem registros sem erro nenhum, e como a query tem `order`,
+// são sempre os MESMOS registros que somem (os que caem depois do corte).
+// Foi a causa raiz de um bug real: clientes sem `codigo_legado` (criados
+// direto no sistema, sem código legado) ficavam depois do corte e
+// desapareciam tanto do autopreenchimento quanto da busca.
+async function fetchAllPages<T>(
+  buildQuery: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const all: T[] = []
+  let from = 0
+  for (;;) {
+    const { data, error } = await buildQuery(from, from + PAGE_SIZE - 1)
+    if (error) {
+      console.error('Error paginating query', error)
+      break
+    }
+    if (!data || data.length === 0) break
+    all.push(...data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return all
+}
+
 export function useOptions() {
   const [empresas, setEmpresas] = useState<any[]>([])
   const [clientes, setClientes] = useState<any[]>([])
@@ -11,37 +43,39 @@ export function useOptions() {
   const [loading, setLoading] = useState(true)
 
   const fetchProjetos = async () => {
-    const { data } = await supabase
-      .from('projetos')
-      .select('id, codigo, nome, arquivado')
-      .limit(50000)
-      .order('codigo', { ascending: false, nullsFirst: false })
-    if (data) {
-      setProjetos(
-        data.map((p: any) => ({
-          ...p,
-          originalNome: p.nome,
-          nome: p.codigo ? `[${p.codigo}] ${p.nome}` : p.nome,
-        })),
-      )
-    }
+    const data = await fetchAllPages<any>((from, to) =>
+      supabase
+        .from('projetos')
+        .select('id, codigo, nome, arquivado')
+        .order('codigo', { ascending: false, nullsFirst: false })
+        .range(from, to),
+    )
+    setProjetos(
+      data.map((p: any) => ({
+        ...p,
+        originalNome: p.nome,
+        nome: p.codigo ? `[${p.codigo}] ${p.nome}` : p.nome,
+      })),
+    )
   }
 
   const fetchClientes = async () => {
-    const { data } = await supabase
-      .from('contatos')
-      .select('id, nome, nome_empresa, codigo_legado, razao_social')
-      .eq('tipo', 'cliente')
-      .limit(50000)
-      .order('codigo_legado', { ascending: false, nullsFirst: false })
-      .order('nome')
-    if (data) setClientes(data)
+    const data = await fetchAllPages<any>((from, to) =>
+      supabase
+        .from('contatos')
+        .select('id, nome, nome_empresa, codigo_legado, razao_social')
+        .eq('tipo', 'cliente')
+        .order('codigo_legado', { ascending: false, nullsFirst: false })
+        .order('nome')
+        .range(from, to),
+    )
+    setClientes(data)
   }
 
   useEffect(() => {
     async function load() {
       try {
-        const [empRes, cliRes, arqRes, funcRes, prodRes, revendaRes, projRes] =
+        const [empRes, cliData, arqRes, funcRes, prodData, revendaRes, projData] =
           await Promise.all([
             supabase
               .from('empresas')
@@ -49,13 +83,15 @@ export function useOptions() {
                 'id, nome, codigo, cnpj, razao_social, logradouro, numero, bairro, cidade, estado, cep',
               )
               .order('nome'),
-            supabase
-              .from('contatos')
-              .select('id, nome, nome_empresa, codigo_legado, razao_social')
-              .eq('tipo', 'cliente')
-              .limit(50000)
-              .order('codigo_legado', { ascending: false, nullsFirst: false })
-              .order('nome'),
+            fetchAllPages<any>((from, to) =>
+              supabase
+                .from('contatos')
+                .select('id, nome, nome_empresa, codigo_legado, razao_social')
+                .eq('tipo', 'cliente')
+                .order('codigo_legado', { ascending: false, nullsFirst: false })
+                .order('nome')
+                .range(from, to),
+            ),
             supabase
               .from('contatos')
               .select('id, nome')
@@ -67,27 +103,31 @@ export function useOptions() {
               .select('id, nome')
               .eq('status', 'Ativo')
               .limit(10000),
-            supabase
-              .from('produtos')
-              .select(
-                'id, nome, preco_venda, sku, referencia, codigo_legado, codigo_produto',
-              )
-              .limit(50000)
-              .order('nome'),
+            fetchAllPages<any>((from, to) =>
+              supabase
+                .from('produtos')
+                .select(
+                  'id, nome, preco_venda, sku, referencia, codigo_legado, codigo_produto',
+                )
+                .order('nome')
+                .range(from, to),
+            ),
             supabase
               .from('revenda_ubiqua')
               .select('id, referencia, descricao, valor_revenda')
               .limit(50000)
               .order('descricao'),
-            supabase
-              .from('projetos')
-              .select('id, codigo, nome, arquivado')
-              .limit(50000)
-              .order('codigo', { ascending: false, nullsFirst: false }),
+            fetchAllPages<any>((from, to) =>
+              supabase
+                .from('projetos')
+                .select('id, codigo, nome, arquivado')
+                .order('codigo', { ascending: false, nullsFirst: false })
+                .range(from, to),
+            ),
           ])
 
         if (empRes.data) setEmpresas(empRes.data)
-        if (cliRes.data) setClientes(cliRes.data)
+        setClientes(cliData)
         if (arqRes.data) setArquitetos(arqRes.data)
         if (funcRes.data) {
           const uniqueMap = new Map()
@@ -133,8 +173,8 @@ export function useOptions() {
 
           setVendedores(sorted)
         }
-        if (prodRes.data || revendaRes?.data) {
-          const normalProds = (prodRes.data || []).map((p: any) => ({
+        if (prodData.length || revendaRes?.data) {
+          const normalProds = prodData.map((p: any) => ({
             ...p,
             originalNome: p.nome,
             nome: `${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
@@ -151,15 +191,13 @@ export function useOptions() {
           }))
           setProdutos([...normalProds, ...revendaProds])
         }
-        if (projRes.data) {
-          setProjetos(
-            projRes.data.map((p: any) => ({
-              ...p,
-              originalNome: p.nome,
-              nome: p.codigo ? `[${p.codigo}] ${p.nome}` : p.nome,
-            })),
-          )
-        }
+        setProjetos(
+          projData.map((p: any) => ({
+            ...p,
+            originalNome: p.nome,
+            nome: p.codigo ? `[${p.codigo}] ${p.nome}` : p.nome,
+          })),
+        )
       } catch (error) {
         console.error('Error loading options', error)
       } finally {
