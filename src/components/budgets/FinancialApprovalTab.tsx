@@ -7,11 +7,13 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
+  Undo2,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -26,6 +28,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/use-auth'
 import useBudgetStore, { type Budget } from '@/stores/useBudgetStore'
 import {
@@ -76,7 +86,8 @@ function matchesBudgetSearch(budget: Budget, query: string) {
 export function FinancialApprovalTab() {
   const navigate = useNavigate()
   const { role, canApproveQuotes } = useAuth()
-  const { budgets, fetchBudgets } = useBudgetStore()
+  const { budgets, fetchBudgets, financeiroDevolverOrcamentoEquipe } =
+    useBudgetStore()
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null)
@@ -85,6 +96,9 @@ export function FinancialApprovalTab() {
     null,
   )
   const [resultBudget, setResultBudget] = useState<Budget | null>(null)
+  const [returnBudget, setReturnBudget] = useState<Budget | null>(null)
+  const [motivoDevolucao, setMotivoDevolucao] = useState('')
+  const [devolvendo, setDevolvendo] = useState(false)
 
   const canManage = role === 'admin' || role === 'gerente'
   const canApproveFinancial = canManage || canApproveQuotes
@@ -138,6 +152,31 @@ export function FinancialApprovalTab() {
       description: `Itens: ${result.projeto_itens_criados}, Parcelas: ${result.parcelas_criadas}, Boletos: ${result.boletos_criados}`,
     })
     await fetchBudgets()
+  }
+
+  const handleOpenReturn = (budget: Budget) => {
+    setReturnBudget(budget)
+    setMotivoDevolucao('')
+  }
+
+  const handleConfirmReturn = async () => {
+    if (!returnBudget || !motivoDevolucao.trim()) return
+    setDevolvendo(true)
+    try {
+      await financeiroDevolverOrcamentoEquipe(
+        returnBudget,
+        motivoDevolucao.trim(),
+      )
+      toast.success('Orçamento devolvido para a equipe')
+      setReturnBudget(null)
+      setMotivoDevolucao('')
+    } catch (error: any) {
+      toast.error('Erro ao devolver orçamento para a equipe', {
+        description: error?.message,
+      })
+    } finally {
+      setDevolvendo(false)
+    }
   }
 
   if (loading) {
@@ -324,6 +363,17 @@ export function FinancialApprovalTab() {
                           >
                             <Eye className="h-4 w-4 mr-1" /> Ver/Editar
                           </Button>
+                          {canApproveFinancial && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                              onClick={() => handleOpenReturn(budget)}
+                            >
+                              <Undo2 className="h-4 w-4 mr-1" />
+                              Devolver para Equipe
+                            </Button>
+                          )}
                           {canApprove ? (
                             <Button
                               size="sm"
@@ -382,6 +432,68 @@ export function FinancialApprovalTab() {
           }}
         />
       )}
+
+      <Dialog
+        open={!!returnBudget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReturnBudget(null)
+            setMotivoDevolucao('')
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <Undo2 className="h-5 w-5" />
+              Devolver Orçamento para a Equipe
+            </DialogTitle>
+            <DialogDescription>
+              O orçamento volta para "Aprovação da Equipe". Descreva o motivo
+              da devolução.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">
+              Motivo (obrigatório)
+            </label>
+            <Textarea
+              value={motivoDevolucao}
+              onChange={(e) => setMotivoDevolucao(e.target.value)}
+              placeholder="Motivo da devolução..."
+              rows={4}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReturnBudget(null)
+                setMotivoDevolucao('')
+              }}
+              disabled={devolvendo}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmReturn}
+              disabled={!motivoDevolucao.trim() || devolvendo}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {devolvendo ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                'Confirmar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

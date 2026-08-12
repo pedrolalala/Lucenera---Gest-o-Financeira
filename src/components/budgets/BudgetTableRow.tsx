@@ -68,6 +68,7 @@ export function BudgetTableRow({
     enviarOrcamentoCliente,
     aprovarManualmenteCliente,
     voltarOrcamentoRascunho,
+    desfazerAprovacaoFinanceira,
   } = useBudgetStore()
   const { canApproveQuotes, role } = useAuth()
   const [isApproving, setIsApproving] = useState(false)
@@ -80,12 +81,16 @@ export function BudgetTableRow({
   const [showVoltarRascunho, setShowVoltarRascunho] = useState(false)
   const [motivoVoltarRascunho, setMotivoVoltarRascunho] = useState('')
   const [isVoltandoRascunho, setIsVoltandoRascunho] = useState(false)
+  const [showDesfazerAprovacao, setShowDesfazerAprovacao] = useState(false)
+  const [motivoDesfazerAprovacao, setMotivoDesfazerAprovacao] = useState('')
+  const [isDesfazendoAprovacao, setIsDesfazendoAprovacao] = useState(false)
 
   const normalizedStatus = normalizeStatus(status)
   const canManageClient =
     role !== null && ['admin', 'gerente', 'operador'].includes(role)
   const canApproveFinancial =
     canApproveQuotes || role === 'admin' || role === 'gerente'
+  const canDesfazerAprovacao = role === 'admin' || role === 'gerente'
 
   const hasSpecialItemsWithoutPrice = budget.itens?.some(
     (i) => Number(i.preco_unitario) === 0,
@@ -168,6 +173,26 @@ export function BudgetTableRow({
       })
     } finally {
       setIsVoltandoRascunho(false)
+    }
+  }
+
+  const handleConfirmDesfazerAprovacao = async () => {
+    if (!motivoDesfazerAprovacao.trim()) return
+    try {
+      setIsDesfazendoAprovacao(true)
+      await desfazerAprovacaoFinanceira(budget, motivoDesfazerAprovacao.trim())
+      toast.success('Aprovação financeira desfeita', {
+        description:
+          'Itens de projeto, parcelas e boletos gerados foram removidos.',
+      })
+      setShowDesfazerAprovacao(false)
+      setMotivoDesfazerAprovacao('')
+    } catch (error: any) {
+      toast.error('Falha ao desfazer aprovação financeira', {
+        description: error?.message,
+      })
+    } finally {
+      setIsDesfazendoAprovacao(false)
     }
   }
 
@@ -450,6 +475,18 @@ export function BudgetTableRow({
                 </Button>
               )}
 
+            {normalizedStatus === 'orcamento_aprovado' && canDesfazerAprovacao && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                title="Desfazer Aprovação Financeira"
+                onClick={() => setShowDesfazerAprovacao(true)}
+              >
+                <Undo2 className="h-4 w-4" />
+              </Button>
+            )}
+
             <Button
               variant="ghost"
               size="icon"
@@ -562,6 +599,70 @@ export function BudgetTableRow({
               className="bg-orange-600 hover:bg-orange-700 text-white"
             >
               {isVoltandoRascunho ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                'Confirmar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showDesfazerAprovacao}
+        onOpenChange={(open) => {
+          setShowDesfazerAprovacao(open)
+          if (!open) setMotivoDesfazerAprovacao('')
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <Undo2 className="h-5 w-5" />
+              Desfazer Aprovação Financeira
+            </DialogTitle>
+            <DialogDescription>
+              O orçamento volta para "Aprovação Financeira" e os itens de
+              projeto, parcelas e boletos gerados por essa aprovação são
+              apagados, com a reserva de estoque estornada. Só é possível se
+              nada disso já foi usado (boleto pago/remessado, nota fiscal,
+              separação, transferência ou devolução de estoque) — caso
+              contrário a ação será bloqueada. Descreva o motivo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">
+              Motivo (obrigatório)
+            </label>
+            <Textarea
+              value={motivoDesfazerAprovacao}
+              onChange={(e) => setMotivoDesfazerAprovacao(e.target.value)}
+              placeholder="Motivo de desfazer a aprovação financeira..."
+              rows={4}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDesfazerAprovacao(false)
+                setMotivoDesfazerAprovacao('')
+              }}
+              disabled={isDesfazendoAprovacao}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmDesfazerAprovacao}
+              disabled={!motivoDesfazerAprovacao.trim() || isDesfazendoAprovacao}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {isDesfazendoAprovacao ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Processando...

@@ -141,6 +141,11 @@ interface BudgetState {
     budget: Budget,
     motivo: string,
   ) => Promise<any>
+  financeiroDevolverOrcamentoEquipe: (
+    budget: Budget,
+    motivo: string,
+  ) => Promise<any>
+  desfazerAprovacaoFinanceira: (budget: Budget, motivo: string) => Promise<any>
 }
 
 const useBudgetStore = create<BudgetState>((set, get) => ({
@@ -477,6 +482,38 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     if (error) {
       console.error('Error returning budget to client:', error)
       throw new Error(error.message || 'Erro ao devolver orçamento ao cliente.')
+    }
+
+    await get().fetchBudgets()
+
+    return data
+  },
+
+  financeiroDevolverOrcamentoEquipe: async (budget, motivo) => {
+    const { data, error } = await (supabase as any).rpc(
+      'financeiro_devolver_orcamento_equipe',
+      { p_orcamento_id: budget.id, p_motivo: motivo },
+    )
+
+    if (error) {
+      console.error('Error returning budget to team:', error)
+      throw new Error(error.message || 'Erro ao devolver orçamento para a equipe.')
+    }
+
+    await get().fetchBudgets()
+
+    return data
+  },
+
+  desfazerAprovacaoFinanceira: async (budget, motivo) => {
+    const { data, error } = await (supabase as any).rpc(
+      'desfazer_aprovacao_financeira',
+      { p_orcamento_id: budget.id, p_motivo: motivo },
+    )
+
+    if (error) {
+      console.error('Error undoing financial approval:', error)
+      throw new Error(error.message || 'Erro ao desfazer aprovação financeira.')
     }
 
     await get().fetchBudgets()
