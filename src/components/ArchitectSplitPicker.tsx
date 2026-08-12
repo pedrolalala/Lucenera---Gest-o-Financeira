@@ -93,21 +93,25 @@ export function ArchitectSplitPicker({
           {value.map((item) => (
             <div key={item.arquiteto_id} className="flex items-center gap-2">
               <span className="flex-1 text-sm truncate">{item.nome}</span>
-              <div className="flex items-center gap-1">
-                <Input
-                  type="number"
-                  min={0.01}
-                  max={100}
-                  step={0.01}
-                  value={item.percentual}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    handlePercentualChange(item.arquiteto_id, parseFloat(e.target.value) || 0)
-                  }
-                  className="h-9 w-24 text-right"
-                />
-                <span className="text-sm text-muted-foreground">%</span>
-              </div>
+              {/* Com 1 único arquiteto o percentual é sempre 100% — não vale
+                  poluir a UI com input/soma, só mostra o nome. */}
+              {value.length > 1 && (
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0.01}
+                    max={100}
+                    step={0.01}
+                    value={item.percentual}
+                    disabled={disabled}
+                    onChange={(e) =>
+                      handlePercentualChange(item.arquiteto_id, parseFloat(e.target.value) || 0)
+                    }
+                    className="h-9 w-24 text-right"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -120,9 +124,11 @@ export function ArchitectSplitPicker({
               </Button>
             </div>
           ))}
-          <p className={cn('text-xs font-medium', somaOk ? 'text-emerald-600' : 'text-destructive')}>
-            Soma dos percentuais: {soma.toFixed(2)}%{!somaOk && ' — precisa ser exatamente 100%'}
-          </p>
+          {value.length > 1 && (
+            <p className={cn('text-xs font-medium', somaOk ? 'text-emerald-600' : 'text-destructive')}>
+              Soma dos percentuais: {soma.toFixed(2)}%{!somaOk && ' — precisa ser exatamente 100%'}
+            </p>
+          )}
         </div>
       )}
     </div>
