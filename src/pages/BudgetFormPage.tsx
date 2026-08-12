@@ -81,6 +81,7 @@ import {
   type ProductSearchItem,
 } from '@/components/budgets/ProductSearchModal'
 import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
+import { MultiLAddDialog } from '@/components/budgets/MultiLAddDialog'
 import {
   DevolucaoItemSearchModal,
   type DevolucaoSelection,
@@ -96,6 +97,7 @@ import type { ParsedPdfResult } from '@/lib/pdf-import'
 import type { ProductCatalogItem } from '@/services/productCatalogService'
 import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
 import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
+import logoImg from '@/assets/lucenera-vertical-527dd.png'
 
 // SPEC-074: subgrupos do campo "Tipo", dependentes do Tipo de Operação
 // selecionado (natureza_operacao). Lista fixa, não normalizada em tabela.
@@ -320,9 +322,16 @@ export default function BudgetFormPage() {
   // SPEC-071: modal de busca de venda de origem, usado só quando
   // natureza_operacao === 'devolucao'.
   const [isDevolucaoSearchOpen, setIsDevolucaoSearchOpen] = useState(false)
+  // SPEC-079: diálogo de múltiplos L's por peça — multiLProduct null =
+  // modo "item não cadastrado" (descrição/preço manuais).
+  const [isMultiLDialogOpen, setIsMultiLDialogOpen] = useState(false)
+  const [multiLProduct, setMultiLProduct] = useState<ProductSearchItem | null>(
+    null,
+  )
   const {
     empresas,
     clientes,
+    setClientes,
     arquitetos,
     vendedores,
     produtos,
@@ -389,7 +398,7 @@ export default function BudgetFormPage() {
     },
   })
 
-  const { fields, append, remove, replace } = useFieldArray({
+  const { fields, remove, replace } = useFieldArray({
     control: form.control,
     name: 'itens',
   })
@@ -558,6 +567,21 @@ export default function BudgetFormPage() {
   }, [id, isEditing, budgets, form, navigate])
 
   const naturezaOperacao = form.watch('natureza_operacao') || 'venda'
+  const empresaIdAtual = form.watch('empresa_id')
+  const empresaSelecionadaPerfil = empresas.find(
+    (e) => e.id === empresaIdAtual,
+  ) as
+    | {
+        id: string
+        nome: string
+        razao_social?: string | null
+        logradouro?: string | null
+        numero?: string | null
+        bairro?: string | null
+        cidade?: string | null
+        estado?: string | null
+      }
+    | undefined
   const clienteIdAtual = form.watch('cliente_id')
   const watchItens = form.watch('itens')
   const descontoGlobalPerc = form.watch('desconto_global') || 0
@@ -573,19 +597,26 @@ export default function BudgetFormPage() {
     return acc + q * p * (1 - d / 100)
   }, 0)
 
+  // SPEC-078 (Bug 4): ordem do cálculo é subtotal -> sinal -> desconto (+
+  // frete). O sinal é sempre valor fixo em R$; o desconto pode ser fixo ou
+  // percentual (desconto_tipo) — quando percentual, incide sobre o valor
+  // JÁ COM o sinal descontado (valorAposSinal), não sobre o subtotal puro.
+  // valor_total (o que é salvo e usado pela RPC de aprovação pra gerar as
+  // parcelas) passa a nascer aqui já com o sinal deduzido — não existe mais
+  // um "saldo restante após o sinal" separado, valorTotal já é esse saldo.
+  const valorAposSinal = Math.max(0, valorSubtotal - valorSinal)
   // SPEC-068: desconto_global guarda o número digitado (10 para "10%" OU
   // 150 para "R$150,00"); desconto_tipo define como interpretá-lo. O valor
-  // em R$ nunca passa do subtotal (evita desconto "valor" negativo/absurdo).
+  // em R$ nunca passa do valor após o sinal (evita desconto negativo/absurdo).
   const descontoValorReais =
     descontoTipo === 'valor'
-      ? Math.min(Math.max(descontoGlobalPerc, 0), valorSubtotal)
-      : valorSubtotal * (Math.min(descontoGlobalPerc, 100) / 100)
+      ? Math.min(Math.max(descontoGlobalPerc, 0), valorAposSinal)
+      : valorAposSinal * (Math.min(descontoGlobalPerc, 100) / 100)
   const descontoPercentualEquivalente =
-    valorSubtotal > 0 ? (descontoValorReais / valorSubtotal) * 100 : 0
-  const valorComDesconto = valorSubtotal - descontoValorReais
+    valorAposSinal > 0 ? (descontoValorReais / valorAposSinal) * 100 : 0
+  const valorComDesconto = valorAposSinal - descontoValorReais
   const valorTotal =
     valorComDesconto + (freteTipo === 'com_frete' ? freteValor : 0)
-  const saldoRestanteAposSinal = valorTotal - valorSinal
 
   const customIdsKey = watchItens.map((i) => i.custom_id || '').join('|')
 
@@ -1047,6 +1078,58 @@ export default function BudgetFormPage() {
     source: 'produtos',
   })
 
+  // SPEC-079: próximo L disponível, sugerido como valor inicial ao abrir
+  // o diálogo de múltiplos L's — mesmo cálculo já usado em
+  // applyProductSelection.
+  const getProximoL = () => {
+    const currentItems = form.getValues('itens') || []
+    const maxL = currentItems.reduce((max, item) => {
+      const match = (item.custom_id || '').match(/L(\d+)/i)
+      return Math.max(max, match ? parseInt(match[1], 10) : 0)
+    }, 0)
+    return formatCircuitId(`L${maxL + 1}`)
+  }
+
+  const handleMultiLConfirm = (payload: {
+    descricao: string
+    preco_unitario: number
+    entries: { custom_id: string; quantidade: number }[]
+  }) => {
+    const currentItems = form.getValues('itens') || []
+    const isManual = !multiLProduct
+    const produtoIdValido =
+      multiLProduct &&
+      multiLProduct.source === 'produtos' &&
+      isValidUUID(multiLProduct.id)
+
+    const newItems = payload.entries.map((entry) => ({
+      uid: crypto.randomUUID(),
+      custom_id: formatCircuitId(entry.custom_id),
+      produto_id: produtoIdValido ? (multiLProduct as ProductSearchItem).id : '',
+      descricao: isManual
+        ? payload.descricao
+        : produtoIdValido
+          ? ''
+          : (multiLProduct as ProductSearchItem).nome,
+      quantidade: entry.quantidade,
+      preco_unitario: isManual
+        ? payload.preco_unitario
+        : multiLProduct!.preco_venda || multiLProduct!.valor_venda || 0,
+      desconto: 0,
+    }))
+
+    if (multiLProduct) updateProductMeta([multiLProduct])
+    replace(sortItemsByCircuitId([...currentItems, ...newItems]), {
+      shouldFocus: false,
+    })
+    toast.success(
+      newItems.length === 1
+        ? '1 L adicionado com sucesso'
+        : `${newItems.length} L's adicionados com sucesso`,
+    )
+    setMultiLProduct(null)
+  }
+
   const applyProductSelection = (
     products: ProductSearchItem[],
     targetIndex: number | null = productSearchRowIndex,
@@ -1113,6 +1196,16 @@ export default function BudgetFormPage() {
   }
 
   const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
+    // SPEC-079: selecionar 1 produto só (pra adicionar, não pra trocar o
+    // produto de uma linha existente) abre o diálogo de múltiplos L's em
+    // vez de criar a linha direto — deixa informar vários L's com
+    // quantidade própria pra essa mesma peça de uma vez.
+    if (products.length === 1 && productSearchRowIndex === null) {
+      setMultiLProduct(products[0])
+      setIsProductSearchOpen(false)
+      setIsMultiLDialogOpen(true)
+      return
+    }
     applyProductSelection(products)
   }
 
@@ -1692,7 +1785,47 @@ export default function BudgetFormPage() {
                     </FormItem>
                   )}
                 />
+              </div>
 
+              {/* SPEC-078 (Bug 3): perfil da empresa selecionada, sempre
+                  visível assim que uma empresa é escolhida — não depende de
+                  haver itens no orçamento. */}
+              {empresaSelecionadaPerfil && (
+                <div className="flex items-center gap-4 rounded-lg border bg-muted/30 p-4">
+                  <img
+                    src={logoImg}
+                    alt={empresaSelecionadaPerfil.nome}
+                    className="h-12 w-auto object-contain shrink-0"
+                  />
+                  <div className="text-sm">
+                    <p className="font-semibold text-gray-900">
+                      {empresaSelecionadaPerfil.nome}
+                    </p>
+                    {empresaSelecionadaPerfil.razao_social && (
+                      <p className="text-muted-foreground">
+                        {empresaSelecionadaPerfil.razao_social}
+                      </p>
+                    )}
+                    <p className="text-muted-foreground">
+                      {[
+                        empresaSelecionadaPerfil.logradouro,
+                        empresaSelecionadaPerfil.numero,
+                      ]
+                        .filter(Boolean)
+                        .join(', ')}
+                      {empresaSelecionadaPerfil.bairro
+                        ? ` - ${empresaSelecionadaPerfil.bairro}`
+                        : ''}
+                      {empresaSelecionadaPerfil.cidade
+                        ? `, ${empresaSelecionadaPerfil.cidade}/${empresaSelecionadaPerfil.estado || ''}`
+                        : ''}
+                    </p>
+                    <p className="text-muted-foreground">(16) 3442 - 3545</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
                   name="projeto_codigo"
@@ -2076,37 +2209,12 @@ export default function BudgetFormPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        append({
-                          uid: crypto.randomUUID(),
-                          custom_id: '',
-                          produto_id: '',
-                          descricao: '',
-                          quantidade: 1,
-                          preco_unitario: 0,
-                          desconto: 0,
-                        })
-                      }
-                    >
-                      <Plus className="w-4 h-4 mr-2" /> Adicionar Item
-                    </Button>
-                    <Button
-                      type="button"
                       variant="secondary"
                       size="sm"
-                      onClick={() =>
-                        append({
-                          uid: crypto.randomUUID(),
-                          custom_id: '',
-                          produto_id: '',
-                          descricao: '',
-                          quantidade: 1,
-                          preco_unitario: 0,
-                          desconto: 0,
-                        })
-                      }
+                      onClick={() => {
+                        setMultiLProduct(null)
+                        setIsMultiLDialogOpen(true)
+                      }}
                     >
                       <Plus className="w-4 h-4 mr-2" /> Adicionar Item não
                       Cadastrado
@@ -2149,35 +2257,11 @@ export default function BudgetFormPage() {
                         </Button>
                         <Button
                           type="button"
-                          variant="secondary"
-                          onClick={() =>
-                            append({
-                              uid: crypto.randomUUID(),
-                              custom_id: '',
-                              produto_id: '',
-                              descricao: '',
-                              quantidade: 1,
-                              preco_unitario: 0,
-                              desconto: 0,
-                            })
-                          }
-                        >
-                          <Plus className="w-4 h-4 mr-2" /> Adicionar Item
-                        </Button>
-                        <Button
-                          type="button"
                           variant="outline"
-                          onClick={() =>
-                            append({
-                              uid: crypto.randomUUID(),
-                              custom_id: '',
-                              produto_id: '',
-                              descricao: '',
-                              quantidade: 1,
-                              preco_unitario: 0,
-                              desconto: 0,
-                            })
-                          }
+                          onClick={() => {
+                            setMultiLProduct(null)
+                            setIsMultiLDialogOpen(true)
+                          }}
                         >
                           <Plus className="w-4 h-4 mr-2" /> Adicionar Item não
                           Cadastrado
@@ -2513,7 +2597,7 @@ export default function BudgetFormPage() {
                       {descontoTipo === 'percentual'
                         ? `Equivale a ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(descontoValorReais)}.`
                         : `Equivale a ${descontoPercentualEquivalente.toFixed(2)}%.`}{' '}
-                      Aplicado sobre o subtotal dos itens.
+                      Aplicado sobre o subtotal já descontado o sinal.
                     </p>
                   </FormItem>
 
@@ -2543,8 +2627,9 @@ export default function BudgetFormPage() {
                           </div>
                         </FormControl>
                         <p className="text-xs text-gray-500 mt-1">
-                          Valor fixo. Exibido no documento do orçamento para o
-                          cliente — não gera parcela financeira.
+                          Valor fixo. Deduzido do subtotal antes do desconto —
+                          reduz o Valor Total e, consequentemente, as
+                          parcelas geradas na aprovação financeira.
                         </p>
                         <FormMessage />
                       </FormItem>
@@ -2571,6 +2656,8 @@ export default function BudgetFormPage() {
                 </div>
 
                 <div className="bg-gray-50 rounded-xl p-6 flex flex-col justify-end h-full border">
+                  {/* SPEC-078 (Bug 4): ordem exibida segue a ordem do
+                      cálculo — subtotal -> sinal -> desconto -> frete. */}
                   <div className="space-y-3 mb-6">
                     <div className="flex justify-between items-center text-sm text-gray-600">
                       <span>Subtotal dos itens</span>
@@ -2581,6 +2668,18 @@ export default function BudgetFormPage() {
                         }).format(valorSubtotal)}
                       </span>
                     </div>
+                    {valorSinal > 0 && (
+                      <div className="flex justify-between items-center text-sm text-gray-600">
+                        <span>Sinal</span>
+                        <span className="font-medium text-amber-700">
+                          -
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(valorSinal)}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center text-sm text-gray-600">
                       <span>
                         Desconto global (
@@ -2609,18 +2708,6 @@ export default function BudgetFormPage() {
                         </span>
                       </div>
                     )}
-                    {valorSinal > 0 && (
-                      <div className="flex justify-between items-center text-sm text-gray-600">
-                        <span>Sinal</span>
-                        <span className="font-medium text-amber-700">
-                          -
-                          {new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                          }).format(valorSinal)}
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   <div className="pt-4 border-t border-gray-200 space-y-2">
@@ -2635,19 +2722,6 @@ export default function BudgetFormPage() {
                         }).format(valorTotal)}
                       </span>
                     </div>
-                    {valorSinal > 0 && (
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-600">
-                          Saldo restante após o sinal
-                        </span>
-                        <span className="font-semibold text-gray-900">
-                          {new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                          }).format(saldoRestanteAposSinal)}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -2672,10 +2746,19 @@ export default function BudgetFormPage() {
             open={isClientModalOpen}
             onOpenChange={setIsClientModalOpen}
             onSuccess={async (newClient: any) => {
-              if (fetchClientes) await fetchClientes()
+              // SPEC-078 (Bug 2): injeta o cliente novo direto no state
+              // local, sem depender do round-trip de fetchClientes() pra
+              // aparecer no combobox — elimina qualquer corrida entre a
+              // criação e o refetch. fetchClientes() ainda roda em paralelo
+              // pra reconciliar com o servidor (codigo_legado etc.).
+              setClientes((prev: any[]) => [
+                newClient,
+                ...prev.filter((c) => c.id !== newClient.id),
+              ])
               form.setValue('cliente_id', newClient.id, {
                 shouldValidate: true,
               })
+              if (fetchClientes) fetchClientes()
               // SPEC-050 (P-2): retoma o import de XML pendente com o
               // cliente recém-cadastrado.
               if (pendingXmlImport) {
@@ -2693,6 +2776,20 @@ export default function BudgetFormPage() {
             }}
             onConfirm={handleProductSearchConfirm}
             onProductCreated={(product) => updateProductMeta([product])}
+          />
+
+          <MultiLAddDialog
+            open={isMultiLDialogOpen}
+            onOpenChange={(v) => {
+              setIsMultiLDialogOpen(v)
+              if (!v) setMultiLProduct(null)
+            }}
+            produtoNome={multiLProduct?.nome}
+            produtoPreco={
+              multiLProduct?.preco_venda || multiLProduct?.valor_venda || 0
+            }
+            proximoL={getProximoL()}
+            onConfirm={handleMultiLConfirm}
           />
 
           <DevolucaoItemSearchModal

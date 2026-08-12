@@ -63,7 +63,7 @@ const schema = z.object({
   responsavel_funcionario_id: z.string().optional().nullable().or(z.literal('')),
   responsavel_obra_id: z.string().optional().nullable().or(z.literal('')),
   tipo_projeto: z
-    .enum(['Residential', 'Corporativo', 'Exposição Comercial', 'Paisagismo'])
+    .enum(['Residencial', 'Corporativo', 'Exposição Comercial', 'Paisagismo'])
     .optional()
     .nullable()
     .or(z.literal('')),
@@ -218,7 +218,7 @@ export function ProjectCreateModal({
                       </FormControl>
                       <SelectContent>
                         {[
-                          'Residential',
+                          'Residencial',
                           'Corporativo',
                           'Exposição Comercial',
                           'Paisagismo',

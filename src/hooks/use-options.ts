@@ -45,7 +45,9 @@ export function useOptions() {
           await Promise.all([
             supabase
               .from('empresas')
-              .select('id, nome, codigo, cnpj')
+              .select(
+                'id, nome, codigo, cnpj, razao_social, logradouro, numero, bairro, cidade, estado, cep',
+              )
               .order('nome'),
             supabase
               .from('contatos')
@@ -170,6 +172,7 @@ export function useOptions() {
   return {
     empresas,
     clientes,
+    setClientes,
     arquitetos,
     vendedores,
     produtos,

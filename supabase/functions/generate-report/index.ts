@@ -470,19 +470,34 @@ Deno.serve(async (req: Request) => {
 
       y -= 5
 
-      const globalDesc = Number(budget.desconto_global || 0)
-      const finalTotal = Number(budget.valor_total || subtotal - globalDesc)
+      // SPEC-078 (Bug 4): mesma ordem/fórmula do frontend e da RPC de
+      // aprovação — subtotal -> sinal -> desconto. Desconto pode ser fixo
+      // (R$) ou percentual (desconto_tipo); quando percentual, incide sobre
+      // o subtotal já com o sinal deduzido, nunca sobre o subtotal cru.
+      const valorSinalPdf = Number(budget.valor_sinal || 0)
+      const valorAposSinalPdf = Math.max(0, subtotal - valorSinalPdf)
+      const globalDescRaw = Number(budget.desconto_global || 0)
+      const globalDesc =
+        budget.desconto_tipo === 'valor'
+          ? Math.min(Math.max(globalDescRaw, 0), valorAposSinalPdf)
+          : valorAposSinalPdf * (Math.min(globalDescRaw, 100) / 100)
+      const finalTotal = Number(
+        budget.valor_total ?? valorAposSinalPdf - globalDesc,
+      )
 
-      if (y < 200) {
+      if (y < 220) {
         page = pdfDoc.addPage()
         y = height - 50
       }
 
+      const hasSinalLine = valorSinalPdf > 0
+      const boxHeight = hasSinalLine ? 85 : 70
+
       page.drawRectangle({
         x: width - 270,
-        y: y - 60,
+        y: y - boxHeight + 10,
         width: 230,
-        height: 70,
+        height: boxHeight,
         color: rgb(0.95, 0.95, 0.95),
       })
 
@@ -490,6 +505,10 @@ Deno.serve(async (req: Request) => {
         style: 'currency',
         currency: 'BRL',
       }).format(subtotal)
+      const fmtSinal = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(valorSinalPdf)
       const fmtGlobalDesc = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
@@ -500,37 +519,51 @@ Deno.serve(async (req: Request) => {
       }).format(finalTotal)
 
       const rightPadX = width - 56
+      let rowY = y - 15
 
-      page.drawText(`SubTotal:`, { x: width - 250, y: y - 15, size: 10, font })
+      page.drawText(`SubTotal:`, { x: width - 250, y: rowY, size: 10, font })
       page.drawText(fmtSubtotal, {
         x: rightPadX - font.widthOfTextAtSize(fmtSubtotal, 10),
-        y: y - 15,
+        y: rowY,
         size: 10,
         font,
       })
+      rowY -= 15
 
-      page.drawText(`Desconto:`, { x: width - 250, y: y - 30, size: 10, font })
+      if (hasSinalLine) {
+        page.drawText(`Sinal:`, { x: width - 250, y: rowY, size: 10, font })
+        page.drawText(fmtSinal, {
+          x: rightPadX - font.widthOfTextAtSize(fmtSinal, 10),
+          y: rowY,
+          size: 10,
+          font,
+        })
+        rowY -= 15
+      }
+
+      page.drawText(`Desconto:`, { x: width - 250, y: rowY, size: 10, font })
       page.drawText(fmtGlobalDesc, {
         x: rightPadX - font.widthOfTextAtSize(fmtGlobalDesc, 10),
-        y: y - 30,
+        y: rowY,
         size: 10,
         font,
       })
+      rowY -= 18
 
       page.drawText(`Valor Total:`, {
         x: width - 250,
-        y: y - 48,
+        y: rowY,
         size: 12,
         font: boldFont,
       })
       page.drawText(fmtFinalTotal, {
         x: rightPadX - boldFont.widthOfTextAtSize(fmtFinalTotal, 12),
-        y: y - 48,
+        y: rowY,
         size: 12,
         font: boldFont,
       })
 
-      y -= 80
+      y -= boxHeight + 10
       page.drawText('Condições de Pagamento:', {
         x: width - 250,
         y,
