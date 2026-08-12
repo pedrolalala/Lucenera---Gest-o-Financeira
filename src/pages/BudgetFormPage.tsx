@@ -100,7 +100,7 @@ import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
 // SPEC-074: subgrupos do campo "Tipo", dependentes do Tipo de Operação
 // selecionado (natureza_operacao). Lista fixa, não normalizada em tabela.
 const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
-  venda: ['VENDAS', 'ENTREGA FUTURA'],
+  venda: ['VENDAS'],
   devolucao: ['TROCA DEV', 'CASA COR ENTRADA'],
   outros: [
     'CASA COR SAIDA',

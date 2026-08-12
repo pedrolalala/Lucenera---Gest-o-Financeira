@@ -60,7 +60,7 @@ const schema = z.object({
   estado: z.string().max(2).optional().nullable().or(z.literal('')),
   cliente_id: z.string().optional().nullable().or(z.literal('')),
   arquiteto_id: z.string().optional().nullable().or(z.literal('')),
-  responsavel_id: z.string().optional().nullable().or(z.literal('')),
+  responsavel_funcionario_id: z.string().optional().nullable().or(z.literal('')),
   responsavel_obra_id: z.string().optional().nullable().or(z.literal('')),
   tipo_projeto: z
     .enum(['Residential', 'Corporativo', 'Exposição Comercial', 'Paisagismo'])
@@ -76,7 +76,7 @@ export function ProjectCreateModal({
   clientes,
   arquitetos,
 }: any) {
-  const [usuarios, setUsuarios] = useState<any[]>([])
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [contatos, setContatos] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const form = useForm<z.infer<typeof schema>>({
@@ -95,14 +95,16 @@ export function ProjectCreateModal({
         estado: '',
         cliente_id: '',
         arquiteto_id: '',
-        responsavel_id: '',
+        responsavel_funcionario_id: '',
         responsavel_obra_id: '',
         tipo_projeto: '',
       })
       supabase
-        .from('usuarios')
+        .from('funcionarios')
         .select('id, nome')
-        .then(({ data }) => data && setUsuarios(data))
+        .eq('status', 'Ativo')
+        .order('nome')
+        .then(({ data }) => data && setFuncionarios(data))
       supabase
         .from('contatos')
         .select('id, nome')
@@ -123,6 +125,14 @@ export function ProjectCreateModal({
           message: 'Este código de projeto já está em uso',
         })
 
+      // SPEC-077: responsavel_nome precisa ir junto no mesmo INSERT porque
+      // o trigger fn_sync_equipe_por_responsavel (BEFORE INSERT/UPDATE OF
+      // responsavel_nome) resolve a equipe/comissão do projeto a partir
+      // desse texto — só setar responsavel_funcionario_id não é suficiente.
+      const funcionarioSelecionado = funcionarios.find(
+        (f) => f.id === val.responsavel_funcionario_id,
+      )
+
       const { error } = await supabase.from('projetos').insert({
         codigo: val.codigo,
         nome: val.nome,
@@ -132,7 +142,8 @@ export function ProjectCreateModal({
         estado: val.estado || null,
         cliente_id: val.cliente_id || null,
         arquiteto_id: val.arquiteto_id || null,
-        responsavel_id: val.responsavel_id || null,
+        responsavel_funcionario_id: val.responsavel_funcionario_id || null,
+        responsavel_nome: funcionarioSelecionado?.nome || null,
         responsavel_obra_id: val.responsavel_obra_id || null,
         area_do_projeto: val.tipo_projeto ? { tipo: val.tipo_projeto } : null,
         historico: [],
@@ -278,15 +289,15 @@ export function ProjectCreateModal({
               />
               <FormField
                 control={form.control}
-                name="responsavel_id"
+                name="responsavel_funcionario_id"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Responsável</FormLabel>
                     <FormControl>
                       <SearchableSelect
-                        options={usuarios.map((u) => ({
-                          value: u.id,
-                          label: u.nome,
+                        options={funcionarios.map((f) => ({
+                          value: f.id,
+                          label: f.nome,
                         }))}
                         value={field.value || ''}
                         onChange={field.onChange}
