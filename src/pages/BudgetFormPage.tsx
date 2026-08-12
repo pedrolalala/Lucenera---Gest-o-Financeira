@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { format } from 'date-fns'
+import { format, addMonths, addDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   CalendarIcon,
@@ -226,6 +226,11 @@ const formSchema = z
         today.setHours(0, 0, 0, 0)
         return date >= today
       }, 'A data de início deve ser hoje ou uma data futura'),
+    // Vencimento de cada parcela a partir da 2ª (índice 0 = parcela 2, etc.)
+    // — null/undefined usa o padrão calculado (1 mês após a parcela
+    // anterior, a partir de `data_inicio_pagamento`); a pessoa que negocia
+    // com o cliente pode sobrescrever individualmente cada vencimento.
+    parcelas_datas: z.array(z.date().nullable()).optional().default([]),
     frete_tipo: z.enum(['com_frete', 'sem_frete'], {
       required_error: 'Selecione o frete',
       invalid_type_error: 'Selecione o frete',
@@ -391,6 +396,7 @@ export default function BudgetFormPage() {
       forma_pagamento: '',
       parcelas: 1,
       data_inicio_pagamento: undefined,
+      parcelas_datas: [],
       frete_valor: 0,
       observacoes: '',
       validade: null,
@@ -530,6 +536,23 @@ export default function BudgetFormPage() {
             data_inicio_pagamento: budget.data_inicio_pagamento
               ? new Date(budget.data_inicio_pagamento)
               : undefined,
+            // Reconstrói os vencimentos calendário de cada parcela a partir
+            // dos offsets em dias salvos (`prazo_pagamento_dias`) — a
+            // diferença entre offsets não depende de quando o orçamento foi
+            // originalmente calculado, só da distância entre as parcelas.
+            parcelas_datas:
+              budget.data_inicio_pagamento &&
+              Array.isArray(budget.prazo_pagamento_dias) &&
+              budget.prazo_pagamento_dias.length > 1
+                ? budget.prazo_pagamento_dias
+                    .slice(1)
+                    .map((offset: number) =>
+                      addDays(
+                        new Date(budget.data_inicio_pagamento as string),
+                        offset - (budget.prazo_pagamento_dias as number[])[0],
+                      ),
+                    )
+                : [],
             frete_tipo:
               (budget.frete_tipo as 'com_frete' | 'sem_frete' | undefined) ??
               undefined,
@@ -914,10 +937,15 @@ export default function BudgetFormPage() {
         return
       }
 
-      // SPEC-002: o usuário informa apenas o prazo (em dias) para início da
-      // cobrança. As parcelas seguintes vencem em múltiplos desse mesmo
-      // intervalo (ex.: prazo 30 dias + 3 parcelas = vencimentos 30/60/90),
-      // reproduzindo o padrão manual usado no Connect.
+      // Parcela 1 vence em `data_inicio_pagamento`. As seguintes, por
+      // padrão, vencem 1 mês após a parcela anterior — mas quem negocia com
+      // o cliente pode sobrescrever o vencimento de qualquer parcela
+      // individualmente (`values.parcelas_datas`). O backend (RPC de
+      // aprovação) só entende offsets em dias a partir da data de
+      // aprovação, então convertemos cada vencimento calendário num offset
+      // relativo a hoje — a diferença entre offsets preserva o espaçamento
+      // calendário escolhido, independente de quando a aprovação de fato
+      // ocorrer.
       const totalParcelas = ['boleto', 'cartao'].includes(
         values.forma_pagamento || '',
       )
@@ -934,9 +962,18 @@ export default function BudgetFormPage() {
             (1000 * 60 * 60 * 24),
         ),
       )
-      const prazoPagamentoDias = Array.from(
-        { length: totalParcelas },
-        (_, i) => prazoDias * (i + 1),
+      const parcelaDatas = Array.from({ length: totalParcelas }, (_, i) => {
+        if (i === 0) return dataInicioDate
+        const override = values.parcelas_datas?.[i - 1]
+        if (override) {
+          const d = new Date(override)
+          d.setHours(0, 0, 0, 0)
+          return d
+        }
+        return addMonths(dataInicioDate, i)
+      })
+      const prazoPagamentoDias = parcelaDatas.map((d) =>
+        Math.round((d.getTime() - hojeBase.getTime()) / (1000 * 60 * 60 * 24)),
       )
 
       const hasUnregisteredItems = values.itens.some(
@@ -2405,95 +2442,156 @@ export default function BudgetFormPage() {
                   <FormField
                     control={form.control}
                     name="data_inicio_pagamento"
-                    render={({ field }) => {
-                      const parcelas = ['boleto', 'cartao'].includes(
-                        form.watch('forma_pagamento') || '',
-                      )
-                        ? form.watch('parcelas') || 1
-                        : 1
-                      const dataInicio = field.value as Date | undefined
-                      const vencimentos: Date[] = []
-                      if (dataInicio) {
-                        const dInicio = new Date(dataInicio)
-                        dInicio.setHours(0, 0, 0, 0)
-                        const hojeCalc = new Date()
-                        hojeCalc.setHours(0, 0, 0, 0)
-                        const intervaloDias = Math.max(
-                          0,
-                          Math.round(
-                            (dInicio.getTime() - hojeCalc.getTime()) /
-                              (1000 * 60 * 60 * 24),
-                          ),
-                        )
-                        for (let i = 0; i < parcelas; i++) {
-                          const d = new Date(dInicio)
-                          d.setDate(d.getDate() + intervaloDias * i)
-                          vencimentos.push(d)
-                        }
-                      }
-                      return (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>
-                            Data de Início do Pagamento{' '}
-                            <span className="text-red-500">*</span>
-                          </FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant={'outline'}
-                                  className={cn(
-                                    'w-full pl-3 text-left font-normal',
-                                    !field.value && 'text-muted-foreground',
-                                  )}
-                                >
-                                  {field.value ? (
-                                    format(field.value, 'PPP', { locale: ptBR })
-                                  ) : (
-                                    <span>Selecione a data</span>
-                                  )}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className="w-auto p-0"
-                              align="start"
-                            >
-                              <Calendar
-                                mode="single"
-                                selected={field.value || undefined}
-                                onSelect={field.onChange}
-                                disabled={(date) =>
-                                  date <
-                                  new Date(new Date().setHours(0, 0, 0, 0))
-                                }
-                                initialFocus
-                                locale={ptBR}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          <p className="text-xs text-muted-foreground">
-                            Data do vencimento da primeira cobrança. Confirme
-                            com o e-mail/negociação do cliente, como no fluxo do
-                            Connect.
-                            {vencimentos.length > 0 && (
-                              <>
-                                {' '}
-                                Vencimentos calculados:{' '}
-                                {vencimentos
-                                  .map((d) =>
-                                    format(d, 'dd/MM/yyyy', { locale: ptBR }),
-                                  )
-                                  .join(' · ')}
-                              </>
-                            )}
-                          </p>
-                          <FormMessage />
-                        </FormItem>
-                      )
-                    }}
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>
+                          Data de Início do Pagamento{' '}
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={'outline'}
+                                className={cn(
+                                  'w-full pl-3 text-left font-normal',
+                                  !field.value && 'text-muted-foreground',
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, 'PPP', { locale: ptBR })
+                                ) : (
+                                  <span>Selecione a data</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value || undefined}
+                              onSelect={field.onChange}
+                              disabled={(date) =>
+                                date < new Date(new Date().setHours(0, 0, 0, 0))
+                              }
+                              initialFocus
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <p className="text-xs text-muted-foreground">
+                          Vencimento da 1ª parcela. Confirme com o
+                          e-mail/negociação do cliente, como no fluxo do
+                          Connect.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
+
+                  {(() => {
+                    const totalParcelas = ['boleto', 'cartao'].includes(
+                      form.watch('forma_pagamento') || '',
+                    )
+                      ? form.watch('parcelas') || 1
+                      : 1
+                    const dataInicio = form.watch('data_inicio_pagamento') as
+                      | Date
+                      | undefined
+                    if (!dataInicio || totalParcelas < 2) return null
+                    const overrides = form.watch('parcelas_datas') || []
+                    return (
+                      <div className="md:col-span-2 space-y-3 rounded-lg border p-4 animate-in fade-in slide-in-from-top-2">
+                        <p className="text-sm font-medium">
+                          Vencimentos das demais parcelas
+                        </p>
+                        <p className="text-xs text-muted-foreground -mt-2">
+                          Por padrão, cada parcela vence 1 mês após a
+                          anterior. Edite individualmente se a negociação com
+                          o cliente definiu datas diferentes.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {Array.from(
+                            { length: totalParcelas - 1 },
+                            (_, idx) => idx,
+                          ).map((idx) => {
+                            const override = overrides[idx]
+                            const valor = override
+                              ? new Date(override)
+                              : addMonths(dataInicio, idx + 1)
+                            const isOverride = !!override
+                            return (
+                              <div key={idx} className="space-y-1">
+                                <label className="text-xs text-muted-foreground">
+                                  Parcela {idx + 2}
+                                </label>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className={cn(
+                                        'w-full pl-3 text-left font-normal',
+                                        !isOverride && 'text-muted-foreground',
+                                      )}
+                                    >
+                                      {format(valor, 'dd/MM/yyyy', {
+                                        locale: ptBR,
+                                      })}
+                                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent
+                                    className="w-auto p-0"
+                                    align="start"
+                                  >
+                                    <Calendar
+                                      mode="single"
+                                      selected={valor}
+                                      onSelect={(date) => {
+                                        const next = [...overrides]
+                                        next[idx] = date ?? null
+                                        form.setValue(
+                                          'parcelas_datas',
+                                          next,
+                                          {
+                                            shouldValidate: true,
+                                            shouldDirty: true,
+                                          },
+                                        )
+                                      }}
+                                      disabled={(date) =>
+                                        date < dataInicio
+                                      }
+                                      initialFocus
+                                      locale={ptBR}
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                                {isOverride && (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-primary underline"
+                                    onClick={() => {
+                                      const next = [...overrides]
+                                      next[idx] = null
+                                      form.setValue('parcelas_datas', next, {
+                                        shouldValidate: true,
+                                        shouldDirty: true,
+                                      })
+                                    }}
+                                  >
+                                    Usar padrão (1 mês)
+                                  </button>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   <FormField
                     control={form.control}
