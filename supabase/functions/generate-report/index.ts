@@ -216,8 +216,8 @@ Deno.serve(async (req: Request) => {
 
       let logoBottomY = height - 15
       let headerTextX = 40
-      const maxLogoWidth = 140
-      const maxLogoHeight = 40 // compact logo
+      const maxLogoWidth = 110
+      const maxLogoHeight = 50
       let textY = height - 15
 
       if (logoBase64) {
