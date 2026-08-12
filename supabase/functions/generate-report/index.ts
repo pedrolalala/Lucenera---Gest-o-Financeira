@@ -145,9 +145,11 @@ Deno.serve(async (req: Request) => {
         .select(
           `
           *,
-          cliente:contatos!orcamentos_cliente_id_fkey(nome, email, telefone, cpf_cnpj),
+          cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social, email, telefone, cpf_cnpj, endereco, cep, cidade, estado),
           empresa:empresas!orcamentos_empresa_id_fkey(nome, razao_social, logradouro, numero, bairro, cidade, estado, cep, cnpj),
           vendedor:funcionarios!orcamentos_vendedor_id_fkey(nome),
+          arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
+          projeto:projetos!orcamentos_projeto_id_fkey(codigo),
           itens:orcamento_itens(
             id, produto_id, quantidade, preco_unitario, desconto, descricao, custom_id,
             produto:produtos(nome, referencia, sku, codigo_produto)
@@ -360,7 +362,16 @@ Deno.serve(async (req: Request) => {
       y -= 25
       page.drawText('Orçamento para', { x: 40, y, size: 11, font })
 
-      const projName = budget.cliente?.nome || 'CLIENTE NÃO INFORMADO'
+      const clienteNomeBase = budget.cliente?.nome || 'CLIENTE NÃO INFORMADO'
+      const codigoProjeto = budget.projeto?.codigo
+      // Alguns clientes legados já têm o código do projeto embutido no
+      // próprio nome (import antigo do Connect) — evita duplicar.
+      const jaTemCodigo =
+        codigoProjeto && clienteNomeBase.trim().startsWith(codigoProjeto)
+      const projName =
+        codigoProjeto && !jaTemCodigo
+          ? `${codigoProjeto} ${clienteNomeBase}`
+          : clienteNomeBase
       page.drawText(projName.toUpperCase(), {
         x: 40,
         y: y - 18,
@@ -368,18 +379,45 @@ Deno.serve(async (req: Request) => {
         font: boldFont,
       })
 
-      page.drawText(`CPF/CNPJ: ${budget.cliente?.cpf_cnpj || '-'}`, {
-        x: 40,
-        y: y - 35,
-        size: 9,
-        font,
-      })
+      // SPEC-084: bloco de endereço do cliente, no mesmo formato do fluxo
+      // Connect — razão social (quando diferente do nome), endereço, CEP +
+      // cidade/UF e telefone, todos vindos do cadastro do cliente
+      // (contatos). Cada linha só é desenhada se o dado existir, então o
+      // bloco encolhe/estica conforme o cadastro do cliente.
+      const clienteRazao = budget.cliente?.razao_social
+      let clienteLineY = y - 33
+      if (clienteRazao && clienteRazao !== clienteNomeBase) {
+        page.drawText(clienteRazao, { x: 40, y: clienteLineY, size: 9, font })
+        clienteLineY -= 12
+      }
+      if (budget.cliente?.endereco) {
+        page.drawText(budget.cliente.endereco, {
+          x: 40,
+          y: clienteLineY,
+          size: 9,
+          font,
+        })
+        clienteLineY -= 12
+      }
+      if (budget.cliente?.cep || budget.cliente?.cidade) {
+        const cepLinha = [
+          budget.cliente?.cep ? `CEP: ${budget.cliente.cep}` : null,
+          budget.cliente?.cidade
+            ? `${budget.cliente.cidade}${budget.cliente?.estado ? `/${budget.cliente.estado}` : ''}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' - ')
+        page.drawText(cepLinha, { x: 40, y: clienteLineY, size: 9, font })
+        clienteLineY -= 12
+      }
       page.drawText(`TEL: ${budget.cliente?.telefone || '-'}`, {
         x: 40,
-        y: y - 47,
+        y: clienteLineY,
         size: 9,
         font,
       })
+      clienteLineY -= 12
 
       page.drawText('Orçamento', { x: width - 120, y, size: 11, font })
       page.drawText(
@@ -392,7 +430,7 @@ Deno.serve(async (req: Request) => {
         },
       )
 
-      y -= 75
+      y = clienteLineY - 15
 
       page.drawText('Vendedor', { x: 40, y, size: 9, font })
 
@@ -402,6 +440,14 @@ Deno.serve(async (req: Request) => {
       }
 
       page.drawText(vendedorNome, { x: 40, y: y - 12, size: 9, font: boldFont })
+
+      page.drawText('Arquiteto Externo', { x: 220, y, size: 9, font })
+      page.drawText(budget.arquiteto?.nome || '-', {
+        x: 220,
+        y: y - 12,
+        size: 9,
+        font: boldFont,
+      })
 
       y -= 30
 

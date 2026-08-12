@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client'
 import { buildClientApprovalLink } from '@/lib/budget-status'
+import { getLogoBase64 } from '@/lib/pdf-logo'
 import type { Budget } from '@/stores/useBudgetStore'
 
 // SPEC-067 — helper compartilhado para o envio inicial de um orçamento em
@@ -27,7 +28,10 @@ function resolveBudgetNumero(budget: BudgetPdfInfo): string {
  * (ver P-5 da SPEC-067).
  */
 export async function downloadBudgetPdf(budget: BudgetPdfInfo): Promise<void> {
-  const { data: sessionData } = await supabase.auth.getSession()
+  const [{ data: sessionData }, logoBase64] = await Promise.all([
+    supabase.auth.getSession(),
+    getLogoBase64(),
+  ])
   const response = await fetch(
     `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-report`,
     {
@@ -39,7 +43,7 @@ export async function downloadBudgetPdf(budget: BudgetPdfInfo): Promise<void> {
       body: JSON.stringify({
         reportType: 'orcamento',
         format: 'pdf',
-        filters: { id: budget.id },
+        filters: { id: budget.id, logoBase64 },
       }),
     },
   )

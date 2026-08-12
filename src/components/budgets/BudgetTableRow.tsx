@@ -41,6 +41,7 @@ import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { normalizeStatus, cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
+import { getLogoBase64 } from '@/lib/pdf-logo'
 import { FiscalSummaryDialog } from './FiscalSummaryDialog'
 import { FinanceResultModal } from './FinanceResultModal'
 import {
@@ -248,7 +249,10 @@ export function BudgetTableRow({
   const handleDownloadPdf = async () => {
     try {
       setIsPrinting(true)
-      const { data: sessionData } = await supabase.auth.getSession()
+      const [{ data: sessionData }, logoBase64] = await Promise.all([
+        supabase.auth.getSession(),
+        getLogoBase64(),
+      ])
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-report`,
         {
@@ -260,7 +264,7 @@ export function BudgetTableRow({
           body: JSON.stringify({
             reportType: 'orcamento',
             format: 'pdf',
-            filters: { id: budgetId },
+            filters: { id: budgetId, logoBase64 },
           }),
         },
       )
