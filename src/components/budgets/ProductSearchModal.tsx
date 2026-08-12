@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { Fragment, useState, useEffect, useRef, useCallback } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -41,9 +41,11 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { useDebounce } from '@/hooks/use-debounce'
 import { Badge } from '@/components/ui/badge'
 import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
+import { LQuantityRepeater, type LEntry } from './LQuantityRepeater'
 import type { ProductCatalogItem } from '@/services/productCatalogService'
 
 export interface ProductSearchItem {
@@ -59,6 +61,25 @@ export interface ProductSearchItem {
   marca_nome: string | null
   categoria_nome: string | null
   source: 'produtos' | 'revenda_ubiqua'
+}
+
+// SPEC-080: cada peça selecionada carrega sua própria lista de L's — o
+// painel expande inline dentro do modal, sem exigir um passo separado.
+export interface ProductSelectionEntry {
+  product: ProductSearchItem
+  entries: LEntry[]
+}
+
+/** Verifica L's vazios/qtd inválida ou código duplicado dentro da mesma peça. */
+function validarEntries(entries: LEntry[]): string | null {
+  if (entries.length === 0) return 'Adicione pelo menos um L.'
+  const codigos = entries.map((e) => e.custom_id.trim().toUpperCase())
+  if (codigos.some((c) => !c)) return 'Todo L precisa de um código.'
+  if (entries.some((e) => Number(e.quantidade) <= 0))
+    return 'Todo L precisa de quantidade maior que zero.'
+  if (new Set(codigos).size !== codigos.length)
+    return 'Não é possível repetir o mesmo L na mesma peça.'
+  return null
 }
 
 type SortKey =
@@ -168,7 +189,7 @@ export function ProductSearchModal({
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  onConfirm: (p: ProductSearchItem[]) => void
+  onConfirm: (selections: ProductSelectionEntry[]) => void
   onProductCreated?: (p: ProductSearchItem) => void
 }) {
   const [search, setSearch] = useState('')
@@ -184,8 +205,11 @@ export function ProductSearchModal({
   const [page, setPage] = useState(0)
   const [sortKey, setSortKey] = useState<SortKey>('sku')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  // SPEC-080: cada peça selecionada carrega sua própria lista de L's, em
+  // vez de uma quantidade única — o painel expande inline abaixo da linha
+  // assim que a peça é marcada.
   const [selected, setSelected] = useState<
-    Map<string, { product: ProductSearchItem; quantity: number }>
+    Map<string, { product: ProductSearchItem; entries: LEntry[] }>
   >(new Map())
   const [createOpen, setCreateOpen] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -427,21 +451,16 @@ export function ProductSearchModal({
     setSelected((s) => {
       const n = new Map(s)
       if (n.has(p.id)) n.delete(p.id)
-      else n.set(p.id, { product: p, quantity: 1 })
+      else n.set(p.id, { product: p, entries: [] })
       return n
     })
   }
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const updateLs = (productId: string, entries: LEntry[]) => {
     setSelected((s) => {
       const n = new Map(s)
       const entry = n.get(productId)
-      if (entry) {
-        n.set(productId, {
-          ...entry,
-          quantity: Math.max(1, Math.min(99, quantity)),
-        })
-      }
+      if (entry) n.set(productId, { ...entry, entries })
       return n
     })
   }
@@ -452,12 +471,9 @@ export function ProductSearchModal({
       if (allSelected) {
         sorted.forEach((p) => n.delete(p.id))
       } else {
-        sorted.forEach((p) =>
-          n.set(p.id, {
-            product: p,
-            quantity: n.get(p.id)?.quantity ?? 1,
-          }),
-        )
+        sorted.forEach((p) => {
+          if (!n.has(p.id)) n.set(p.id, { product: p, entries: [] })
+        })
       }
       return n
     })
@@ -492,25 +508,40 @@ export function ProductSearchModal({
     ])
     setSelected((prev) => {
       const next = new Map(prev)
-      next.set(created.id, { product: created, quantity: 1 })
+      next.set(created.id, { product: created, entries: [] })
       return next
     })
     onProductCreated?.(created)
   }
 
+  // SPEC-080: bloqueia a confirmação se qualquer peça selecionada não
+  // tiver ao menos 1 L válido (código preenchido, quantidade > 0) ou
+  // tiver código de L repetido dentro da MESMA peça (o mesmo L em peças
+  // diferentes é permitido — cada peça valida só os próprios L's).
+  const validationErrors = Array.from(selected.values())
+    .map(({ product, entries }) => ({
+      product,
+      error: validarEntries(entries),
+    }))
+    .filter((v) => v.error)
+
   const handleConfirm = () => {
-    const chosen: ProductSearchItem[] = []
-    selected.forEach(({ product, quantity }) => {
-      for (let i = 0; i < quantity; i++) {
-        chosen.push(product)
-      }
-    })
+    if (validationErrors.length > 0) {
+      const first = validationErrors[0]
+      toast.error(
+        `${first.product.nome}: ${first.error} (${validationErrors.length} peça(s) com pendência)`,
+      )
+      return
+    }
+    const chosen: ProductSelectionEntry[] = Array.from(
+      selected.values(),
+    ).map(({ product, entries }) => ({ product, entries }))
     onConfirm(chosen)
     setSelected(new Map())
   }
 
-  const totalLines = Array.from(selected.values()).reduce(
-    (sum, s) => sum + s.quantity,
+  const totalLs = Array.from(selected.values()).reduce(
+    (sum, s) => sum + s.entries.length,
     0,
   )
 
@@ -628,8 +659,8 @@ export function ProductSearchModal({
                     </TableRow>
                   ) : (
                     sorted.map((p) => (
+                      <Fragment key={p.id}>
                       <TableRow
-                        key={p.id}
                         data-state={selected.has(p.id) ? 'selected' : undefined}
                         className={cn(
                           selected.has(p.id) &&
@@ -637,29 +668,10 @@ export function ProductSearchModal({
                         )}
                       >
                         <TableCell>
-                          <div className="flex flex-col items-center gap-1">
-                            <Checkbox
-                              checked={selected.has(p.id)}
-                              onCheckedChange={() => toggleSelect(p)}
-                            />
-                            {selected.has(p.id) && (
-                              <Input
-                                type="number"
-                                min="1"
-                                max="99"
-                                value={selected.get(p.id)?.quantity ?? 1}
-                                onChange={(e) =>
-                                  updateQuantity(
-                                    p.id,
-                                    parseInt(e.target.value) || 1,
-                                  )
-                                }
-                                onClick={(e) => e.stopPropagation()}
-                                className="w-14 h-7 text-xs text-center px-1"
-                                title="Número de linhas independentes para este SKU"
-                              />
-                            )}
-                          </div>
+                          <Checkbox
+                            checked={selected.has(p.id)}
+                            onCheckedChange={() => toggleSelect(p)}
+                          />
                         </TableCell>
                         <TableCell>
                           <span className="font-mono font-bold text-sm text-primary">
@@ -730,6 +742,23 @@ export function ProductSearchModal({
                           </HoverCard>
                         </TableCell>
                       </TableRow>
+                      {selected.has(p.id) && (
+                        <TableRow className="bg-primary/5 hover:bg-primary/5">
+                          <TableCell />
+                          <TableCell colSpan={COLS.length} className="py-3">
+                            <div className="max-w-lg">
+                              <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                                L&apos;s desta peça
+                              </p>
+                              <LQuantityRepeater
+                                value={selected.get(p.id)?.entries || []}
+                                onChange={(entries) => updateLs(p.id, entries)}
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      </Fragment>
                     ))
                   )}
                 </TableBody>
@@ -751,7 +780,8 @@ export function ProductSearchModal({
           <DialogFooter className="px-6 py-4 border-t flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
-                {totalLines} linha(s) independente(s) · {selected.size} SKU(s)
+                {selected.size} peça(s) selecionada(s) · {totalLs} L(s) no
+                total
                 {selected.size > 0 &&
                   sorted.filter((p) => selected.has(p.id)).length <
                     selected.size && (
@@ -778,9 +808,14 @@ export function ProductSearchModal({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleConfirm} disabled={selected.size === 0}>
+              <Button
+                onClick={handleConfirm}
+                disabled={
+                  selected.size === 0 || validationErrors.length > 0
+                }
+              >
                 <Check className="w-4 h-4 mr-2" />
-                Confirmar Seleção ({totalLines} linha(s))
+                Confirmar Seleção ({totalLs} L(s))
               </Button>
             </div>
           </DialogFooter>

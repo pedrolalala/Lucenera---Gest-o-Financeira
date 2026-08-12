@@ -13,7 +13,7 @@ import { EditableOrcamentoData } from '@/services/financialApprovalEditService'
 import { EditableItemCard } from '@/components/budgets/EditableItemCard'
 import {
   ProductSearchModal,
-  type ProductSearchItem,
+  type ProductSelectionEntry,
 } from '@/components/budgets/ProductSearchModal'
 import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
 import { isValidUUID } from '@/lib/uuid'
@@ -153,15 +153,21 @@ export function EditableBudgetItemsTable({
     setCreateTarget(null)
   }
 
-  const handleProductConfirm = (products: ProductSearchItem[]) => {
-    if (products.length === 0 || (!searchTarget && !addTargetOrc)) {
+  // SPEC-080: ProductSearchModal agora devolve os L's coletados por peça,
+  // mas esta tela (edição de itens na Aprovação Financeira) segue o
+  // comportamento pré-existente de só usar a primeira peça selecionada
+  // por vez (não faz parte do fluxo "Buscar Produtos"/"Adicionar Item não
+  // Cadastrado" pedido nesta SPEC) — só ignora os L's coletados, sem
+  // regressão do que já funcionava.
+  const handleProductConfirm = (selections: ProductSelectionEntry[]) => {
+    if (selections.length === 0 || (!searchTarget && !addTargetOrc)) {
       setIsProductSearchOpen(false)
       setSearchTarget(null)
       setAddTargetOrc(null)
       return
     }
 
-    const p = products[0]
+    const p = selections[0].product
     const isProduto = p.source === 'produtos' && isValidUUID(p.id)
     const preco = p.preco_venda || p.valor_venda || 0
     const produtoInfo = isProduto
@@ -222,9 +228,9 @@ export function EditableBudgetItemsTable({
       )
     }
 
-    if (products.length > 1) {
+    if (selections.length > 1) {
       toast.info(
-        `${products.length - 1} produto(s) adicional(is) não foram adicionados.`,
+        `${selections.length - 1} produto(s) adicional(is) não foram adicionados.`,
       )
     }
 

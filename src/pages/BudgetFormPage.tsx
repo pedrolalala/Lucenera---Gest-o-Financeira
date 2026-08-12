@@ -79,6 +79,7 @@ import { supabase } from '@/lib/supabase/client'
 import {
   ProductSearchModal,
   type ProductSearchItem,
+  type ProductSelectionEntry,
 } from '@/components/budgets/ProductSearchModal'
 import { ProductCreateModal } from '@/components/budgets/ProductCreateModal'
 import { MultiLAddDialog } from '@/components/budgets/MultiLAddDialog'
@@ -1195,18 +1196,48 @@ export default function BudgetFormPage() {
     setProductSearchRowIndex(null)
   }
 
-  const handleProductSearchConfirm = (products: ProductSearchItem[]) => {
-    // SPEC-079: selecionar 1 produto só (pra adicionar, não pra trocar o
-    // produto de uma linha existente) abre o diálogo de múltiplos L's em
-    // vez de criar a linha direto — deixa informar vários L's com
-    // quantidade própria pra essa mesma peça de uma vez.
-    if (products.length === 1 && productSearchRowIndex === null) {
-      setMultiLProduct(products[0])
-      setIsProductSearchOpen(false)
-      setIsMultiLDialogOpen(true)
+  // SPEC-080: o modal "Buscar Produtos" já coleta os L's de cada peça
+  // selecionada (painel inline, ver ProductSearchModal.tsx) — não precisa
+  // mais de um diálogo separado depois de fechar a busca.
+  const handleProductSearchConfirm = (selections: ProductSelectionEntry[]) => {
+    // Trocar o produto de UMA linha existente (ícone de busca na linha)
+    // continua sendo 1:1 direto — mantém o L/quantidade que já estavam
+    // naquela linha, só troca o produto.
+    if (productSearchRowIndex !== null) {
+      applyProductSelection(selections.map((s) => s.product))
       return
     }
-    applyProductSelection(products)
+
+    if (selections.length === 0) {
+      setIsProductSearchOpen(false)
+      return
+    }
+
+    updateProductMeta(selections.map((s) => s.product))
+    const currentItems = form.getValues('itens') || []
+    const newItems = selections.flatMap(({ product, entries }) => {
+      const isProduto =
+        product.source === 'produtos' && isValidUUID(product.id)
+      return entries.map((entry) => ({
+        uid: crypto.randomUUID(),
+        custom_id: formatCircuitId(entry.custom_id),
+        produto_id: isProduto ? product.id : '',
+        descricao: isProduto ? '' : product.nome,
+        quantidade: entry.quantidade,
+        preco_unitario: product.preco_venda || product.valor_venda || 0,
+        desconto: 0,
+      }))
+    })
+
+    replace(sortItemsByCircuitId([...currentItems, ...newItems]), {
+      shouldFocus: false,
+    })
+    toast.success(
+      newItems.length === 1
+        ? '1 L adicionado com sucesso'
+        : `${newItems.length} L's adicionados com sucesso (${selections.length} peça(s))`,
+    )
+    setIsProductSearchOpen(false)
   }
 
   // SPEC-071: mesma lógica de applyProductSelection, mas a origem é uma
