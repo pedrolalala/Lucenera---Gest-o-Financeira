@@ -135,6 +135,7 @@ interface BudgetState {
   approveBudgetClient: (budget: Budget) => Promise<any>
   enviarOrcamentoCliente: (budgetId: string) => Promise<{ token: string }>
   aprovarManualmenteCliente: (budgetId: string) => Promise<void>
+  voltarOrcamentoRascunho: (budget: Budget, motivo: string) => Promise<any>
   equipeAprovarOrcamento: (budget: Budget, observacao?: string) => Promise<any>
   equipeDevolverOrcamentoCliente: (
     budget: Budget,
@@ -433,6 +434,22 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     }
 
     await get().fetchBudgets()
+  },
+
+  voltarOrcamentoRascunho: async (budget, motivo) => {
+    const { data, error } = await (supabase as any).rpc(
+      'voltar_orcamento_rascunho',
+      { p_orcamento_id: budget.id, p_motivo: motivo },
+    )
+
+    if (error) {
+      console.error('Error returning budget to draft:', error)
+      throw new Error(error.message || 'Erro ao voltar orçamento para rascunho.')
+    }
+
+    await get().fetchBudgets()
+
+    return data
   },
 
   equipeAprovarOrcamento: async (budget, observacao) => {
