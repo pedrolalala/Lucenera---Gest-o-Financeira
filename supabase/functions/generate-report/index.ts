@@ -257,7 +257,13 @@ Deno.serve(async (req: Request) => {
           })
 
           logoBottomY = logoY
-          textY = logoBottomY - 5 // minimize vertical space between logo and company text
+          // `drawText` posiciona a BASE do texto em `y` — a letra visível
+          // sobe a partir daí pelo ascent da fonte (~7-8pt numa fonte
+          // bold de 10pt). Um espaçamento de só 5pt entre a borda
+          // inferior do logo e essa base garantia sobreposição visual
+          // (a letra ficava mais alta que a borda do logo); 14pt deixa
+          // uma folga real.
+          textY = logoBottomY - 14
         } catch (e) {
           console.error('Error embedding logo:', e)
         }
