@@ -392,7 +392,13 @@ export default function BudgetFormPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       natureza_operacao: 'venda',
-      subgrupo: '',
+      // Fix (achado 2026-08-13): 'venda' sempre mapeia pro único subgrupo
+      // 'VENDAS' (SUBGRUPOS_POR_TIPO.venda), conhecido de antemão — não dá
+      // pra confiar em useEffect pra preencher isso depois do mount, porque
+      // handleProjectSelect (assíncrono, múltiplos form.setValue em
+      // sequência) tem race condition com o efeito e podia deixar o campo
+      // vazio de novo mesmo depois dele já ter sido preenchido uma vez.
+      subgrupo: 'VENDAS',
       empresa_id: '',
       projeto_codigo: '',
       cliente_id: '',
