@@ -27,8 +27,16 @@ export function LQuantityRepeater({
 }: LQuantityRepeaterProps) {
   const total = value.reduce((acc, e) => acc + (Number(e.quantidade) || 0), 0)
 
+  // Bug real achado em teste ao vivo (2026-08-13): o input mostrava "L01"
+  // como placeholder (cinza), parecendo pre-preenchido, mas custom_id
+  // começava vazio de verdade — o botão "Confirmar Seleção" ficava
+  // desabilitado sem nenhum aviso (validationErrors bloqueia o onClick
+  // antes mesmo dele disparar o toast de erro), travando silenciosamente
+  // todo fluxo de adicionar item. Fix: gera um código real (L01, L02...)
+  // que bate com o que o placeholder já prometia visualmente.
   const handleAdd = () => {
-    onChange([...value, { custom_id: '', quantidade: 1 }])
+    const nextNum = String(value.length + 1).padStart(2, '0')
+    onChange([...value, { custom_id: `L${nextNum}`, quantidade: 1 }])
   }
 
   const handleRemove = (index: number) => {

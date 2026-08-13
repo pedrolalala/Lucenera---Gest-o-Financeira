@@ -623,6 +623,23 @@ export default function BudgetFormPage() {
   }, [id, isEditing, budgets, form, navigate])
 
   const naturezaOperacao = form.watch('natureza_operacao') || 'venda'
+
+  // Fix (achado 2026-08-13, teste ao vivo): quando SUBGRUPOS_POR_TIPO tem
+  // só 1 opção pro tipo atual, o campo "Tipo" renderiza um Input
+  // desabilitado mostrando essa opção (ex.: "VENDAS"), mas nunca chama
+  // field.onChange — subgrupo ficava vazio no formulário até o usuário
+  // clicar manualmente no botão de Tipo de Operação (o que nunca
+  // acontece pra "Venda", já selecionado por padrão). Resultado: criar
+  // um orçamento novo falhava a validação "Selecione o Tipo" sem nenhum
+  // aviso visível até rolar a tela pro topo depois de já ter clicado em
+  // "Criar Orçamento".
+  useEffect(() => {
+    if (isEditing) return
+    const opcoes = SUBGRUPOS_POR_TIPO[naturezaOperacao] || []
+    if (opcoes.length === 1 && form.getValues('subgrupo') !== opcoes[0]) {
+      form.setValue('subgrupo', opcoes[0], { shouldValidate: true })
+    }
+  }, [naturezaOperacao, isEditing, form])
   const empresaIdAtual = form.watch('empresa_id')
   const empresaSelecionadaPerfil = empresas.find(
     (e) => e.id === empresaIdAtual,
@@ -748,13 +765,19 @@ export default function BudgetFormPage() {
         if (emp) empresaNome = emp.nome
       }
 
-      if (projeto.responsavel_id) {
-        const { data: usr } = await supabase
-          .from('usuarios')
+      // SPEC-077: responsavel_id (usuarios) e' campo legado, sempre NULL
+      // desde que o Responsavel do projeto passou a vir de
+      // responsavel_funcionario_id (funcionarios) — corrigido apos achar
+      // que este painel sempre mostrava "Nao encontrado", mesmo com
+      // responsavel corretamente vinculado (o Vendedor do orcamento ja
+      // usava o campo certo, so este texto informativo ficou desatualizado).
+      if (projeto.responsavel_funcionario_id) {
+        const { data: func } = await supabase
+          .from('funcionarios')
           .select('nome')
-          .eq('id', projeto.responsavel_id)
+          .eq('id', projeto.responsavel_funcionario_id)
           .single()
-        if (usr) responsavelSisNome = usr.nome
+        if (func) responsavelSisNome = func.nome
       }
 
       setProjectDetails({
