@@ -196,8 +196,14 @@ export function ProductSearchModal({
   const debounced = useDebounce(search, 300)
   const [brandFilter, setBrandFilter] = useState('all')
   const [catFilter, setCatFilter] = useState('all')
+  // SPEC-094: filtro de fornecedor — o único que faltava na busca (marca,
+  // categoria e nome/SKU/referência já existiam).
+  const [fornecedorFilter, setFornecedorFilter] = useState('all')
   const [brands, setBrands] = useState<{ id: string; nome: string }[]>([])
   const [cats, setCats] = useState<{ id: string; nome: string }[]>([])
+  const [fornecedores, setFornecedores] = useState<
+    { id: string; nome: string }[]
+  >([])
   const [products, setProducts] = useState<ProductSearchItem[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -221,6 +227,7 @@ export function ProductSearchModal({
       setSearch('')
       setBrandFilter('all')
       setCatFilter('all')
+      setFornecedorFilter('all')
       setProducts([])
       setPage(0)
       setHasMore(true)
@@ -236,6 +243,12 @@ export function ProductSearchModal({
       .select('id, nome')
       .order('nome')
       .then(({ data }) => data && setCats(data))
+    supabase
+      .from('contatos')
+      .select('id, nome')
+      .eq('tipo', 'fornecedor')
+      .order('nome')
+      .then(({ data }) => data && setFornecedores(data))
   }, [open])
 
   const fetchPage = useCallback(
@@ -287,10 +300,35 @@ export function ProductSearchModal({
       if (catFilter !== 'all')
         prodQuery = prodQuery.eq('categoria_id', catFilter)
 
+      // SPEC-094: fornecedor não é coluna direta de `produtos` — vem da
+      // tabela ponte `produto_fornecedores` (N:N).
+      if (fornecedorFilter !== 'all') {
+        const { data: pf } = await supabase
+          .from('produto_fornecedores')
+          .select('produto_id')
+          .eq('fornecedor_id', fornecedorFilter)
+        const produtoIds = (pf || []).map((r: any) => r.produto_id)
+        // vazio (nunca vai casar nada) em vez de pular o .in() — sem isso
+        // o filtro ficaria sem efeito e devolveria todo mundo.
+        prodQuery = prodQuery.in(
+          'id',
+          produtoIds.length > 0
+            ? produtoIds
+            : ['00000000-0000-0000-0000-000000000000'],
+        )
+      }
+
       prodQuery = prodQuery.range(from, to)
       revQuery = revQuery.range(from, to)
 
-      const [prodRes, revRes] = await Promise.all([prodQuery, revQuery])
+      // revenda_ubiqua não tem conceito de fornecedor — não entra no
+      // resultado quando esse filtro está ativo.
+      const [prodRes, revRes] = await Promise.all([
+        prodQuery,
+        fornecedorFilter !== 'all'
+          ? Promise.resolve({ data: [], error: null } as const)
+          : revQuery,
+      ])
 
       if (prodRes.error) console.error(prodRes.error)
       if (revRes.error) console.error(revRes.error)
@@ -396,7 +434,7 @@ export function ProductSearchModal({
         }
       }
     },
-    [debounced, brandFilter, catFilter],
+    [debounced, brandFilter, catFilter, fornecedorFilter],
   )
 
   useEffect(() => {
@@ -404,7 +442,7 @@ export function ProductSearchModal({
     setPage(0)
     setHasMore(true)
     fetchPage(0, false)
-  }, [open, debounced, brandFilter, catFilter, fetchPage])
+  }, [open, debounced, brandFilter, catFilter, fornecedorFilter, fetchPage])
 
   const loadMore = useCallback(() => {
     if (loadingMore || loading || !hasMore) return
@@ -533,9 +571,9 @@ export function ProductSearchModal({
       )
       return
     }
-    const chosen: ProductSelectionEntry[] = Array.from(
-      selected.values(),
-    ).map(({ product, entries }) => ({ product, entries }))
+    const chosen: ProductSelectionEntry[] = Array.from(selected.values()).map(
+      ({ product, entries }) => ({ product, entries }),
+    )
     onConfirm(chosen)
     setSelected(new Map())
   }
@@ -585,6 +623,22 @@ export function ProductSearchModal({
                 {cats.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={fornecedorFilter}
+              onValueChange={setFornecedorFilter}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Fornecedor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os fornecedores</SelectItem>
+                {fornecedores.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.nome}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -660,104 +714,110 @@ export function ProductSearchModal({
                   ) : (
                     sorted.map((p) => (
                       <Fragment key={p.id}>
-                      <TableRow
-                        data-state={selected.has(p.id) ? 'selected' : undefined}
-                        className={cn(
-                          selected.has(p.id) &&
-                            'bg-primary/10 border-l-4 border-l-primary',
-                        )}
-                      >
-                        <TableCell>
-                          <Checkbox
-                            checked={selected.has(p.id)}
-                            onCheckedChange={() => toggleSelect(p)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-mono font-bold text-sm text-primary">
-                            {p.codigo_produto ?? '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-bold text-base text-gray-900">
-                            {p.sku || p.referencia || '-'}
-                          </div>
-                          {p.referencia && p.sku && p.referencia !== p.sku && (
-                            <div className="text-xs text-muted-foreground">
-                              Ref: {p.referencia}
-                            </div>
+                        <TableRow
+                          data-state={
+                            selected.has(p.id) ? 'selected' : undefined
+                          }
+                          className={cn(
+                            selected.has(p.id) &&
+                              'bg-primary/10 border-l-4 border-l-primary',
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-start gap-2">
-                            <div className="line-clamp-2 max-w-[200px] text-sm text-gray-600">
-                              {p.nome}
+                        >
+                          <TableCell>
+                            <Checkbox
+                              checked={selected.has(p.id)}
+                              onCheckedChange={() => toggleSelect(p)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-mono font-bold text-sm text-primary">
+                              {p.codigo_produto ?? '-'}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-bold text-base text-gray-900">
+                              {p.sku || p.referencia || '-'}
                             </div>
-                            {selected.has(p.id) && (
-                              <Badge
-                                variant="default"
-                                className="shrink-0 text-[10px] px-1.5 py-0"
-                              >
-                                Selecionado
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          {p.marca_nome || '-'}
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          {p.categoria_nome || '-'}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {FMT.format(p.preco_venda || p.valor_venda || 0)}
-                        </TableCell>
-                        <TableCell>
-                          <HoverCard openDelay={300} closeDelay={200}>
-                            <HoverCardTrigger asChild>
-                              <span className="cursor-help font-semibold underline decoration-dotted">
-                                {p.estoque_total}
-                              </span>
-                            </HoverCardTrigger>
-                            <HoverCardContent className="w-64">
-                              <StockPopover productId={p.id} />
-                            </HoverCardContent>
-                          </HoverCard>
-                        </TableCell>
-                        <TableCell>
-                          <HoverCard openDelay={300} closeDelay={200}>
-                            <HoverCardTrigger asChild>
-                              <span
-                                className={cn(
-                                  'cursor-help font-semibold underline decoration-dotted',
-                                  p.estoque_disponivel <= 0 && 'text-red-600',
-                                )}
-                              >
-                                {p.estoque_disponivel}
-                              </span>
-                            </HoverCardTrigger>
-                            <HoverCardContent className="w-64">
-                              <StockPopover productId={p.id} />
-                            </HoverCardContent>
-                          </HoverCard>
-                        </TableCell>
-                      </TableRow>
-                      {selected.has(p.id) && (
-                        <TableRow className="bg-primary/5 hover:bg-primary/5">
-                          <TableCell />
-                          <TableCell colSpan={COLS.length} className="py-3">
-                            <div className="max-w-lg">
-                              <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-                                L&apos;s desta peça
-                              </p>
-                              <LQuantityRepeater
-                                value={selected.get(p.id)?.entries || []}
-                                onChange={(entries) => updateLs(p.id, entries)}
-                              />
+                            {p.referencia &&
+                              p.sku &&
+                              p.referencia !== p.sku && (
+                                <div className="text-xs text-muted-foreground">
+                                  Ref: {p.referencia}
+                                </div>
+                              )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-start gap-2">
+                              <div className="line-clamp-2 max-w-[200px] text-sm text-gray-600">
+                                {p.nome}
+                              </div>
+                              {selected.has(p.id) && (
+                                <Badge
+                                  variant="default"
+                                  className="shrink-0 text-[10px] px-1.5 py-0"
+                                >
+                                  Selecionado
+                                </Badge>
+                              )}
                             </div>
                           </TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {p.marca_nome || '-'}
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {p.categoria_nome || '-'}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {FMT.format(p.preco_venda || p.valor_venda || 0)}
+                          </TableCell>
+                          <TableCell>
+                            <HoverCard openDelay={300} closeDelay={200}>
+                              <HoverCardTrigger asChild>
+                                <span className="cursor-help font-semibold underline decoration-dotted">
+                                  {p.estoque_total}
+                                </span>
+                              </HoverCardTrigger>
+                              <HoverCardContent className="w-64">
+                                <StockPopover productId={p.id} />
+                              </HoverCardContent>
+                            </HoverCard>
+                          </TableCell>
+                          <TableCell>
+                            <HoverCard openDelay={300} closeDelay={200}>
+                              <HoverCardTrigger asChild>
+                                <span
+                                  className={cn(
+                                    'cursor-help font-semibold underline decoration-dotted',
+                                    p.estoque_disponivel <= 0 && 'text-red-600',
+                                  )}
+                                >
+                                  {p.estoque_disponivel}
+                                </span>
+                              </HoverCardTrigger>
+                              <HoverCardContent className="w-64">
+                                <StockPopover productId={p.id} />
+                              </HoverCardContent>
+                            </HoverCard>
+                          </TableCell>
                         </TableRow>
-                      )}
+                        {selected.has(p.id) && (
+                          <TableRow className="bg-primary/5 hover:bg-primary/5">
+                            <TableCell />
+                            <TableCell colSpan={COLS.length} className="py-3">
+                              <div className="max-w-lg">
+                                <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                                  L&apos;s desta peça
+                                </p>
+                                <LQuantityRepeater
+                                  value={selected.get(p.id)?.entries || []}
+                                  onChange={(entries) =>
+                                    updateLs(p.id, entries)
+                                  }
+                                />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </Fragment>
                     ))
                   )}
@@ -780,8 +840,7 @@ export function ProductSearchModal({
           <DialogFooter className="px-6 py-4 border-t flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
-                {selected.size} peça(s) selecionada(s) · {totalLs} L(s) no
-                total
+                {selected.size} peça(s) selecionada(s) · {totalLs} L(s) no total
                 {selected.size > 0 &&
                   sorted.filter((p) => selected.has(p.id)).length <
                     selected.size && (
@@ -810,9 +869,7 @@ export function ProductSearchModal({
               </Button>
               <Button
                 onClick={handleConfirm}
-                disabled={
-                  selected.size === 0 || validationErrors.length > 0
-                }
+                disabled={selected.size === 0 || validationErrors.length > 0}
               >
                 <Check className="w-4 h-4 mr-2" />
                 Confirmar Seleção ({totalLs} L(s))

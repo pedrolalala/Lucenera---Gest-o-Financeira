@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -419,6 +419,18 @@ export default function BudgetFormPage() {
     control: form.control,
     name: 'itens',
   })
+
+  // SPEC-095: validade padrão é a data de emissão + 10 dias — recalcula
+  // toda vez que a emissão muda, a menos que o usuário já tenha editado a
+  // validade manualmente nesta sessão (o botão "Usar padrão" reseta essa
+  // trava e recalcula de novo).
+  const validadeEditadaManualmenteRef = useRef(false)
+  const dataEmissaoWatch = form.watch('data_emissao')
+  useEffect(() => {
+    if (validadeEditadaManualmenteRef.current) return
+    if (!dataEmissaoWatch) return
+    form.setValue('validade', addDays(dataEmissaoWatch, 10))
+  }, [dataEmissaoWatch, form])
 
   const PRIORITY_SELLERS = [
     'Marina Pousa',
@@ -2255,7 +2267,22 @@ export default function BudgetFormPage() {
                   name="validade"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Validade (Opcional)</FormLabel>
+                      <FormLabel className="flex items-center justify-between gap-2">
+                        <span>Validade</span>
+                        {/* SPEC-095: padrão é emissão + 10 dias; permanece
+                            editável manualmente por cima do valor calculado. */}
+                        <button
+                          type="button"
+                          className="text-xs font-normal text-primary hover:underline"
+                          onClick={() => {
+                            validadeEditadaManualmenteRef.current = false
+                            const emissao = form.getValues('data_emissao')
+                            if (emissao) field.onChange(addDays(emissao, 10))
+                          }}
+                        >
+                          Usar padrão (10 dias)
+                        </button>
+                      </FormLabel>
                       <Popover>
                         <PopoverTrigger asChild>
                           <FormControl>
@@ -2279,7 +2306,10 @@ export default function BudgetFormPage() {
                           <Calendar
                             mode="single"
                             selected={field.value || undefined}
-                            onSelect={field.onChange}
+                            onSelect={(d) => {
+                              validadeEditadaManualmenteRef.current = true
+                              field.onChange(d)
+                            }}
                             initialFocus
                             locale={ptBR}
                           />
