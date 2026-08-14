@@ -228,13 +228,15 @@ const formSchema = z
       .max(120)
       .optional()
       .default(1),
-    data_inicio_pagamento: z
-      .date({ required_error: 'Data de início do pagamento é obrigatória' })
-      .refine((date) => {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        return date >= today
-      }, 'A data de início deve ser hoje ou uma data futura'),
+    // Achado 2026-08-14: campo era obrigatório + só aceitava hoje/futuro,
+    // mas orçamentos já aprovados (parcelas/boletos já gerados na
+    // aprovação) têm data histórica — muitas vezes no passado, ou nula em
+    // orçamentos criados antes da SPEC-082. Exigir "hoje ou futuro" pra
+    // simplesmente editar um campo não relacionado (ex.: observações)
+    // travava a edição de qualquer orçamento aprovado antigo. Validação
+    // completa (obrigatório + futuro) continua sendo feita no submit, mas
+    // só quando não é edição de orçamento já aprovado — ver handleSubmit.
+    data_inicio_pagamento: z.date().optional().nullable(),
     // Vencimento de cada parcela a partir da 2ª (índice 0 = parcela 2, etc.)
     // — null/undefined usa o padrão calculado (1 mês após a parcela
     // anterior, a partir de `data_inicio_pagamento`); a pessoa que negocia
@@ -557,9 +559,21 @@ export default function BudgetFormPage() {
           })
           setProductMetaMap(metaMap)
           setBudgetToEdit(budget)
+          // Achado 2026-08-14: orçamentos criados antes da SPEC-074 têm
+          // subgrupo vazio no banco (26 de 29 hoje). Em modo de edição o
+          // "Tipo de Operação" fica desabilitado (não pode ser alterado
+          // após a criação), então o usuário nunca consegue disparar o
+          // preenchimento manual — o formulário ficava permanentemente
+          // impossível de salvar ("Selecione o Tipo"). Mesmo raciocínio do
+          // fix da SPEC-097: só dá pra confiar nisso escrito direto aqui,
+          // não em um useEffect que rode depois na ordem certa.
+          const naturezaEdit = (budget as any).natureza_operacao || 'venda'
+          const opcoesEdit = SUBGRUPOS_POR_TIPO[naturezaEdit] || []
+          const subgrupoEdit =
+            (budget as any).subgrupo || (opcoesEdit.length === 1 ? opcoesEdit[0] : '')
           form.reset({
-            natureza_operacao: (budget as any).natureza_operacao || 'venda',
-            subgrupo: (budget as any).subgrupo || '',
+            natureza_operacao: naturezaEdit,
+            subgrupo: subgrupoEdit,
             empresa_id: budget.empresa_id,
             projeto_codigo: projetoCodigo,
             cliente_id: budget.cliente_id || '',
@@ -998,6 +1012,37 @@ export default function BudgetFormPage() {
         return
       }
 
+      // Achado 2026-08-14: orçamento já aprovado tem parcelas/boletos
+      // gerados de verdade na aprovação (tabelas projeto_parcelas/boletos)
+      // — os campos abaixo em `orcamentos` ficam só como registro
+      // histórico depois disso, não recalculam nada. Editar um campo não
+      // relacionado a pagamento (ex.: observações) não deveria exigir
+      // preencher/validar uma data de início "hoje ou futura" que não
+      // existe mais pra um negócio fechado há semanas.
+      const editandoAprovado =
+        isEditing && budgetToEdit?.status === 'Orçamento Aprovado'
+
+      if (!editandoAprovado && !values.data_inicio_pagamento) {
+        form.setError('data_inicio_pagamento', {
+          message: 'Data de início do pagamento é obrigatória',
+        })
+        setIsSubmitting(false)
+        return
+      }
+      if (!editandoAprovado && values.data_inicio_pagamento) {
+        const checarData = new Date(values.data_inicio_pagamento)
+        checarData.setHours(0, 0, 0, 0)
+        const hoje = new Date()
+        hoje.setHours(0, 0, 0, 0)
+        if (checarData < hoje) {
+          form.setError('data_inicio_pagamento', {
+            message: 'A data de início deve ser hoje ou uma data futura',
+          })
+          setIsSubmitting(false)
+          return
+        }
+      }
+
       // Parcela 1 vence em `data_inicio_pagamento`. As seguintes, por
       // padrão, vencem 1 mês após a parcela anterior — mas quem negocia com
       // o cliente pode sobrescrever o vencimento de qualquer parcela
@@ -1007,35 +1052,43 @@ export default function BudgetFormPage() {
       // relativo a hoje — a diferença entre offsets preserva o espaçamento
       // calendário escolhido, independente de quando a aprovação de fato
       // ocorrer.
-      const totalParcelas = ['boleto', 'cartao'].includes(
-        values.forma_pagamento || '',
-      )
-        ? values.parcelas || 1
-        : 1
-      const dataInicioDate = new Date(values.data_inicio_pagamento)
-      dataInicioDate.setHours(0, 0, 0, 0)
-      const hojeBase = new Date()
-      hojeBase.setHours(0, 0, 0, 0)
-      const prazoDias = Math.max(
-        0,
-        Math.round(
-          (dataInicioDate.getTime() - hojeBase.getTime()) /
-            (1000 * 60 * 60 * 24),
-        ),
-      )
-      const parcelaDatas = Array.from({ length: totalParcelas }, (_, i) => {
-        if (i === 0) return dataInicioDate
-        const override = values.parcelas_datas?.[i - 1]
-        if (override) {
-          const d = new Date(override)
-          d.setHours(0, 0, 0, 0)
-          return d
-        }
-        return addMonths(dataInicioDate, i)
-      })
-      const prazoPagamentoDias = parcelaDatas.map((d) =>
-        Math.round((d.getTime() - hojeBase.getTime()) / (1000 * 60 * 60 * 24)),
-      )
+      let prazoDias: number | undefined
+      let prazoPagamentoDias: number[] | undefined
+      let dataInicioPagamentoStr: string | undefined
+      if (!editandoAprovado) {
+        const totalParcelas = ['boleto', 'cartao'].includes(
+          values.forma_pagamento || '',
+        )
+          ? values.parcelas || 1
+          : 1
+        const dataInicioDate = new Date(values.data_inicio_pagamento as Date)
+        dataInicioDate.setHours(0, 0, 0, 0)
+        const hojeBase = new Date()
+        hojeBase.setHours(0, 0, 0, 0)
+        prazoDias = Math.max(
+          0,
+          Math.round(
+            (dataInicioDate.getTime() - hojeBase.getTime()) /
+              (1000 * 60 * 60 * 24),
+          ),
+        )
+        const parcelaDatas = Array.from({ length: totalParcelas }, (_, i) => {
+          if (i === 0) return dataInicioDate
+          const override = values.parcelas_datas?.[i - 1]
+          if (override) {
+            const d = new Date(override)
+            d.setHours(0, 0, 0, 0)
+            return d
+          }
+          return addMonths(dataInicioDate, i)
+        })
+        prazoPagamentoDias = parcelaDatas.map((d) =>
+          Math.round(
+            (d.getTime() - hojeBase.getTime()) / (1000 * 60 * 60 * 24),
+          ),
+        )
+        dataInicioPagamentoStr = format(dataInicioDate, 'yyyy-MM-dd')
+      }
 
       const hasUnregisteredItems = values.itens.some(
         (i) => !i.produto_id || !isValidUUID(i.produto_id),
@@ -1055,13 +1108,18 @@ export default function BudgetFormPage() {
         desconto_tipo: values.desconto_tipo || 'percentual',
         valor_sinal: values.valor_sinal ?? 0,
         forma_pagamento: values.forma_pagamento || null,
-        prazo_inicio_cobranca_dias: prazoDias,
-        data_inicio_pagamento: format(
-          values.data_inicio_pagamento,
-          'yyyy-MM-dd',
-        ),
-        prazo_pagamento_dias: prazoPagamentoDias,
-        condicoes_pagamento: prazoPagamentoDias.join('/'),
+        // Achado 2026-08-14: ao editar orçamento já aprovado, não
+        // recalcula/sobrescreve os campos de prazo de pagamento — eles só
+        // registram o histórico da negociação original, e as
+        // parcelas/boletos reais já existem em tabelas próprias.
+        ...(editandoAprovado
+          ? {}
+          : {
+              prazo_inicio_cobranca_dias: prazoDias,
+              data_inicio_pagamento: dataInicioPagamentoStr,
+              prazo_pagamento_dias: prazoPagamentoDias,
+              condicoes_pagamento: (prazoPagamentoDias ?? []).join('/'),
+            }),
         frete_tipo: values.frete_tipo,
         frete_valor: values.frete_tipo === 'sem_frete' ? 0 : values.frete_valor,
         observacoes: values.observacoes,
@@ -1095,6 +1153,7 @@ export default function BudgetFormPage() {
           payload,
           values.itens,
           arquitetosPayload,
+          editandoAprovado,
         )
         toast.success('Orçamento atualizado com sucesso')
       } else {

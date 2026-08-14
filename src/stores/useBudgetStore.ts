@@ -133,6 +133,12 @@ interface BudgetState {
     budget: Partial<Budget>,
     items: BudgetItem[],
     arquitetos?: { arquiteto_id: string; percentual: number }[],
+    // Achado 2026-08-14: orçamento já aprovado tem projeto_itens vinculado
+    // (via orcamento_item_id) aos itens originais — replace_orcamento_itens
+    // faz DELETE + INSERT de tudo, o que sempre quebrava com violação de FK
+    // ao salvar QUALQUER edição num orçamento aprovado, mesmo sem tocar nos
+    // itens. skipItens pula tanto o replace quanto o delete-all.
+    skipItens?: boolean,
   ) => Promise<void>
   replaceOrcamentoArquitetos: (
     orcamentoId: string,
@@ -289,8 +295,10 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     return data.id
   },
 
-  updateBudget: async (id, budget, items, arquitetos) => {
-    validateBudgetItems(items)
+  updateBudget: async (id, budget, items, arquitetos, skipItens) => {
+    if (!skipItens) {
+      validateBudgetItems(items)
+    }
 
     const { error } = await supabase
       .from('orcamentos')
@@ -302,7 +310,10 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       throw new Error(error.message || 'Erro ao atualizar orçamento.')
     }
 
-    if (items && items.length > 0) {
+    if (skipItens) {
+      // Itens do orçamento já aprovado ficam intocados — ver comentário na
+      // assinatura de updateBudget.
+    } else if (items && items.length > 0) {
       const subOrdens = computeSubOrdem(items)
       const itemsPayload = items.map((i, idx) => ({
         orcamento_id: id,
