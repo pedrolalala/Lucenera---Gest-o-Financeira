@@ -19,6 +19,11 @@ function formatCurrency(value: number) {
 }
 
 export function FiscalSummaryDialog({ budget }: { budget: Budget }) {
+  const clienteNome =
+    budget.cliente?.nome_empresa ||
+    budget.cliente?.razao_social ||
+    budget.cliente?.nome ||
+    ''
   const subtotalItens =
     budget.itens?.reduce((acc, item) => {
       return (
@@ -48,14 +53,18 @@ export function FiscalSummaryDialog({ budget }: { budget: Budget }) {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
-          title="Resumo Fiscal (NF 4740)"
+          title="Resumo Fiscal"
         >
           <FileText className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Resumo Fiscal (NF 4740 - Roberta Lucchesi)</DialogTitle>
+          <DialogTitle>
+            Resumo Fiscal
+            {budget.numero ? ` (${budget.numero})` : ''}
+            {clienteNome ? ` - ${clienteNome}` : ''}
+          </DialogTitle>
           <DialogDescription>
             Consolidação de dados para emissão de nota fiscal.
           </DialogDescription>
