@@ -1,4 +1,6 @@
 import { Badge } from '@/components/ui/badge'
+import { MessageSquare } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { OrcamentoDetail } from '@/services/projectFinancialApprovalService'
 
 const fmt = (v: number) =>
@@ -24,14 +26,31 @@ export function ProjectOrcamentoList({
 
   return (
     <div className="space-y-3">
-      {orcamentos.map((orc) => (
-        <div key={orc.id} className="rounded-lg border overflow-hidden">
+      {orcamentos.map((orc) => {
+        // SPEC-112: observação preenchida "salta aos olhos" — borda laranja
+        // no card inteiro + ícone com preview no hover, mesmo padrão da
+        // listagem principal de orçamentos (BudgetTableRow.tsx).
+        const hasObservacao = !!orc.observacoes?.trim()
+        return (
+        <div
+          key={orc.id}
+          className={cn(
+            'rounded-lg border overflow-hidden',
+            hasObservacao && 'border-orange-400 border-2',
+          )}
+        >
           <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-gray-900">
                 Orçamento {orc.numero || orc.id.slice(0, 8).toUpperCase()}
               </span>
               <Badge variant="outline">{orc.status || '—'}</Badge>
+              {hasObservacao && (
+                <MessageSquare
+                  className="h-4 w-4 text-orange-500 shrink-0"
+                  title={orc.observacoes ?? undefined}
+                />
+              )}
             </div>
             <span className="font-bold text-gray-900">
               {fmt(orc.valor_total || 0)}
@@ -108,7 +127,8 @@ export function ProjectOrcamentoList({
             </table>
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

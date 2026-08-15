@@ -35,6 +35,7 @@ import {
   UserCheck,
   Send,
   Undo2,
+  MessageSquare,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
@@ -292,9 +293,18 @@ export function BudgetTableRow({
       currency: 'BRL',
     }).format(v || 0)
 
+  // SPEC-112: observação preenchida "salta aos olhos" — borda laranja na
+  // linha inteira + ícone com preview no hover, pra não precisar abrir a
+  // edição completa só pra saber que tem algo importante anotado.
+  const hasObservacao = !!budget.observacoes?.trim()
+
   return (
     <>
-      <TableRow>
+      <TableRow
+        className={cn(
+          hasObservacao && 'border-l-4 border-l-orange-400 bg-orange-50/40',
+        )}
+      >
         <TableCell className="font-medium text-gray-600">
           {budget.data_emissao &&
           !isNaN(new Date(budget.data_emissao).getTime())
@@ -305,7 +315,15 @@ export function BudgetTableRow({
           {budget.empresa?.nome || '-'}
         </TableCell>
         <TableCell className="font-mono text-sm text-gray-600">
-          {budget.projeto?.codigo || budget.numero || '-'}
+          <div className="flex items-center gap-1.5">
+            <span>{budget.projeto?.codigo || budget.numero || '-'}</span>
+            {hasObservacao && (
+              <MessageSquare
+                className="h-3.5 w-3.5 text-orange-500 shrink-0"
+                title={budget.observacoes ?? undefined}
+              />
+            )}
+          </div>
         </TableCell>
         <TableCell className="text-gray-700">
           {budget.cliente?.razao_social || budget.cliente?.nome || '-'}

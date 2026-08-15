@@ -40,6 +40,8 @@ export interface OrcamentoDetail {
   status: string | null
   condicoes_pagamento: string | null
   forma_pagamento: string | null
+  // SPEC-112: destaque visual quando preenchida (card laranja).
+  observacoes: string | null
   orcamento_itens: OrcamentoItemDetail[]
 }
 
@@ -150,6 +152,7 @@ export async function fetchProjectFinancialDetails(
       status,
       condicoes_pagamento,
       forma_pagamento,
+      observacoes,
       orcamento_itens(id, descricao, quantidade, preco_unitario, desconto, custom_id, ordem, peca_nova)
       `,
     )
