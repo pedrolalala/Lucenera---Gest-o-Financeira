@@ -1523,13 +1523,16 @@ export default function BudgetFormPage() {
       if (found) vendedorId = found.id
     }
 
-    const validFormas = ['pix', 'cartao', 'boleto', 'dinheiro']
+    // SPEC-107: cheque/transferência já existiam no ENUM do banco mas nunca
+    // tinham sido liberados aqui nem na tela — cheque/transferência
+    // importados de XML caíam no fallback 'pix' (linha removida abaixo).
+    // permuta é novo (pedido explícito na reunião 14/08).
+    const validFormas = ['pix', 'cartao', 'boleto', 'dinheiro', 'cheque', 'transferencia', 'permuta']
     const formaPgtoRaw =
       results.find((r) => r.forma_pagamento)?.forma_pagamento?.toLowerCase() ||
       ''
     let formaPgto = formaPgtoRaw
-    if (formaPgto.includes('transferencia')) formaPgto = 'pix'
-    else if (!validFormas.includes(formaPgto)) formaPgto = ''
+    if (!validFormas.includes(formaPgto)) formaPgto = ''
 
     let parsedParcelas = 1
     const condicoes = results.find(
@@ -2561,6 +2564,12 @@ export default function BudgetFormPage() {
                             <SelectItem value="pix">Pix</SelectItem>
                             <SelectItem value="cartao">Cartão</SelectItem>
                             <SelectItem value="boleto">Boleto</SelectItem>
+                            {/* SPEC-107: cheque/transferência já existiam no
+                                banco, nunca tinham sido liberados aqui;
+                                permuta é novo. */}
+                            <SelectItem value="cheque">Cheque</SelectItem>
+                            <SelectItem value="transferencia">Transferência</SelectItem>
+                            <SelectItem value="permuta">Permuta</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
