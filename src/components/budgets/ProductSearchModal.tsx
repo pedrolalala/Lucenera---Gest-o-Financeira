@@ -259,72 +259,59 @@ export function ProductSearchModal({
       const from = pageNum * PAGE_SIZE
       const to = from + PAGE_SIZE - 1
 
-      let prodQuery = supabase
-        .from('produtos')
-        .select(
-          `
-          id, nome, sku, referencia, codigo_produto, preco_venda, valor_venda,
-          marca:marcas(nome), categoria:categorias_produto(nome)
-        `,
-        )
-        .eq('ativo', true)
-
       let revQuery = supabase
         .from('revenda_ubiqua')
         .select(
           'id, referencia, descricao, valor_revenda, cod_produto, estoque, disponivel',
         )
 
-      if (debounced) {
-        const t = debounced.trim().replace(/,/g, '')
+      const t = debounced ? debounced.trim().replace(/,/g, '') : ''
+
+      if (t) {
         const numericTerm = parseInt(t, 10)
         const isNumeric = !isNaN(numericTerm) && /^\d+$/.test(t)
-        if (isNumeric) {
-          prodQuery = prodQuery.or(
-            `nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%,codigo_produto.eq.${numericTerm}`,
-          )
-          revQuery = revQuery.or(
-            `descricao.ilike.%${t}%,referencia.ilike.%${t}%,cod_produto.eq.${numericTerm}`,
-          )
-        } else {
-          prodQuery = prodQuery.or(
-            `nome.ilike.%${t}%,sku.ilike.%${t}%,referencia.ilike.%${t}%`,
-          )
-          revQuery = revQuery.or(
-            `descricao.ilike.%${t}%,referencia.ilike.%${t}%`,
-          )
-        }
+        revQuery = isNumeric
+          ? revQuery.or(
+              `descricao.ilike.%${t}%,referencia.ilike.%${t}%,cod_produto.eq.${numericTerm}`,
+            )
+          : revQuery.or(`descricao.ilike.%${t}%,referencia.ilike.%${t}%`)
       }
-      if (brandFilter !== 'all')
-        prodQuery = prodQuery.eq('marca_id', brandFilter)
-      if (catFilter !== 'all')
-        prodQuery = prodQuery.eq('categoria_id', catFilter)
 
       // SPEC-094: fornecedor não é coluna direta de `produtos` — vem da
-      // tabela ponte `produto_fornecedores` (N:N).
+      // tabela ponte `produto_fornecedores` (N:N). Resolvido client-side e
+      // repassado pra RPC como p_produto_ids.
+      let produtoIdsFornecedor: string[] | null = null
       if (fornecedorFilter !== 'all') {
         const { data: pf } = await supabase
           .from('produto_fornecedores')
           .select('produto_id')
           .eq('fornecedor_id', fornecedorFilter)
-        const produtoIds = (pf || []).map((r: any) => r.produto_id)
-        // vazio (nunca vai casar nada) em vez de pular o .in() — sem isso
-        // o filtro ficaria sem efeito e devolveria todo mundo.
-        prodQuery = prodQuery.in(
-          'id',
-          produtoIds.length > 0
-            ? produtoIds
-            : ['00000000-0000-0000-0000-000000000000'],
-        )
+        // vazio (nunca vai casar nada) em vez de mandar null — sem isso o
+        // filtro ficaria sem efeito e devolveria todo mundo.
+        produtoIdsFornecedor = (pf || []).map((r: any) => r.produto_id)
+        if (produtoIdsFornecedor.length === 0)
+          produtoIdsFornecedor = ['00000000-0000-0000-0000-000000000000']
       }
 
-      prodQuery = prodQuery.range(from, to)
       revQuery = revQuery.range(from, to)
+
+      // SPEC-100: busca "estilo Google" via RPC fuzzy — casa o termo livre
+      // contra nome/sku/referencia/codigo_produto (substring/exato) e contra
+      // marca/categoria via word_similarity, o que o .or() do PostgREST não
+      // alcançava (marca/categoria vêm de JOIN).
+      const prodRpcCall = (supabase as any).rpc('buscar_produtos_fuzzy', {
+        p_termo: t || null,
+        p_marca_id: brandFilter !== 'all' ? brandFilter : null,
+        p_categoria_id: catFilter !== 'all' ? catFilter : null,
+        p_produto_ids: produtoIdsFornecedor,
+        p_offset: from,
+        p_limit: PAGE_SIZE,
+      })
 
       // revenda_ubiqua não tem conceito de fornecedor — não entra no
       // resultado quando esse filtro está ativo.
       const [prodRes, revRes] = await Promise.all([
-        prodQuery,
+        prodRpcCall,
         fornecedorFilter !== 'all'
           ? Promise.resolve({ data: [], error: null } as const)
           : revQuery,
@@ -344,8 +331,8 @@ export function ProductSearchModal({
           valor_venda: p.valor_venda,
           estoque_total: 0,
           estoque_disponivel: 0,
-          marca_nome: p.marca?.nome || null,
-          categoria_nome: p.categoria?.nome || null,
+          marca_nome: p.marca_nome || null,
+          categoria_nome: p.categoria_nome || null,
           source: 'produtos' as const,
         }),
       )
@@ -595,7 +582,7 @@ export function ProductSearchModal({
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome, SKU ou referência..."
+                placeholder="Buscar por nome, SKU, referência, marca ou categoria..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
