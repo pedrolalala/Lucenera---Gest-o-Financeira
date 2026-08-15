@@ -60,6 +60,10 @@ export interface ProductSearchItem {
   estoque_disponivel: number
   marca_nome: string | null
   categoria_nome: string | null
+  // SPEC-113: setor(es) físico(s) onde a peça tem estoque disponível
+  // (estoque_itens.local — hoje só "Estoque"/"Showroom") — pedido pendente
+  // de reunião anterior, nunca implementado nesta tela.
+  setor: string | null
   source: 'produtos' | 'revenda_ubiqua'
 }
 
@@ -91,6 +95,7 @@ type SortKey =
   | 'preco_venda'
   | 'estoque_total'
   | 'estoque_disponivel'
+  | 'setor'
 type SortDir = 'asc' | 'desc'
 
 const PAGE_SIZE = 100
@@ -108,6 +113,9 @@ const COLS: { key: SortKey; label: string }[] = [
   { key: 'preco_venda', label: 'Preço' },
   { key: 'estoque_total', label: 'Estoque Total' },
   { key: 'estoque_disponivel', label: 'Disponível' },
+  // SPEC-113: pedido pendente de reunião anterior — mostrar onde a peça
+  // está fisicamente estocada na hora de escolher o produto.
+  { key: 'setor', label: 'Setor' },
 ]
 
 function sortData(
@@ -333,6 +341,7 @@ export function ProductSearchModal({
           estoque_disponivel: 0,
           marca_nome: p.marca_nome || null,
           categoria_nome: p.categoria_nome || null,
+          setor: null,
           source: 'produtos' as const,
         }),
       )
@@ -350,6 +359,7 @@ export function ProductSearchModal({
           estoque_disponivel: r.disponivel ?? 0,
           marca_nome: null,
           categoria_nome: null,
+          setor: null,
           source: 'revenda_ubiqua' as const,
         }),
       )
@@ -371,13 +381,21 @@ export function ProductSearchModal({
       }
 
       if (prodMapped.length > 0) {
-        const { data: stockData } = await supabase
-          .from('vw_detalhe_produto_estoque')
-          .select('produto_id, estoque_total, estoque_disponivel')
-          .in(
-            'produto_id',
-            prodMapped.map((p) => p.id),
-          )
+        const produtoIds = prodMapped.map((p) => p.id)
+        const [{ data: stockData }, { data: localData }] = await Promise.all([
+          supabase
+            .from('vw_detalhe_produto_estoque')
+            .select('produto_id, estoque_total, estoque_disponivel')
+            .in('produto_id', produtoIds),
+          // SPEC-113: setor físico (estoque_itens.local) onde a peça tem
+          // saldo disponível — mesma tabela já usada pelo StockPopover
+          // (hover de "Distribuição por Local"), só que buscada em lote
+          // aqui pra exibir direto na linha, sem precisar passar o mouse.
+          supabase
+            .from('estoque_itens')
+            .select('produto_id, local, quantidade, quantidade_reservada')
+            .in('produto_id', produtoIds),
+        ])
 
         const stockMap = new Map<
           string,
@@ -392,12 +410,24 @@ export function ProductSearchModal({
           ]),
         )
 
+        const setorMap = new Map<string, string[]>()
+        ;(localData || []).forEach((l: any) => {
+          const disponivel =
+            (l.quantidade ?? 0) - (l.quantidade_reservada ?? 0)
+          if (disponivel <= 0) return
+          const atual = setorMap.get(l.produto_id) || []
+          atual.push(l.local)
+          setorMap.set(l.produto_id, atual)
+        })
+
         prodMapped.forEach((p) => {
           const stock = stockMap.get(p.id)
           if (stock) {
             p.estoque_total = stock.estoque_total
             p.estoque_disponivel = stock.estoque_disponivel
           }
+          const setores = setorMap.get(p.id)
+          p.setor = setores && setores.length > 0 ? setores.join(' + ') : null
         })
       }
 
@@ -524,6 +554,8 @@ export function ProductSearchModal({
       categoria_nome:
         cats.find((categoria) => categoria.id === product.categoria_id)?.nome ||
         null,
+      // Produto recém-criado ainda não tem movimentação em estoque_itens.
+      setor: null,
       source: 'produtos',
     }
 
@@ -785,6 +817,14 @@ export function ProductSearchModal({
                                 <StockPopover productId={p.id} />
                               </HoverCardContent>
                             </HoverCard>
+                          </TableCell>
+                          {/* SPEC-113: setor físico onde a peça está
+                              disponível — pedido pendente de reunião
+                              anterior, "no canto inferior direito". */}
+                          <TableCell>
+                            <span className="text-xs text-muted-foreground">
+                              {p.setor || '-'}
+                            </span>
                           </TableCell>
                         </TableRow>
                         {selected.has(p.id) && (
