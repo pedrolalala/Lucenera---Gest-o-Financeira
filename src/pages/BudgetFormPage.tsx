@@ -1147,6 +1147,26 @@ export default function BudgetFormPage() {
         percentual: a.percentual,
       }))
 
+      // SPEC-111: orçamento em 'Aprovação Financeira' tem um trigger no banco
+      // (handle_orcamento_item_change_reset) que reinicia o ciclo de
+      // aprovação do cliente sempre que os itens são salvos aqui — antes
+      // isso acontecia silenciosamente, sem aviso, e foi confundido com bug
+      // numa reunião ao vivo. Não muda a regra (já validada como correta
+      // pelo próprio usuário) — só avisa antes de salvar. 'Orçamento
+      // Aprovado' não precisa desse aviso porque editandoAprovado já pula os
+      // itens inteiramente (skipItens=true), então o trigger nunca dispara
+      // por aqui nesse status.
+      if (
+        isEditing &&
+        budgetToEdit?.status === 'Aprovação Financeira' &&
+        !window.confirm(
+          'Esta alteração vai reiniciar o ciclo de aprovação — o orçamento volta para "Enviado ao Cliente" e o cliente precisará aprovar novamente. Confirmar?',
+        )
+      ) {
+        setIsSubmitting(false)
+        return
+      }
+
       if (isEditing && budgetToEdit) {
         await updateBudget(
           budgetToEdit.id,
@@ -1155,7 +1175,11 @@ export default function BudgetFormPage() {
           arquitetosPayload,
           editandoAprovado,
         )
-        toast.success('Orçamento atualizado com sucesso')
+        toast.success(
+          budgetToEdit.status === 'Aprovação Financeira'
+            ? 'Orçamento atualizado — ciclo de aprovação do cliente reiniciado.'
+            : 'Orçamento atualizado com sucesso',
+        )
       } else {
         const newBudgetId = await addBudget(
           payload,
