@@ -691,6 +691,36 @@ export default function BudgetFormPage() {
   const freteTipo = form.watch('frete_tipo')
   const freteValor = form.watch('frete_valor') || 0
 
+  // SPEC-110: quando o cliente selecionado tem um sinal padrão cadastrado
+  // (contatos.valor_sinal_padrao), pré-preenche o campo Sinal — só na
+  // CRIAÇÃO de orçamento novo e só se o campo ainda estiver zerado (não
+  // sobrescreve um valor já digitado nem mexe em orçamento existente sendo
+  // editado). Continua 100% editável depois.
+  useEffect(() => {
+    if (isEditing) return
+    if (!clienteIdAtual) return
+    if (form.getValues('valor_sinal')) return
+    let cancelled = false
+    supabase
+      .from('contatos')
+      .select('valor_sinal_padrao')
+      .eq('id', clienteIdAtual)
+      .single()
+      .then(({ data }) => {
+        if (cancelled) return
+        const padrao = (data as any)?.valor_sinal_padrao
+        if (padrao && !form.getValues('valor_sinal')) {
+          form.setValue('valor_sinal', Number(padrao), {
+            shouldValidate: true,
+            shouldDirty: true,
+          })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [clienteIdAtual, isEditing])
+
   const valorSubtotal = watchItens.reduce((acc, item) => {
     const q = Number(item.quantidade) || 0
     const p = Number(item.preco_unitario) || 0
@@ -3019,8 +3049,13 @@ export default function BudgetFormPage() {
                 </div>
 
                 <div className="bg-gray-50 rounded-xl p-6 flex flex-col justify-end h-full border">
-                  {/* SPEC-078 (Bug 4): ordem exibida segue a ordem do
-                      cálculo — subtotal -> sinal -> desconto -> frete. */}
+                  {/* SPEC-110: ordem exibida segue a mesma ordem dos campos
+                      editáveis ao lado (Desconto Global, depois Sinal) —
+                      antes o resumo mostrava Sinal antes de Desconto
+                      (SPEC-078, seguindo a ordem do CÁLCULO), inconsistente
+                      com a ordem dos campos e apontado como confuso pelo
+                      usuário. O cálculo em si (sinal deduzido antes do
+                      desconto) não muda, só a ordem de exibição das linhas. */}
                   <div className="space-y-3 mb-6">
                     <div className="flex justify-between items-center text-sm text-gray-600">
                       <span>Subtotal dos itens</span>
@@ -3031,18 +3066,6 @@ export default function BudgetFormPage() {
                         }).format(valorSubtotal)}
                       </span>
                     </div>
-                    {valorSinal > 0 && (
-                      <div className="flex justify-between items-center text-sm text-gray-600">
-                        <span>Sinal</span>
-                        <span className="font-medium text-amber-700">
-                          -
-                          {new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                          }).format(valorSinal)}
-                        </span>
-                      </div>
-                    )}
                     <div className="flex justify-between items-center text-sm text-gray-600">
                       <span>
                         Desconto global (
@@ -3059,6 +3082,18 @@ export default function BudgetFormPage() {
                         }).format(descontoValorReais)}
                       </span>
                     </div>
+                    {valorSinal > 0 && (
+                      <div className="flex justify-between items-center text-sm text-gray-600">
+                        <span>Sinal</span>
+                        <span className="font-medium text-amber-700">
+                          -
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(valorSinal)}
+                        </span>
+                      </div>
+                    )}
                     {freteTipo === 'com_frete' && freteValor > 0 && (
                       <div className="flex justify-between items-center text-sm text-gray-600">
                         <span>Frete</span>
