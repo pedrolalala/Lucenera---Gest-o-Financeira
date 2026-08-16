@@ -20,18 +20,34 @@ export interface VendaOrigemItem {
 // SPEC-071 (P-2): busca cruza todos os projetos do cliente, não só o projeto
 // do orçamento de devolução em edição — o mesmo produto pode ter sido
 // vendido ao cliente em obras diferentes.
+//
+// SPEC-105 (achado 2026-08-15): `projetos.cliente_id` pode divergir do
+// `orcamentos.cliente_id` que gerou a venda original — confirmado com dados
+// reais (ex.: projeto 26.250 tem cliente_id de um contato, mas a venda que
+// criou o saldo em estoque_saldos_projeto_item ficou gravada com o
+// cliente_id de outro contato). Buscar só por cliente_id do projeto atual
+// fazia a busca voltar vazia mesmo com saldo real disponível. Também cobre
+// o caso de `projetos.cliente_id` NULL (a busca antes nem rodava). Fix:
+// aceita clienteId E/OU projetoId, e casa por QUALQUER um dos dois (OR) —
+// mantém a busca cross-projeto por cliente (SPEC-071) e ainda encontra
+// vendas do projeto atual mesmo se o cliente gravado nelas for outro.
 export async function getVendasOrigemParaDevolucao(
-  clienteId: string,
+  clienteId: string | null | undefined,
+  projetoId: string | null | undefined,
   search = '',
 ): Promise<VendaOrigemItem[]> {
-  if (!clienteId) return []
+  if (!clienteId && !projetoId) return []
+
+  const orParts: string[] = []
+  if (clienteId) orParts.push(`cliente_id.eq.${clienteId}`)
+  if (projetoId) orParts.push(`projeto_id.eq.${projetoId}`)
 
   let query = supabase
     .from('vw_estoque_saldos_projeto_item')
     .select(
       'projeto_item_id, projeto_id, produto_id, produto, produto_codigo, projeto_codigo, orcamento_numero, q_reserva, q_entrega_futura, q_entregue, status_operacional',
     )
-    .eq('cliente_id', clienteId)
+    .or(orParts.join(','))
     .eq('status_operacional', 'ativo')
 
   const t = search.trim()

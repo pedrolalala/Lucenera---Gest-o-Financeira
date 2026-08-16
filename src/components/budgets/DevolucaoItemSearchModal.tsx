@@ -41,11 +41,15 @@ export function DevolucaoItemSearchModal({
   open,
   onOpenChange,
   clienteId,
+  projetoId,
   onConfirm,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   clienteId: string | null | undefined
+  // SPEC-105: casa por projeto atual também, não só por cliente — ver
+  // comentário em devolucoesService.ts.
+  projetoId: string | null | undefined
   onConfirm: (itens: DevolucaoSelection[]) => void
 }) {
   const [search, setSearch] = useState('')
@@ -63,16 +67,16 @@ export function DevolucaoItemSearchModal({
       setSelected(new Map())
       return
     }
-    if (!clienteId) {
+    if (!clienteId && !projetoId) {
       setVendas([])
       return
     }
     setLoading(true)
-    getVendasOrigemParaDevolucao(clienteId, debounced)
+    getVendasOrigemParaDevolucao(clienteId, projetoId, debounced)
       .then(setVendas)
       .catch(() => setVendas([]))
       .finally(() => setLoading(false))
-  }, [open, clienteId, debounced])
+  }, [open, clienteId, projetoId, debounced])
 
   const toggleSelect = (venda: VendaOrigemItem) => {
     setSelected((s) => {
@@ -127,20 +131,21 @@ export function DevolucaoItemSearchModal({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
-              disabled={!clienteId}
+              disabled={!clienteId && !projetoId}
             />
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            A busca cruza todos os projetos deste cliente — mostra qualquer
-            venda anterior com saldo ainda disponível para devolução (reserva +
-            entrega futura + entregue).
+            A busca cruza todos os projetos deste cliente e também as vendas
+            já feitas neste projeto — mostra qualquer venda anterior com
+            saldo ainda disponível para devolução (reserva + entrega futura +
+            entregue).
           </p>
         </div>
 
         <div className="flex-1 overflow-auto">
-          {!clienteId ? (
+          {!clienteId && !projetoId ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-              Selecione um cliente no orçamento antes de buscar a venda de
+              Selecione um projeto no orçamento antes de buscar a venda de
               origem.
             </div>
           ) : loading ? (

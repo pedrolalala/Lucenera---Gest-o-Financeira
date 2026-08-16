@@ -364,6 +364,10 @@ export default function BudgetFormPage() {
     string | null
   >(null)
   const [projectDetails, setProjectDetails] = useState<{
+    // SPEC-105: id real do projeto selecionado, usado pra buscar venda de
+    // origem na devolução também por projeto (não só por cliente) — ver
+    // DevolucaoItemSearchModal.tsx.
+    id?: string
     nome?: string
     responsavel_nome?: string
     arquiteto_nome?: string
@@ -805,6 +809,7 @@ export default function BudgetFormPage() {
       }
 
       setProjectDetails({
+        id: projeto.id,
         nome: projeto.nome,
         responsavel_nome: projeto.responsavel_nome || 'Não preenchido',
         arquiteto_nome: projeto['Nome Arquiteto'] || 'Não preenchido',
@@ -3154,6 +3159,11 @@ export default function BudgetFormPage() {
             open={isDevolucaoSearchOpen}
             onOpenChange={setIsDevolucaoSearchOpen}
             clienteId={clienteIdAtual}
+            // SPEC-105: em criação vem de handleProjectSelect
+            // (projectDetails.id); em edição, o projeto já veio carregado
+            // com o orçamento (budgetToEdit.projeto_id) e handleProjectSelect
+            // nunca dispara sozinho.
+            projetoId={projectDetails?.id || budgetToEdit?.projeto_id}
             onConfirm={applyDevolucaoSelection}
           />
 
