@@ -95,11 +95,14 @@ export function GerenciamentoDialog({
   const linhas = itens.map((item, idx) => {
     const key = item.uid || String(idx)
     const isAvulso = !item.produto_id
-    const custoUnitario = isAvulso
-      ? custosManuais[key] ?? 0
-      : custosProdutos[item.produto_id as string] ?? 0
     const vendaUnitComDesconto =
       item.preco_unitario * (1 - descontoSimulado / 100)
+    // SPEC-106: item avulso sem custo digitado ainda começa em 50% da venda
+    // (não 0) — custo 0 fazia lucroPct nascer em 100%, mascarando a leitura
+    // do orçamento antes de alguém preencher o custo real.
+    const custoUnitario = isAvulso
+      ? custosManuais[key] ?? vendaUnitComDesconto * 0.5
+      : custosProdutos[item.produto_id as string] ?? 0
     const vendaTotal = vendaUnitComDesconto * item.quantidade
     const custoTotal = custoUnitario * item.quantidade
     const lucroTotal = vendaTotal - custoTotal
