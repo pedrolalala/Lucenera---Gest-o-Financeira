@@ -8,10 +8,14 @@ export function ProductSelectButton({
   value,
   onClick,
   placeholder = 'Buscar produto...',
+  disabled = false,
+  title,
 }: {
   value: string
   onClick: () => void
   placeholder?: string
+  disabled?: boolean
+  title?: string
 }) {
   const [label, setLabel] = useState('')
 
@@ -67,6 +71,8 @@ export function ProductSelectButton({
       role="combobox"
       className="w-full justify-between font-normal text-left"
       onClick={onClick}
+      disabled={disabled}
+      title={title}
     >
       {label ? (
         <span className="truncate">{label}</span>

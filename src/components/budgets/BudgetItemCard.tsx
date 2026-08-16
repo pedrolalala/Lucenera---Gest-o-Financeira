@@ -33,6 +33,11 @@ interface BudgetItemCardProps {
   onSearchProduct: (index: number) => void
   onCreateProduct?: (index: number) => void
   getProductInfo: (produtoId: string | null | undefined) => ProductMeta | null
+  // SPEC-108: só admin edita valor de peça ou troca/adiciona produto NUM
+  // ORÇAMENTO JÁ EXISTENTE — na criação de um orçamento novo (vendedora
+  // montando a lista de produtos do zero), continua liberado pra todo
+  // mundo. Calculado no BudgetFormPage.tsx (que sabe role + isEditing).
+  canEditValorProduto: boolean
 }
 
 const BRL = new Intl.NumberFormat('pt-BR', {
@@ -47,6 +52,7 @@ export function BudgetItemCard({
   onSearchProduct,
   onCreateProduct,
   getProductInfo,
+  canEditValorProduto,
 }: BudgetItemCardProps) {
   const { control } = useFormContext()
 
@@ -179,6 +185,12 @@ export function BudgetItemCard({
                         value={f.value}
                         onClick={() => onSearchProduct(index)}
                         placeholder="Buscar produto..."
+                        disabled={!canEditValorProduto}
+                        title={
+                          canEditValorProduto
+                            ? undefined
+                            : 'Só administrador pode trocar o produto do item'
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -208,7 +220,12 @@ export function BudgetItemCard({
                         variant="outline"
                         size="icon"
                         onClick={() => onSearchProduct(index)}
-                        title="Buscar produto cadastrado"
+                        disabled={!canEditValorProduto}
+                        title={
+                          canEditValorProduto
+                            ? 'Buscar produto cadastrado'
+                            : 'Só administrador pode vincular um produto ao item'
+                        }
                         className="shrink-0 h-9 w-9"
                       >
                         <PackageSearch className="w-4 h-4" />
@@ -218,7 +235,12 @@ export function BudgetItemCard({
                         variant="outline"
                         size="icon"
                         onClick={() => onCreateProduct?.(index)}
-                        title="Criar novo produto"
+                        disabled={!canEditValorProduto}
+                        title={
+                          canEditValorProduto
+                            ? 'Criar novo produto'
+                            : 'Só administrador pode criar produto'
+                        }
                         className="shrink-0 h-9 w-9"
                       >
                         <PackagePlus className="w-4 h-4" />
@@ -280,7 +302,17 @@ export function BudgetItemCard({
                       step="0.01"
                       min="0"
                       {...f}
-                      className="text-sm h-9 text-right"
+                      readOnly={!canEditValorProduto}
+                      title={
+                        canEditValorProduto
+                          ? undefined
+                          : 'Só administrador pode editar o valor do item'
+                      }
+                      className={
+                        canEditValorProduto
+                          ? 'text-sm h-9 text-right'
+                          : 'text-sm h-9 text-right bg-muted/40 cursor-default'
+                      }
                     />
                   </FormControl>
                   <FormMessage />

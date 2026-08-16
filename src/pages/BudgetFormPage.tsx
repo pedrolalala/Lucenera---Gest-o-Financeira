@@ -389,6 +389,10 @@ export default function BudgetFormPage() {
     Map<string, ProductMeta>
   >(new Map())
   const { role } = useAuth()
+  // SPEC-108: só admin edita valor de peça ou adiciona produto NUM
+  // ORÇAMENTO JÁ EXISTENTE. Na criação (isEditing = false), continua
+  // liberado pra todo mundo — é assim que vendedora monta um orçamento novo.
+  const canEditValorProduto = role === 'admin' || !isEditing
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -2462,6 +2466,12 @@ export default function BudgetFormPage() {
                       type="button"
                       variant="default"
                       size="sm"
+                      disabled={!canEditValorProduto}
+                      title={
+                        canEditValorProduto
+                          ? undefined
+                          : 'Só administrador pode adicionar produto a um orçamento já existente'
+                      }
                       onClick={() => {
                         setProductSearchRowIndex(null)
                         setIsProductSearchOpen(true)
@@ -2473,6 +2483,12 @@ export default function BudgetFormPage() {
                       type="button"
                       variant="secondary"
                       size="sm"
+                      disabled={!canEditValorProduto}
+                      title={
+                        canEditValorProduto
+                          ? undefined
+                          : 'Só administrador pode adicionar produto a um orçamento já existente'
+                      }
                       onClick={() => {
                         setMultiLProduct(null)
                         setIsMultiLDialogOpen(true)
@@ -2509,6 +2525,12 @@ export default function BudgetFormPage() {
                         <Button
                           type="button"
                           variant="default"
+                          disabled={!canEditValorProduto}
+                          title={
+                            canEditValorProduto
+                              ? undefined
+                              : 'Só administrador pode adicionar produto a um orçamento já existente'
+                          }
                           onClick={() => {
                             setProductSearchRowIndex(null)
                             setIsProductSearchOpen(true)
@@ -2520,6 +2542,12 @@ export default function BudgetFormPage() {
                         <Button
                           type="button"
                           variant="outline"
+                          disabled={!canEditValorProduto}
+                          title={
+                            canEditValorProduto
+                              ? undefined
+                              : 'Só administrador pode adicionar produto a um orçamento já existente'
+                          }
                           onClick={() => {
                             setMultiLProduct(null)
                             setIsMultiLDialogOpen(true)
@@ -2553,6 +2581,7 @@ export default function BudgetFormPage() {
                         setIsProductCreateOpen(true)
                       }}
                       getProductInfo={getProductInfo}
+                      canEditValorProduto={canEditValorProduto}
                     />
                   )
                 })}
