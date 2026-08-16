@@ -22,6 +22,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { format } from 'date-fns'
 import {
   Edit,
@@ -247,7 +253,10 @@ export function BudgetTableRow({
     }
   }
 
-  const handleDownloadPdf = async () => {
+  // SPEC-109: 2 modelos de PDF — "cliente" (padrão, sem referência) e
+  // "interno" (com Código real + Referência, usado quando o item não tem
+  // cadastro e o código sai "0" — a referência ajuda a identificar a peça).
+  const handleDownloadPdf = async (modelo: 'cliente' | 'interno' = 'cliente') => {
     try {
       setIsPrinting(true)
       const [{ data: sessionData }, logoBase64] = await Promise.all([
@@ -265,7 +274,7 @@ export function BudgetTableRow({
           body: JSON.stringify({
             reportType: 'orcamento',
             format: 'pdf',
-            filters: { id: budgetId, logoBase64 },
+            filters: { id: budgetId, logoBase64, modelo },
           }),
         },
       )
@@ -509,20 +518,31 @@ export function BudgetTableRow({
               </Button>
             )}
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-              title="Baixar PDF"
-              onClick={handleDownloadPdf}
-              disabled={isPrinting}
-            >
-              {isPrinting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Printer className="h-4 w-4" />
-              )}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  title="Baixar PDF"
+                  disabled={isPrinting}
+                >
+                  {isPrinting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleDownloadPdf('cliente')}>
+                  PDF para o cliente
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownloadPdf('interno')}>
+                  PDF interno (com código e referência)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Button
               variant="ghost"

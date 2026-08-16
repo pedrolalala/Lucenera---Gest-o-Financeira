@@ -126,7 +126,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (reportType === 'orcamento') {
-      const { id, logoBase64 } = filters || {}
+      // SPEC-109: "cliente" (padrão, sem referência) ou "interno" (mostra
+      // Referência além do Código real — útil quando o item não tem
+      // cadastro e o código sai "0").
+      const { id, logoBase64, modelo = 'cliente' } = filters || {}
 
       if (!id) {
         return new Response(
@@ -149,6 +152,7 @@ Deno.serve(async (req: Request) => {
           empresa:empresas!orcamentos_empresa_id_fkey(nome, razao_social, logradouro, numero, bairro, cidade, estado, cep, cnpj),
           vendedor:funcionarios!orcamentos_vendedor_id_fkey(nome),
           arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
+          arquitetos:orcamento_arquitetos(percentual, arquiteto:contatos!orcamento_arquitetos_arquiteto_id_fkey(nome)),
           projeto:projetos!orcamentos_projeto_id_fkey(codigo),
           itens:orcamento_itens(
             id, produto_id, quantidade, preco_unitario, desconto, descricao, custom_id,
@@ -354,8 +358,24 @@ Deno.serve(async (req: Request) => {
         { x: width - 150, y: dateY, size: 6, font, color: rgb(0.4, 0.4, 0.4) },
       )
 
+      // SPEC-109: "Data de Emissão" (criação do orçamento) além da "Data
+      // Impressão" (momento de gerar este PDF) — sem hora, só a data.
+      const emissaoY = dateY - 9
+      const dataEmissaoStr = budget.created_at
+        ? new Date(budget.created_at).toLocaleDateString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+          })
+        : '-'
+      page.drawText(`Data Emissão ${dataEmissaoStr}`, {
+        x: width - 150,
+        y: emissaoY,
+        size: 6,
+        font,
+        color: rgb(0.4, 0.4, 0.4),
+      })
+
       // Calculate Lowest Y coordinate between Left (Company Info) and Right (Approval Section)
-      const lowestHeaderY = Math.min(companyTextBottomY, dateY)
+      const lowestHeaderY = Math.min(companyTextBottomY, emissaoY)
 
       // Add safe vertical margin below the lowest header element
       let y = lowestHeaderY - 15
@@ -447,8 +467,19 @@ Deno.serve(async (req: Request) => {
 
       page.drawText(vendedorNome, { x: 40, y: y - 12, size: 9, font: boldFont })
 
+      // SPEC-109: quando o orçamento tem 2+ arquitetos cadastrados
+      // (orcamento_arquitetos, SPEC-077), mostra todos, separados por " / ";
+      // senão cai no arquiteto único legado (orcamentos.arquiteto_id).
+      const arquitetosMultiplos = (budget.arquitetos || [])
+        .filter((a: any) => a.arquiteto?.nome)
+        .map((a: any) => a.arquiteto.nome)
+      const arquitetoTexto =
+        arquitetosMultiplos.length > 0
+          ? arquitetosMultiplos.join(' / ')
+          : budget.arquiteto?.nome || '-'
+
       page.drawText('Arquiteto Externo', { x: 220, y, size: 9, font })
-      page.drawText(budget.arquiteto?.nome || '-', {
+      page.drawText(arquitetoTexto, {
         x: 220,
         y: y - 12,
         size: 9,
@@ -457,14 +488,20 @@ Deno.serve(async (req: Request) => {
 
       y -= 30
 
-      const headersList = [
-        'Código',
-        'Descrição',
-        'Qtd.',
-        'Vl. Unit.',
-        'Subtotal',
-      ]
-      const xOffsets = [40, 90, 390, 430, 490]
+      // SPEC-109: "Código" passa a ser o código real do produto
+      // (produtos.codigo_produto), nunca mais o L ou a referência — "L"
+      // (custom_id) vira coluna própria, sempre visível (é o identificador
+      // que o cliente/instalador usa em campo). Modelo "interno" acrescenta
+      // Referência — útil quando o item não tem cadastro (código sai "0",
+      // a referência ajuda a achar a peça pra cadastrar depois).
+      const isInterno = modelo === 'interno'
+      const headersList = isInterno
+        ? ['L', 'Código', 'Referência', 'Descrição', 'Qtd.', 'Vl. Unit.', 'Subtotal']
+        : ['L', 'Código', 'Descrição', 'Qtd.', 'Vl. Unit.', 'Subtotal']
+      const xOffsets = isInterno
+        ? [40, 65, 100, 195, 385, 420, 470]
+        : [40, 70, 115, 385, 420, 470]
+      const descMaxLen = isInterno ? 35 : 45
 
       headersList.forEach((h, i) => {
         page.drawText(h, { x: xOffsets[i], y, size: 9, font: boldFont })
@@ -479,7 +516,19 @@ Deno.serve(async (req: Request) => {
 
       let subtotal = 0
 
+      // SPEC-109: ordena por L (custom_id) — extrai a parte numérica pra
+      // ordenar "L2" antes de "L10" (ordem alfabética pura erraria isso).
+      // Itens sem L (avulsos sem circuito) vão pro final, na ordem que já
+      // vieram do banco.
+      function extractCircuitNumber(customId: string | null | undefined): number {
+        if (!customId) return Number.MAX_SAFE_INTEGER
+        const match = String(customId).match(/\d+/)
+        return match ? parseInt(match[0], 10) : Number.MAX_SAFE_INTEGER
+      }
       const items = (budget.itens || []).sort((a: any, b: any) => {
+        const na = extractCircuitNumber(a.custom_id)
+        const nb = extractCircuitNumber(b.custom_id)
+        if (na !== nb) return na - nb
         return a.id > b.id ? 1 : -1
       })
 
@@ -489,10 +538,15 @@ Deno.serve(async (req: Request) => {
           y = height - 50
         }
 
-        const cod = item.custom_id || item.produto?.referencia || '-'
+        const lFixo = item.custom_id || '-'
+        const codReal =
+          item.produto?.codigo_produto != null
+            ? String(item.produto.codigo_produto)
+            : '0'
+        const referencia = item.produto?.referencia || '-'
         let desc = String(
           item.descricao || item.produto?.nome || 'Produto sem nome',
-        ).substring(0, 55)
+        ).substring(0, descMaxLen)
 
         const qtd = String(item.quantidade || 1)
         const preco = Number(item.preco_unitario || 0)
@@ -502,10 +556,6 @@ Deno.serve(async (req: Request) => {
 
         subtotal += finalVal
 
-        page.drawText(cod, { x: xOffsets[0], y, size: 8, font: boldFont })
-        page.drawText(desc, { x: xOffsets[1], y, size: 8, font })
-        page.drawText(qtd, { x: xOffsets[2], y, size: 8, font })
-
         const fmtPreco = new Intl.NumberFormat('pt-BR', {
           style: 'currency',
           currency: 'BRL',
@@ -514,8 +564,18 @@ Deno.serve(async (req: Request) => {
           style: 'currency',
           currency: 'BRL',
         }).format(finalVal)
-        page.drawText(fmtPreco, { x: xOffsets[3], y, size: 8, font })
-        page.drawText(fmtFinalVal, { x: xOffsets[4], y, size: 8, font })
+
+        const cols = isInterno
+          ? [lFixo, codReal, referencia, desc, qtd, fmtPreco, fmtFinalVal]
+          : [lFixo, codReal, desc, qtd, fmtPreco, fmtFinalVal]
+        cols.forEach((val, i) => {
+          page.drawText(val, {
+            x: xOffsets[i],
+            y,
+            size: 8,
+            font: i <= 1 ? boldFont : font,
+          })
+        })
 
         y -= 15
       })
