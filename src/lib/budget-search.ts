@@ -1,11 +1,20 @@
+// SPEC-116: normaliza acento/maiúscula pra busca "estilo Google" — usado
+// tanto no match único (fuzzyMatch/highlight) quanto no multi-termo abaixo.
+function normalize(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+}
+
 export function fuzzyMatch(
   query: string,
   target: string | null | undefined,
 ): boolean {
   if (!target) return false
-  const q = query.trim().toLowerCase()
+  const q = normalize(query.trim())
   if (!q) return false
-  return target.toLowerCase().includes(q)
+  return normalize(target).includes(q)
 }
 
 export interface BudgetSearchable {
@@ -29,22 +38,34 @@ export function searchBudgetsByContactsAndProjects<T extends BudgetSearchable>(
   budgets: T[],
   query: string,
 ): T[] {
-  const trimmed = query.trim()
-  if (!trimmed) return budgets
+  // SPEC-116: multi-termo em qualquer ordem, sem distinção de acento —
+  // cada palavra digitada precisa aparecer em algum campo do orçamento
+  // (cliente, projeto, arquiteto ou número), não necessariamente no mesmo
+  // campo. Antes era 1 termo contra cada campo isoladamente, sensível a
+  // acento, e nunca checava o arquiteto apesar de já estar na interface.
+  const terms = normalize(query.trim())
+    .split(/\s+/)
+    .filter(Boolean)
+  if (terms.length === 0) return budgets
 
   return budgets.filter((budget) => {
     const client = budget.cliente
     const projeto = budget.projeto
-
-    return (
-      fuzzyMatch(trimmed, client?.nome) ||
-      fuzzyMatch(trimmed, client?.razao_social) ||
-      fuzzyMatch(trimmed, client?.email) ||
-      fuzzyMatch(trimmed, client?.nome_empresa) ||
-      fuzzyMatch(trimmed, projeto?.nome) ||
-      fuzzyMatch(trimmed, projeto?.codigo) ||
-      fuzzyMatch(trimmed, budget.numero)
+    const haystack = normalize(
+      [
+        client?.nome,
+        client?.razao_social,
+        client?.email,
+        client?.nome_empresa,
+        projeto?.nome,
+        projeto?.codigo,
+        budget.numero,
+        budget.arquiteto?.nome,
+      ]
+        .filter(Boolean)
+        .join(' '),
     )
+    return terms.every((t) => haystack.includes(t))
   })
 }
 

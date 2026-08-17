@@ -53,10 +53,25 @@ export async function getVendasOrigemParaDevolucao(
   const t = search.trim()
   if (t) {
     const numericTerm = Number(t)
-    query =
-      !isNaN(numericTerm) && t !== ''
-        ? query.or(`produto.ilike.%${t}%,produto_codigo.eq.${numericTerm}`)
-        : query.ilike('produto', `%${t}%`)
+    if (!isNaN(numericTerm) && t !== '') {
+      query = query.or(`produto.ilike.%${t}%,produto_codigo.eq.${numericTerm}`)
+    } else {
+      // SPEC-116: multi-termo em qualquer ordem — cada palavra digitada
+      // precisa aparecer no nome do produto (não precisa ser a frase
+      // inteira). Encadear .ilike() na mesma coluna gera múltiplos
+      // parâmetros `produto=ilike.*termo*` na URL, que o PostgREST some
+      // como AND (mesmo comportamento de múltiplos filtros na mesma
+      // coluna). A view não expõe marca/descrição, então a busca continua
+      // restrita ao nome do produto — o resto (cliente/projeto) já é
+      // aplicado fora do texto livre.
+      search
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .forEach((term) => {
+          query = query.ilike('produto', `%${term}%`)
+        })
+    }
   }
 
   const { data, error } = await query
