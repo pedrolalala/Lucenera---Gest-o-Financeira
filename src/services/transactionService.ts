@@ -96,7 +96,17 @@ export const transactionService = {
     if (role === 'admin' || role === 'gerente') {
       // Admin sees all, applies filters
       if (filters.search) {
-        query = query.ilike('description', `%${filters.search}%`)
+        // SPEC-116: multi-termo em qualquer ordem na descrição — cada
+        // palavra digitada precisa aparecer na descrição, não precisa ser
+        // a frase inteira. Encadear .ilike() na mesma coluna gera
+        // múltiplos parâmetros que o PostgREST soma como AND.
+        filters.search
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .forEach((term: string) => {
+            query = query.ilike('description', `%${term}%`)
+          })
       }
 
       if (filters.type !== 'all') {
