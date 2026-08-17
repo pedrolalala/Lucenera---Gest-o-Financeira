@@ -211,18 +211,38 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     let filtered = data as unknown as Budget[]
 
     if (filters?.search) {
-      const s = filters.search.toLowerCase()
-      filtered = filtered.filter(
-        (b) =>
-          b.cliente?.nome?.toLowerCase().includes(s) ||
-          b.cliente?.razao_social?.toLowerCase().includes(s) ||
-          b.cliente?.email?.toLowerCase().includes(s) ||
-          b.cliente?.nome_empresa?.toLowerCase().includes(s) ||
-          b.empresa?.nome?.toLowerCase().includes(s) ||
-          b.numero?.toLowerCase().includes(s) ||
-          b.projeto?.codigo?.toLowerCase().includes(s) ||
-          b.projeto?.nome?.toLowerCase().includes(s),
-      )
+      // SPEC-116 (achado ao testar ao vivo): esta busca é uma
+      // implementação própria, separada de searchBudgetsByContactsAndProjects
+      // (budget-search.ts, já corrigida) — nunca checava arquiteto (apesar
+      // de o `select` já trazer `arquiteto:contatos!...(nome)`), era 1
+      // termo contra a frase inteira e sensível a acento. Mesmo padrão
+      // multi-termo + accent-insensitive do resto do rollout.
+      const normalize = (v: string) =>
+        v
+          .normalize('NFD')
+          .replace(/\p{Diacritic}/gu, '')
+          .toLowerCase()
+      const terms = normalize(filters.search.trim())
+        .split(/\s+/)
+        .filter(Boolean)
+      filtered = filtered.filter((b) => {
+        const haystack = normalize(
+          [
+            b.cliente?.nome,
+            b.cliente?.razao_social,
+            b.cliente?.email,
+            b.cliente?.nome_empresa,
+            b.empresa?.nome,
+            b.numero,
+            b.projeto?.codigo,
+            b.projeto?.nome,
+            b.arquiteto?.nome,
+          ]
+            .filter(Boolean)
+            .join(' '),
+        )
+        return terms.every((t) => haystack.includes(t))
+      })
     }
 
     filtered = filtered.map((b) => ({
