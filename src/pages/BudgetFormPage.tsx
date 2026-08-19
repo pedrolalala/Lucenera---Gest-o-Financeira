@@ -3287,6 +3287,7 @@ export default function BudgetFormPage() {
         itens={form.watch('itens')}
         produtoNomes={produtoNomesMap}
         descontoAtual={form.watch('desconto_global') || 0}
+        descontoTipo={form.watch('desconto_tipo') || 'percentual'}
         onAplicarDesconto={(pct) => {
           form.setValue('desconto_tipo', 'percentual', { shouldDirty: true })
           form.setValue('desconto_global', pct, {

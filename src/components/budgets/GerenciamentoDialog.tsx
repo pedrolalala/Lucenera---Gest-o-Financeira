@@ -34,6 +34,7 @@ interface GerenciamentoDialogProps {
   itens: GerenciamentoItem[]
   produtoNomes: Record<string, string>
   descontoAtual: number
+  descontoTipo: 'percentual' | 'valor'
   onAplicarDesconto: (percentual: number) => void
 }
 
@@ -41,6 +42,26 @@ const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
     v || 0,
   )
+
+// O painel so entende desconto em %: quando o orcamento tem desconto do
+// tipo "valor" (R$ fixo, ex.: SPEC-068), converte pro percentual
+// equivalente sobre o subtotal bruto antes de simular - sem isso o painel
+// tratava um "R$ 1.000" como "1000%" (ou, na pratica, ignorava o desconto
+// e mostrava lucro inflado, porque o form so aplica esse numero como
+// percentual em algum outro lugar). Achado em producao, 2026-08-18.
+function calcDescontoInicialPct(
+  itens: GerenciamentoItem[],
+  descontoAtual: number,
+  descontoTipo: 'percentual' | 'valor',
+): number {
+  if (descontoTipo === 'percentual') return descontoAtual || 0
+  const subtotalBruto = itens.reduce(
+    (s, i) => s + i.preco_unitario * i.quantidade,
+    0,
+  )
+  if (subtotalBruto <= 0) return 0
+  return Math.min(Math.max((descontoAtual / subtotalBruto) * 100, 0), 100)
+}
 
 // Painel de análise só pra admin/gerente (SPEC-083): mostra custo/lucro por
 // peça e permite simular um desconto global sem alterar o orçamento até a
@@ -53,6 +74,7 @@ export function GerenciamentoDialog({
   itens,
   produtoNomes,
   descontoAtual,
+  descontoTipo,
   onAplicarDesconto,
 }: GerenciamentoDialogProps) {
   const [custosProdutos, setCustosProdutos] = useState<Record<string, number>>(
@@ -61,12 +83,14 @@ export function GerenciamentoDialog({
   const [custosManuais, setCustosManuais] = useState<Record<string, number>>(
     {},
   )
-  const [descontoSimulado, setDescontoSimulado] = useState(descontoAtual || 0)
+  const [descontoSimulado, setDescontoSimulado] = useState(
+    calcDescontoInicialPct(itens, descontoAtual, descontoTipo),
+  )
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!open) return
-    setDescontoSimulado(descontoAtual || 0)
+    setDescontoSimulado(calcDescontoInicialPct(itens, descontoAtual, descontoTipo))
     const ids = Array.from(
       new Set(
         itens.map((i) => i.produto_id).filter((id): id is string => !!id),
@@ -154,6 +178,12 @@ export function GerenciamentoDialog({
               setDescontoSimulado(parseFloat(e.target.value) || 0)
             }
           />
+          {descontoTipo === 'valor' && descontoAtual > 0 && (
+            <span className="text-xs text-muted-foreground">
+              equivalente ao desconto de {fmt(descontoAtual)} já aplicado ao
+              orçamento
+            </span>
+          )}
           <Button
             type="button"
             size="sm"
