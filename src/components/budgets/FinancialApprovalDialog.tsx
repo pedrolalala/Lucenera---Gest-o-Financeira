@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AlertTriangle, ShieldAlert, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Budget } from '@/stores/useBudgetStore'
 
 interface FinancialApprovalDialogProps {
@@ -46,8 +47,14 @@ export function FinancialApprovalDialog({
     }).format(value || 0)
 
   const itemCount = budget.itens?.length || 0
+  // SPEC-135: item sem produto_id (peça sem cadastro/código interno) não
+  // pode ser faturado — vira venda sem controle de estoque. A RPC também
+  // bloqueia isso, mas avisar aqui evita o usuário chegar a tentar.
+  const itensSemCadastro = (budget.itens || []).filter((i) => !i.produto_id)
   const canConfirm =
-    verifyText.trim().toUpperCase() === 'APROVAR' && itemsReviewed
+    verifyText.trim().toUpperCase() === 'APROVAR' &&
+    itemsReviewed &&
+    itensSemCadastro.length === 0
 
   const handleConfirm = async () => {
     if (!canConfirm) return
@@ -55,7 +62,10 @@ export function FinancialApprovalDialog({
     try {
       await onConfirm()
       onOpenChange(false)
-    } catch {
+    } catch (error: any) {
+      toast.error('Falha ao aprovar orçamento financeiramente', {
+        description: error?.message || 'Erro desconhecido.',
+      })
       setIsApproving(false)
     }
   }
@@ -113,6 +123,19 @@ export function FinancialApprovalDialog({
             </p>
           </div>
 
+          {itensSemCadastro.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-300 p-3">
+              <ShieldAlert className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-800">
+                <strong>Não é possível aprovar:</strong> {itensSemCadastro.length}{' '}
+                item(ns) deste orçamento não têm produto cadastrado (peça sem
+                código interno). Cadastre o produto e vincule o item antes de
+                aprovar financeiramente — sem isso, viraria uma venda sem
+                controle de estoque.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input
@@ -120,6 +143,7 @@ export function FinancialApprovalDialog({
                 checked={itemsReviewed}
                 onChange={(e) => setItemsReviewed(e.target.checked)}
                 className="rounded border-gray-300"
+                disabled={itensSemCadastro.length > 0}
               />
               Confirmo que revisei todos os itens e dados financeiros do
               orçamento.
@@ -134,6 +158,7 @@ export function FinancialApprovalDialog({
               onChange={(e) => setVerifyText(e.target.value)}
               placeholder="Digite APROVAR"
               className={canConfirm ? 'border-green-500' : ''}
+              disabled={itensSemCadastro.length > 0}
             />
           </div>
         </div>
