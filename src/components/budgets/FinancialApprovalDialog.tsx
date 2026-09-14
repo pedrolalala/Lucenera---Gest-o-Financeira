@@ -21,11 +21,7 @@ interface FinancialApprovalDialogProps {
   budget: Budget | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  // SPEC-133: quando o usuário edita o valor de alguma parcela aqui dentro,
-  // passa o array completo (mesma ordem das parcelas) — a RPC substitui a
-  // divisão igualitária padrão por esses valores. Sem edição, passa
-  // undefined e o comportamento é idêntico ao de antes desta SPEC.
-  onConfirm: (valoresParcelas?: number[]) => Promise<void>
+  onConfirm: () => Promise<void>
 }
 
 const formatCurrency = (value: number) =>
@@ -37,6 +33,14 @@ const formatCurrency = (value: number) =>
 const formatDate = (date: Date) =>
   date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
+// Instrução do usuário (2026-09-14): este card é a etapa de aprovação
+// financeira — deve ser SOMENTE LEITURA. Nenhum campo (valor de parcela,
+// data de vencimento etc.) pode ser editado aqui; qualquer ajuste nos
+// dados financeiros do orçamento (ex.: valor da entrada) é feito antes,
+// na tela de condições de pagamento (BudgetFormPage). Revoga a edição de
+// parcela introduzida antes nesta mesma SPEC-133 — por isso não depende
+// mais do parâmetro novo da RPC (p_valores_parcelas): a chamada de
+// aprovação voltou a ser só `aprovar_orcamento_financeiro(p_orcamento_id)`.
 export function FinancialApprovalDialog({
   budget,
   open,
@@ -52,20 +56,11 @@ export function FinancialApprovalDialog({
   // fácil de perder. Agora fica fixo aqui dentro do diálogo até a pessoa
   // fechar ou tentar de novo.
   const [approvalError, setApprovalError] = useState<string | null>(null)
-  // SPEC-133: valores de parcela editáveis — strings pra deixar o campo
-  // digitável livremente, convertidos pra number só na validação/confirmação.
-  const [parcelaValores, setParcelaValores] = useState<string[]>([])
 
   const resumo = useMemo(
     () => (budget ? calcularResumoFinanceiro(budget) : null),
     [budget],
   )
-
-  useEffect(() => {
-    if (open && resumo) {
-      setParcelaValores(resumo.parcelas.map((p) => p.valor.toFixed(2)))
-    }
-  }, [open, resumo])
 
   useEffect(() => {
     if (!open) {
@@ -84,30 +79,17 @@ export function FinancialApprovalDialog({
   // bloqueia isso, mas avisar aqui evita o usuário chegar a tentar.
   const itensSemCadastro = (budget.itens || []).filter((i) => !i.produto_id)
 
-  const parcelaValoresNumeros = parcelaValores.map((v) => Number(v.replace(',', '.')))
-  const parcelasValidas =
-    parcelaValoresNumeros.length === resumo.parcelas.length &&
-    parcelaValoresNumeros.every((v) => Number.isFinite(v) && v > 0)
-
-  // SPEC-133: só manda p_valores_parcelas quando algo realmente mudou em
-  // relação ao cálculo padrão (divisão igualitária) — sem edição, a chamada
-  // segue idêntica à de antes desta SPEC (p_valores_parcelas = null).
-  const parcelasForamEditadas = resumo.parcelas.some(
-    (p, i) => p.valor.toFixed(2) !== parcelaValores[i],
-  )
-
   const canConfirm =
     verifyText.trim().toUpperCase() === 'APROVAR' &&
     itemsReviewed &&
-    itensSemCadastro.length === 0 &&
-    parcelasValidas
+    itensSemCadastro.length === 0
 
   const handleConfirm = async () => {
     if (!canConfirm) return
     setIsApproving(true)
     setApprovalError(null)
     try {
-      await onConfirm(parcelasForamEditadas ? parcelaValoresNumeros : undefined)
+      await onConfirm()
       onOpenChange(false)
     } catch (error: any) {
       const message = error?.message || 'Erro desconhecido.'
@@ -198,42 +180,26 @@ export function FinancialApprovalDialog({
             <p className="text-sm font-semibold text-gray-800 mb-2">
               {resumo.parcelas.length}{' '}
               {resumo.parcelas.length === 1 ? 'parcela' : 'parcelas'}
-              <span className="font-normal text-gray-500">
-                {' '}
-                — valor editável (ex.: entrada maior que o padrão)
-              </span>
             </p>
-            <div className="space-y-1.5">
-              {resumo.parcelas.map((p, i) => (
-                <div key={p.numero} className="flex items-center gap-2 text-sm">
-                  <span className="w-6 text-gray-500 shrink-0">{p.numero}ª</span>
-                  <span className="flex-1 text-gray-600">
-                    vence {formatDate(p.dataVencimento)}
+            <div className="space-y-1">
+              {resumo.parcelas.map((p) => (
+                <div
+                  key={p.numero}
+                  className="flex items-center justify-between text-sm py-1 px-2 rounded-md bg-muted/40"
+                >
+                  <span className="text-gray-600">
+                    {p.numero}ª — vence {formatDate(p.dataVencimento)}
                   </span>
-                  <div className="relative w-32 shrink-0">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
-                      R$
-                    </span>
-                    <Input
-                      value={parcelaValores[i] ?? ''}
-                      onChange={(e) =>
-                        setParcelaValores((vals) => {
-                          const next = [...vals]
-                          next[i] = e.target.value
-                          return next
-                        })
-                      }
-                      className="h-8 pl-8 text-right text-sm"
-                    />
-                  </div>
+                  <span className="font-semibold text-gray-900">
+                    {formatCurrency(p.valor)}
+                  </span>
                 </div>
               ))}
             </div>
-            {!parcelasValidas && (
-              <p className="text-xs text-red-600 mt-2">
-                Todos os valores de parcela precisam ser números maiores que zero.
-              </p>
-            )}
+            <p className="text-xs text-gray-400 mt-2">
+              Somente leitura — para ajustar valor de parcela ou vencimento,
+              edite o orçamento antes de aprovar.
+            </p>
           </div>
 
           <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">
