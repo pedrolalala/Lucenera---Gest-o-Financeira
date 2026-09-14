@@ -29,12 +29,19 @@ export function FinancialApprovalDialog({
   const [verifyText, setVerifyText] = useState('')
   const [isApproving, setIsApproving] = useState(false)
   const [itemsReviewed, setItemsReviewed] = useState(false)
+  // Achado 2026-09-14 (teste ao vivo): quando a RPC recusa a aprovação (ex.:
+  // item sem cadastro que o banner acima não pegou por causa de um estado
+  // desatualizado do orçamento em tela), o erro só aparecia como toast —
+  // fácil de perder. Agora fica fixo aqui dentro do diálogo até a pessoa
+  // fechar ou tentar de novo.
+  const [approvalError, setApprovalError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
       setVerifyText('')
       setIsApproving(false)
       setItemsReviewed(false)
+      setApprovalError(null)
     }
   }, [open])
 
@@ -59,12 +66,15 @@ export function FinancialApprovalDialog({
   const handleConfirm = async () => {
     if (!canConfirm) return
     setIsApproving(true)
+    setApprovalError(null)
     try {
       await onConfirm()
       onOpenChange(false)
     } catch (error: any) {
+      const message = error?.message || 'Erro desconhecido.'
+      setApprovalError(message)
       toast.error('Falha ao aprovar orçamento financeiramente', {
-        description: error?.message || 'Erro desconhecido.',
+        description: message,
       })
       setIsApproving(false)
     }
@@ -122,6 +132,16 @@ export function FinancialApprovalDialog({
               associados a este orçamento.
             </p>
           </div>
+
+          {approvalError && (
+            <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-300 p-3">
+              <ShieldAlert className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-800">
+                <p className="font-semibold">Não foi possível aprovar:</p>
+                <p>{approvalError}</p>
+              </div>
+            </div>
+          )}
 
           {itensSemCadastro.length > 0 && (
             <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-300 p-3">
