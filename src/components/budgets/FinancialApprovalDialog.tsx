@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -12,13 +12,30 @@ import { Input } from '@/components/ui/input'
 import { AlertTriangle, ShieldAlert, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Budget } from '@/stores/useBudgetStore'
+import {
+  calcularResumoFinanceiro,
+  FORMA_PAGAMENTO_LABELS,
+} from '@/lib/budget-financial-summary'
 
 interface FinancialApprovalDialogProps {
   budget: Budget | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: () => Promise<void>
+  // SPEC-133: quando o usuário edita o valor de alguma parcela aqui dentro,
+  // passa o array completo (mesma ordem das parcelas) — a RPC substitui a
+  // divisão igualitária padrão por esses valores. Sem edição, passa
+  // undefined e o comportamento é idêntico ao de antes desta SPEC.
+  onConfirm: (valoresParcelas?: number[]) => Promise<void>
 }
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value || 0)
+
+const formatDate = (date: Date) =>
+  date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 export function FinancialApprovalDialog({
   budget,
@@ -35,6 +52,20 @@ export function FinancialApprovalDialog({
   // fácil de perder. Agora fica fixo aqui dentro do diálogo até a pessoa
   // fechar ou tentar de novo.
   const [approvalError, setApprovalError] = useState<string | null>(null)
+  // SPEC-133: valores de parcela editáveis — strings pra deixar o campo
+  // digitável livremente, convertidos pra number só na validação/confirmação.
+  const [parcelaValores, setParcelaValores] = useState<string[]>([])
+
+  const resumo = useMemo(
+    () => (budget ? calcularResumoFinanceiro(budget) : null),
+    [budget],
+  )
+
+  useEffect(() => {
+    if (open && resumo) {
+      setParcelaValores(resumo.parcelas.map((p) => p.valor.toFixed(2)))
+    }
+  }, [open, resumo])
 
   useEffect(() => {
     if (!open) {
@@ -45,30 +76,38 @@ export function FinancialApprovalDialog({
     }
   }, [open])
 
-  if (!budget) return null
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value || 0)
+  if (!budget || !resumo) return null
 
   const itemCount = budget.itens?.length || 0
   // SPEC-135: item sem produto_id (peça sem cadastro/código interno) não
   // pode ser faturado — vira venda sem controle de estoque. A RPC também
   // bloqueia isso, mas avisar aqui evita o usuário chegar a tentar.
   const itensSemCadastro = (budget.itens || []).filter((i) => !i.produto_id)
+
+  const parcelaValoresNumeros = parcelaValores.map((v) => Number(v.replace(',', '.')))
+  const parcelasValidas =
+    parcelaValoresNumeros.length === resumo.parcelas.length &&
+    parcelaValoresNumeros.every((v) => Number.isFinite(v) && v > 0)
+
+  // SPEC-133: só manda p_valores_parcelas quando algo realmente mudou em
+  // relação ao cálculo padrão (divisão igualitária) — sem edição, a chamada
+  // segue idêntica à de antes desta SPEC (p_valores_parcelas = null).
+  const parcelasForamEditadas = resumo.parcelas.some(
+    (p, i) => p.valor.toFixed(2) !== parcelaValores[i],
+  )
+
   const canConfirm =
     verifyText.trim().toUpperCase() === 'APROVAR' &&
     itemsReviewed &&
-    itensSemCadastro.length === 0
+    itensSemCadastro.length === 0 &&
+    parcelasValidas
 
   const handleConfirm = async () => {
     if (!canConfirm) return
     setIsApproving(true)
     setApprovalError(null)
     try {
-      await onConfirm()
+      await onConfirm(parcelasForamEditadas ? parcelaValoresNumeros : undefined)
       onOpenChange(false)
     } catch (error: any) {
       const message = error?.message || 'Erro desconhecido.'
@@ -80,9 +119,13 @@ export function FinancialApprovalDialog({
     }
   }
 
+  const formaPagamentoLabel = budget.forma_pagamento
+    ? FORMA_PAGAMENTO_LABELS[budget.forma_pagamento] || budget.forma_pagamento
+    : 'Não informado'
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-700">
             <ShieldAlert className="h-5 w-5" />
@@ -101,28 +144,96 @@ export function FinancialApprovalDialog({
             </p>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>
-                <span className="text-gray-500">Valor Total:</span>
+                <span className="text-gray-500">Valor Bruto:</span>
                 <p className="font-bold text-gray-900">
-                  {formatCurrency(budget.valor_total)}
+                  {formatCurrency(resumo.valorBruto)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-500">Qtd. de Itens:</span>
                 <p className="font-bold text-gray-900">{itemCount}</p>
               </div>
+              {resumo.valorSinal > 0 && (
+                <div>
+                  <span className="text-gray-500">Sinal:</span>
+                  <p className="font-bold text-gray-900">
+                    -{formatCurrency(resumo.valorSinal)}
+                  </p>
+                </div>
+              )}
               <div>
-                <span className="text-gray-500">Cond. Pagamento:</span>
+                <span className="text-gray-500">Desconto:</span>
                 <p className="font-bold text-gray-900">
-                  {budget.condicoes_pagamento || 'Não informado'}
+                  -{formatCurrency(resumo.descontoValor)}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-500">Valor Líquido:</span>
+                <p className="font-bold text-gray-900">
+                  {formatCurrency(resumo.valorLiquido)}
+                </p>
+              </div>
+              {resumo.freteValor > 0 && (
+                <div>
+                  <span className="text-gray-500">Frete:</span>
+                  <p className="font-bold text-gray-900">
+                    {formatCurrency(resumo.freteValor)}
+                  </p>
+                </div>
+              )}
+              <div>
+                <span className="text-gray-500">Valor Total:</span>
+                <p className="font-bold text-gray-900">
+                  {formatCurrency(resumo.valorTotal)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-500">Forma Pagamento:</span>
-                <p className="font-bold text-gray-900">
-                  {budget.forma_pagamento || 'Não informado'}
-                </p>
+                <p className="font-bold text-gray-900">{formaPagamentoLabel}</p>
               </div>
             </div>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 p-3">
+            <p className="text-sm font-semibold text-gray-800 mb-2">
+              {resumo.parcelas.length}{' '}
+              {resumo.parcelas.length === 1 ? 'parcela' : 'parcelas'}
+              <span className="font-normal text-gray-500">
+                {' '}
+                — valor editável (ex.: entrada maior que o padrão)
+              </span>
+            </p>
+            <div className="space-y-1.5">
+              {resumo.parcelas.map((p, i) => (
+                <div key={p.numero} className="flex items-center gap-2 text-sm">
+                  <span className="w-6 text-gray-500 shrink-0">{p.numero}ª</span>
+                  <span className="flex-1 text-gray-600">
+                    vence {formatDate(p.dataVencimento)}
+                  </span>
+                  <div className="relative w-32 shrink-0">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                      R$
+                    </span>
+                    <Input
+                      value={parcelaValores[i] ?? ''}
+                      onChange={(e) =>
+                        setParcelaValores((vals) => {
+                          const next = [...vals]
+                          next[i] = e.target.value
+                          return next
+                        })
+                      }
+                      className="h-8 pl-8 text-right text-sm"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!parcelasValidas && (
+              <p className="text-xs text-red-600 mt-2">
+                Todos os valores de parcela precisam ser números maiores que zero.
+              </p>
+            )}
           </div>
 
           <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3">

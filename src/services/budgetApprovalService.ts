@@ -38,6 +38,10 @@ export function validateBudget(budget: any): ValidationResult {
 
 export async function approveBudgetFinancial(
   budgetId: string,
+  // SPEC-133: valores de parcela editados na confirmação (FinancialApprovalDialog)
+  // — quando informado, substitui a divisão igualitária padrão da RPC, sem
+  // recalcular as demais parcelas nem exigir que a soma bata com valor_total.
+  valoresParcelas?: number[],
 ): Promise<ApprovalResult> {
   if (!isValidUUID(budgetId)) {
     throw new Error(
@@ -47,6 +51,7 @@ export async function approveBudgetFinancial(
 
   const { data, error } = await supabase.rpc('aprovar_orcamento_financeiro', {
     p_orcamento_id: budgetId,
+    p_valores_parcelas: valoresParcelas && valoresParcelas.length > 0 ? valoresParcelas : null,
   })
 
   if (error) {
