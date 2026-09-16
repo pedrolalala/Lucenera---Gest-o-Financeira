@@ -37,6 +37,7 @@ export interface OrcamentoDetail {
   id: string
   numero: string | null
   valor_total: number | null
+  natureza_operacao: string | null
   status: string | null
   condicoes_pagamento: string | null
   forma_pagamento: string | null
@@ -149,6 +150,7 @@ export async function fetchProjectFinancialDetails(
       id,
       numero,
       valor_total,
+      natureza_operacao,
       status,
       condicoes_pagamento,
       forma_pagamento,

@@ -29,6 +29,7 @@ import {
   buildClientApprovalLink,
   getStatusLabel,
   getStatusBadgeClass,
+  getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -155,6 +156,48 @@ function orcamentoArquitetosParaPicker(budget: Budget): ArquitetoSplit[] {
     ]
   }
   return []
+}
+
+// Achado 2026-09-14 (teste ao vivo): o RPC replace_orcamento_itens (SPEC-135)
+// já não reinicia o ciclo de aprovação do cliente quando os itens salvos são
+// idênticos aos já existentes — mas o aviso window.confirm() abaixo disparava
+// incondicionalmente em QUALQUER salvamento com status 'Aprovação
+// Financeira', mesmo editando só campos de "Pagamento e Totais" (forma de
+// pagamento, parcelas, frete, perfil, desconto, sinal, observações) que nunca
+// tocam orcamento_itens. Usuário pediu explicitamente: esses campos já foram
+// negociados com o cliente antes da aprovação financeira, não devem nem
+// avisar sobre reiniciar o ciclo. Esta comparação espelha (aproximadamente,
+// só como gate de UX — a fonte de verdade continua sendo o SQL) as mesmas
+// colunas que replace_orcamento_itens compara no banco.
+type ItemComparavel = {
+  produto_id?: string | null
+  descricao?: string | null
+  custom_id?: string | null
+  quantidade: number
+  preco_unitario: number
+  desconto: number
+}
+
+function serializarItemParaComparacao(item: ItemComparavel) {
+  return JSON.stringify({
+    produto_id: item.produto_id || null,
+    descricao: item.descricao?.trim() || null,
+    custom_id: item.custom_id?.trim() || null,
+    quantidade: Number(item.quantidade) || 0,
+    preco_unitario: Number(item.preco_unitario) || 0,
+    desconto: Number(item.desconto) || 0,
+  })
+}
+
+function itensRealmenteMudaram(
+  itensOriginais: ItemComparavel[] | undefined,
+  itensAtuais: ItemComparavel[],
+): boolean {
+  const originaisSerializados = (itensOriginais || [])
+    .map(serializarItemParaComparacao)
+    .sort()
+  const atuaisSerializados = itensAtuais.map(serializarItemParaComparacao).sort()
+  return JSON.stringify(originaisSerializados) !== JSON.stringify(atuaisSerializados)
 }
 
 const formSchema = z
@@ -441,6 +484,16 @@ export default function BudgetFormPage() {
   // validade manualmente nesta sessão (o botão "Usar padrão" reseta essa
   // trava e recalcula de novo).
   const validadeEditadaManualmenteRef = useRef(false)
+  // Achado 2026-08-20: handleProjectSelect é assíncrono com vários awaits
+  // em sequência (busca projeto, cliente, empresa, responsável) — se ele
+  // for disparado de novo antes do primeiro terminar (ex.: reabrir/rebuscar
+  // o combobox de Código do Projeto sem querer), a chamada mais antiga pode
+  // resolver DEPOIS da mais nova e sobrescrever arquiteto/empresa/cliente
+  // com o resultado errado, silenciosamente. Mesma classe de bug já
+  // documentada no defaultValues de `subgrupo` acima, agora reaparecendo
+  // pra `arquitetos`. Guard: só a chamada mais recente pode aplicar seus
+  // resultados no form.
+  const projectSelectSeqRef = useRef(0)
   const dataEmissaoWatch = form.watch('data_emissao')
   useEffect(() => {
     if (validadeEditadaManualmenteRef.current) return
@@ -448,12 +501,22 @@ export default function BudgetFormPage() {
     form.setValue('validade', addDays(dataEmissaoWatch, 10))
   }, [dataEmissaoWatch, form])
 
-  const PRIORITY_SELLERS = [
+  // Pedido do usuário (2026-09-14): campo Vendedor do Orçamento deve listar
+  // só estas 5 pessoas, nesta ordem — não é mais um "priorizar no topo",
+  // é uma lista fechada. Investigação achou 2 problemas de dado antes de
+  // poder filtrar por nome exato (migration 20260914_140):
+  // "Marina Pousa Barbara Gregorio" era 1 única funcionária com o nome
+  // errado (confirmado com o usuário — nunca existiu "Barbara Gregorio"
+  // separada neste banco, o vínculo de login dela é só "Marina"),
+  // corrigido pra "Marina Pousa"; e Filippo Giorgi (dono da Lucenera) não
+  // tinha nenhum cadastro em funcionarios, criado vinculado ao usuário CRM
+  // dele.
+  const VENDEDORES_PERMITIDOS = [
+    'Thairine Cristina da Silva',
+    'Thais Gomes Pegrucci Favaron',
     'Marina Pousa',
-    'Barbara Gregorio',
-    'Thairine Cristina',
-    'Thais Gomes',
-    'Teresinha do Amaral',
+    'Vinicius Bortolin Costa',
+    'Filippo Giorgi',
   ].map((n) => n.toLowerCase())
 
   // SPEC-083: nome de exibição por produto pro painel de Gerenciamento
@@ -466,19 +529,13 @@ export default function BudgetFormPage() {
     return map
   }, [produtos])
 
-  const sortedVendedores = [...vendedores].sort((a, b) => {
-    const idxA = PRIORITY_SELLERS.findIndex((n) =>
-      a.nome.toLowerCase().includes(n),
+  const sortedVendedores = vendedores
+    .filter((v) => VENDEDORES_PERMITIDOS.includes(v.nome.trim().toLowerCase()))
+    .sort(
+      (a, b) =>
+        VENDEDORES_PERMITIDOS.indexOf(a.nome.trim().toLowerCase()) -
+        VENDEDORES_PERMITIDOS.indexOf(b.nome.trim().toLowerCase()),
     )
-    const idxB = PRIORITY_SELLERS.findIndex((n) =>
-      b.nome.toLowerCase().includes(n),
-    )
-
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB
-    if (idxA !== -1) return -1
-    if (idxB !== -1) return 1
-    return a.nome.localeCompare(b.nome)
-  })
 
   const getProductInfo = (
     produtoId: string | null | undefined,
@@ -764,6 +821,8 @@ export default function BudgetFormPage() {
   }, [customIdsKey])
 
   const handleProjectSelect = async (codigo: string) => {
+    const mySeq = ++projectSelectSeqRef.current
+
     if (!codigo) {
       setProjectDetails(null)
       return
@@ -775,15 +834,16 @@ export default function BudgetFormPage() {
       const { data: projeto, error } = await supabase
         .from('projetos')
         .select(
-          '*, projeto_arquitetos(percentual, arquiteto:arquiteto_id(id, nome))',
+          '*, projeto_arquitetos(percentual, arquiteto:arquiteto_id(id, nome)), arquiteto:arquiteto_id(id, nome)',
         )
         .eq('codigo', codigo)
         .single()
 
       if (error || !projeto) {
-        setProjectDetails(null)
+        if (mySeq === projectSelectSeqRef.current) setProjectDetails(null)
         return
       }
+      if (mySeq !== projectSelectSeqRef.current) return
 
       // SPEC-061: "Não encontrado" (busca falhou) é diferente de "projeto
       // nunca teve esse vínculo na origem" — só o segundo caso é normal e
@@ -838,6 +898,13 @@ export default function BudgetFormPage() {
         if (func) responsavelSisNome = func.nome
       }
 
+      // Ponto de não-retorno: a partir daqui o resultado é aplicado no
+      // form (empresa/cliente/arquiteto/vendedor). Se uma chamada mais
+      // nova de handleProjectSelect já começou nesse meio-tempo, esta aqui
+      // está obsoleta -- abandona sem tocar em nada, pra não sobrescrever
+      // o que a chamada nova já aplicou ou vai aplicar.
+      if (mySeq !== projectSelectSeqRef.current) return
+
       setProjectDetails({
         id: projeto.id,
         nome: projeto.nome,
@@ -880,6 +947,44 @@ export default function BudgetFormPage() {
           shouldValidate: true,
           shouldDirty: true,
         })
+        // Achado 2026-08-24: o quadro-resumo "Arquiteto" lia só o texto
+        // legado `projeto['Nome Arquiteto']` (quase sempre vazio em
+        // projetos criados pelo CRM depois da SPEC-077) — o campo real do
+        // formulário já vinha certo, só o resumo mostrava "Não preenchido"
+        // por engano. Sincroniza o resumo com o que foi de fato preenchido.
+        if (splits.length > 0) {
+          setProjectDetails((prev) =>
+            prev
+              ? { ...prev, arquiteto_nome: splits.map((s) => s.nome).join(', ') }
+              : prev,
+          )
+        }
+      } else if (projeto.arquiteto) {
+        // Achado 2026-08-20: projetos criados pelo modal "Novo Projeto"
+        // deste próprio app (ProjectCreateModal.tsx) só gravavam o
+        // arquiteto_id singular (legado), nunca uma linha em
+        // projeto_arquitetos — o projeto ficava sem arquiteto autopreenchido
+        // aqui mesmo com o vínculo salvo. ProjectCreateModal já foi corrigido
+        // pra gravar em projeto_arquitetos também; este fallback cobre os
+        // projetos que ficaram com esse gap (e qualquer outra origem futura
+        // que só grave o campo singular).
+        form.setValue(
+          'arquitetos',
+          [{ arquiteto_id: (projeto.arquiteto as any).id, nome: (projeto.arquiteto as any).nome, percentual: 100 }],
+          {
+            shouldValidate: true,
+            shouldDirty: true,
+          },
+        )
+        setProjectDetails((prev) =>
+          prev
+            ? {
+                ...prev,
+                arquitetoAutoLinked: true,
+                arquiteto_nome: (projeto.arquiteto as any).nome,
+              }
+            : prev,
+        )
       } else if (projeto['Nome Arquiteto']) {
         // SPEC-061: fallback de autopreenchimento por nome — quando o
         // projeto só tem o texto legado "Nome Arquiteto" (sem vínculo em
@@ -894,6 +999,7 @@ export default function BudgetFormPage() {
             .select('id, nome')
             .eq('tipo', 'arquiteto')
             .ilike('nome', nomeArquiteto)
+          if (mySeq !== projectSelectSeqRef.current) return
           if (arqMatches && arqMatches.length === 1) {
             form.setValue(
               'arquitetos',
@@ -910,7 +1016,13 @@ export default function BudgetFormPage() {
               },
             )
             setProjectDetails((prev) =>
-              prev ? { ...prev, arquitetoAutoLinked: true } : prev,
+              prev
+                ? {
+                    ...prev,
+                    arquitetoAutoLinked: true,
+                    arquiteto_nome: arqMatches[0].nome,
+                  }
+                : prev,
             )
           }
         }
@@ -957,6 +1069,7 @@ export default function BudgetFormPage() {
           }
         }
 
+        if (mySeq !== projectSelectSeqRef.current) return
         form.setValue('vendedor_id', targetVendedorId || 'none', {
           shouldValidate: true,
           shouldDirty: true,
@@ -1012,6 +1125,21 @@ export default function BudgetFormPage() {
     preencherProjetoPorId()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing, searchParams])
+
+  // Achado 2026-08-20: quando a validação do zod barra o submit (campo
+  // obrigatório vazio, ex. Data de Início do Pagamento ou Frete), o
+  // react-hook-form só marca o campo em vermelho -- sem nenhum toast,
+  // nenhuma requisição disparada. Usuário não tem como saber que nada foi
+  // salvo. `handleExplicitos` (Enviar para o Cliente etc.) já avisa; o
+  // submit genérico (Criar/Salvar) não tinha esse mesmo tratamento.
+  function onInvalid(errors: any) {
+    const primeiraChave = Object.keys(errors)[0]
+    const mensagem = primeiraChave ? errors[primeiraChave]?.message : null
+    toast.error('Corrija os campos destacados antes de salvar.', {
+      description:
+        typeof mensagem === 'string' ? mensagem : undefined,
+    })
+  }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
@@ -1188,16 +1316,24 @@ export default function BudgetFormPage() {
 
       // SPEC-111: orçamento em 'Aprovação Financeira' tem um trigger no banco
       // (handle_orcamento_item_change_reset) que reinicia o ciclo de
-      // aprovação do cliente sempre que os itens são salvos aqui — antes
-      // isso acontecia silenciosamente, sem aviso, e foi confundido com bug
-      // numa reunião ao vivo. Não muda a regra (já validada como correta
-      // pelo próprio usuário) — só avisa antes de salvar. 'Orçamento
-      // Aprovado' não precisa desse aviso porque editandoAprovado já pula os
-      // itens inteiramente (skipItens=true), então o trigger nunca dispara
-      // por aqui nesse status.
-      if (
+      // aprovação do cliente quando os itens salvos mudam de verdade. SPEC-135
+      // corrigiu o falso-positivo no banco (replace_orcamento_itens vira no-op
+      // quando os itens são idênticos aos já salvos). Achado 2026-09-14: o
+      // aviso abaixo continuava disparando incondicionalmente mesmo assim —
+      // corrigido para só avisar quando os itens realmente mudam (mesma
+      // comparação, em espírito, do banco). Editar só "Pagamento e Totais"
+      // (forma de pagamento, parcelas, frete, perfil, desconto, sinal,
+      // observações) não passa mais por aqui. 'Orçamento Aprovado' não
+      // precisa desse aviso porque editandoAprovado já pula os itens
+      // inteiramente (skipItens=true), então o trigger nunca dispara por
+      // aqui nesse status.
+      const itensMudaram =
         isEditing &&
         budgetToEdit?.status === 'Aprovação Financeira' &&
+        itensRealmenteMudaram(budgetToEdit.itens, values.itens)
+
+      if (
+        itensMudaram &&
         !window.confirm(
           'Esta alteração vai reiniciar o ciclo de aprovação — o orçamento volta para "Enviado ao Cliente" e o cliente precisará aprovar novamente. Confirmar?',
         )
@@ -1215,7 +1351,7 @@ export default function BudgetFormPage() {
           editandoAprovado,
         )
         toast.success(
-          budgetToEdit.status === 'Aprovação Financeira'
+          itensMudaram
             ? 'Orçamento atualizado — ciclo de aprovação do cliente reiniciado.'
             : 'Orçamento atualizado com sucesso',
         )
@@ -1776,6 +1912,31 @@ export default function BudgetFormPage() {
     toast.success('XML exportado com sucesso.')
   }
 
+  // Achado 2026-09-14 (teste ao vivo): abrir o diálogo de Aprovação
+  // Financeira usa `budgetToEdit.itens`, que só é carregado uma vez quando a
+  // página abre — se um item sem produto cadastrado foi adicionado nesta
+  // mesma sessão de edição, o aviso/bloqueio do diálogo (que depende desse
+  // array) podia não pegar o item novo. Busca os itens direto do banco antes
+  // de abrir, pra garantir que o aviso reflita o estado real salvo.
+  const handleAbrirAprovacaoFinanceira = async () => {
+    if (!budgetToEdit) return
+    try {
+      const { data, error } = await supabase
+        .from('orcamento_itens')
+        .select(
+          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, produto:produtos(codigo_produto, referencia, nome, sku)',
+        )
+        .eq('orcamento_id', budgetToEdit.id)
+      if (!error && data) {
+        setBudgetToEdit((prev) => (prev ? { ...prev, itens: data as any } : prev))
+      }
+    } catch {
+      // Não bloqueia a abertura do diálogo por falha na atualização — só
+      // usa os itens já carregados como fallback.
+    }
+    setShowApprovalDialog(true)
+  }
+
   const handleFinancialApproval = async () => {
     if (!budgetToEdit) return
     try {
@@ -1826,6 +1987,11 @@ export default function BudgetFormPage() {
               {isEditing
                 ? `Editando orçamento #${budgetToEdit?.numero || budgetToEdit?.id.split('-')[0].toUpperCase()}`
                 : 'Preencha os detalhes para criar um novo orçamento'}
+              {/* SPEC-136 (pendência fechada 2026-09-14, a pedido do
+                  usuário): número da venda, quando já aprovado. */}
+              {isEditing && budgetToEdit?.numero_venda && (
+                <span className="text-gray-400"> — Venda: {budgetToEdit.numero_venda}</span>
+              )}
             </p>
           </div>
         </div>
@@ -1836,7 +2002,7 @@ export default function BudgetFormPage() {
               <Button
                 variant="default"
                 className="bg-red-600 hover:bg-red-700 text-white"
-                onClick={() => setShowApprovalDialog(true)}
+                onClick={handleAbrirAprovacaoFinanceira}
               >
                 <ShieldAlert className="w-4 h-4 mr-2" />
                 Aprovar Financeiro
@@ -1868,7 +2034,7 @@ export default function BudgetFormPage() {
           <Button variant="outline" asChild>
             <Link to="/budgets">Cancelar</Link>
           </Button>
-          <Button onClick={form.handleSubmit(onSubmit)} disabled={isSubmitting}>
+          <Button onClick={form.handleSubmit(onSubmit, onInvalid)} disabled={isSubmitting}>
             {isSubmitting ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
@@ -1880,7 +2046,7 @@ export default function BudgetFormPage() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Informações Gerais</CardTitle>
@@ -3063,7 +3229,9 @@ export default function BudgetFormPage() {
                         {new Intl.NumberFormat('pt-BR', {
                           style: 'currency',
                           currency: 'BRL',
-                        }).format(valorSubtotal)}
+                        }).format(
+                          getDisplayValorTotal(valorSubtotal, naturezaOperacao),
+                        )}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-sm text-gray-600">
@@ -3117,7 +3285,9 @@ export default function BudgetFormPage() {
                         {new Intl.NumberFormat('pt-BR', {
                           style: 'currency',
                           currency: 'BRL',
-                        }).format(valorTotal)}
+                        }).format(
+                          getDisplayValorTotal(valorTotal, naturezaOperacao),
+                        )}
                       </span>
                     </div>
                   </div>

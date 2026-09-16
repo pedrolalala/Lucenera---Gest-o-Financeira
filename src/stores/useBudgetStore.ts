@@ -51,6 +51,10 @@ export interface BudgetItem {
 export interface Budget {
   id: string
   numero: string | null
+  /** SPEC-136: número da venda (VENDA-0001), distinto do número do orçamento
+   * de origem. Gerado só na aprovação financeira (ramo venda); null antes
+   * disso e em orçamentos aprovados antes desta SPEC (sem backfill). */
+  numero_venda?: string | null
   empresa_id: string
   cliente_id: string
   projeto_id: string
@@ -71,6 +75,10 @@ export interface Budget {
   frete_tipo: string | null
   frete_valor: number | null
   desconto_global: number | null
+  /** SPEC-068/SPEC-133: 'percentual' (padrão) ou 'valor' — como interpretar desconto_global. */
+  desconto_tipo?: string | null
+  /** SPEC-068/SPEC-133: valor fixo em R$, deduzido do subtotal antes do desconto. */
+  valor_sinal?: number | null
   observacoes: string | null
   /** SPEC-064: rótulo Ribeirão/São Paulo, só visualização. */
   perfil?: string | null
@@ -107,6 +115,8 @@ export interface Budget {
 export interface ApprovalResult {
   orcamento_id: string
   status: string
+  /** SPEC-136: presente só no ramo venda (aprovar_orcamento_financeiro). */
+  numero_venda?: string | null
   projeto_id: string
   projeto_itens_criados: number
   parcelas_criadas: number

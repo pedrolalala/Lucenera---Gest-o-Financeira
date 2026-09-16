@@ -37,6 +37,7 @@ import {
   TEAM_APPROVAL_STATUS,
   getStatusBadgeClass,
   getStatusLabel,
+  getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { cn } from '@/lib/utils'
 
@@ -324,7 +325,7 @@ export function TeamApprovalTab() {
                       {budget.arquiteto?.nome || '-'}
                     </TableCell>
                     <TableCell className="text-right font-bold text-gray-900">
-                      {BRL.format(budget.valor_total || 0)}
+                      {BRL.format(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

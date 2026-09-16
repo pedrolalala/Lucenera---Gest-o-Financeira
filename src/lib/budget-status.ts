@@ -88,3 +88,20 @@ export function isTeamApprovalStatus(
 export function isDraftStatus(status: string | null | undefined): boolean {
   return status === 'rascunho'
 }
+
+/**
+ * `orcamentos.valor_total` é sempre armazenado positivo no banco — a RPC de
+ * aprovação financeira (`aprovar_orcamento_financeiro`) exige `> 0` mesmo
+ * para devolução, e só ela aplica o sinal negativo ao criar a parcela de
+ * crédito (`projeto_parcelas.valor = -v_valor_parcela`). Pra deixar isso
+ * visualmente claro em qualquer tela/documento sem mexer no dado salvo, todo
+ * lugar que exibe o total de um orçamento de devolução deve usar este
+ * helper em vez de `valor_total` cru.
+ */
+export function getDisplayValorTotal(
+  valorTotal: number | null | undefined,
+  naturezaOperacao: string | null | undefined,
+): number {
+  const valor = Number(valorTotal) || 0
+  return naturezaOperacao === 'devolucao' ? -Math.abs(valor) : valor
+}

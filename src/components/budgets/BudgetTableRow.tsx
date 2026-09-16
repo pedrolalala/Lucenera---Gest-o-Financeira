@@ -55,7 +55,9 @@ import {
   buildClientApprovalLink,
   getStatusLabel,
   getStatusBadgeClass,
+  getDisplayValorTotal,
 } from '@/lib/budget-status'
+import { sendInitialBudgetPdfAndEmail } from '@/lib/envio-inicial-cliente'
 
 interface BudgetTableRowProps {
   budgetId: string
@@ -107,7 +109,14 @@ export function BudgetTableRow({
   const needsFinancialReview =
     budget.requer_revisao_financeira || hasUnregisteredItems
 
+  // SPEC-067: só o envio INICIAL (status ainda "rascunho" no momento do
+  // clique) deve baixar o PDF e abrir o `mailto:` — reenvio (regenerar
+  // token a partir de "enviado_cliente"/"recusado_cliente") continua só
+  // com RPC + copiar link, como sempre foi (ver "Distinção obrigatória de
+  // escopo" em envio-inicial-cliente.ts). Guarda o status ANTES da RPC,
+  // já que ela muda `budget.status` para "enviado_cliente" ao terminar.
   const handleEnviarCliente = async () => {
+    const isEnvioInicial = normalizedStatus === 'rascunho'
     try {
       setIsSending(true)
       const result = await enviarOrcamentoCliente(budgetId)
@@ -120,6 +129,15 @@ export function BudgetTableRow({
           duration: 8000,
         },
       )
+      if (isEnvioInicial) {
+        try {
+          await sendInitialBudgetPdfAndEmail(budget, result.token)
+        } catch (pdfError: any) {
+          toast.error('Falha ao gerar o PDF', {
+            description: pdfError?.message,
+          })
+        }
+      }
     } catch (error: any) {
       toast.error('Falha ao enviar orçamento', { description: error?.message })
     } finally {
@@ -333,6 +351,13 @@ export function BudgetTableRow({
               />
             )}
           </div>
+          {/* SPEC-136 (pendência fechada 2026-09-14, a pedido do usuário):
+              número da venda, distinto do orçamento/projeto acima. */}
+          {budget.numero_venda && (
+            <div className="text-xs text-gray-400 mt-0.5">
+              Venda: {budget.numero_venda}
+            </div>
+          )}
         </TableCell>
         <TableCell className="text-gray-700">
           {budget.cliente?.razao_social || budget.cliente?.nome || '-'}
@@ -367,7 +392,7 @@ export function BudgetTableRow({
           </div>
         </TableCell>
         <TableCell className="text-right font-bold text-gray-900">
-          {fmt(budget.valor_total)}
+          {fmt(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
         </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">

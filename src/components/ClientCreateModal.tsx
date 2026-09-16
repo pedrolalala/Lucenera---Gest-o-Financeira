@@ -114,6 +114,10 @@ const schema = z.object({
   observacoes: z.string().optional(),
   vendedor_id: z.string().optional(),
   vendedor_padrao_id: z.string().optional(),
+  // SPEC-119: capturado automaticamente na busca de CEP do endereço
+  // principal (ViaCEP já devolve o Código IBGE) — não é campo editável
+  // na tela, só guardado pra emissão de nota fiscal.
+  ibge_cidade: z.string().optional(),
 })
 
 function formatCpfCnpj(value: string, tipo: 'fisica' | 'juridica') {
@@ -199,6 +203,7 @@ export function ClientCreateModal({
       observacoes: '',
       vendedor_id: '',
       vendedor_padrao_id: '',
+      ibge_cidade: '',
     },
   })
 
@@ -246,6 +251,13 @@ export function ClientCreateModal({
         form.setValue(keys.bairro, endereco.bairro, { shouldDirty: true })
         form.setValue(keys.cidade, endereco.cidade, { shouldDirty: true })
         form.setValue(keys.estado, endereco.uf, { shouldDirty: true })
+        // SPEC-119: só o bloco de endereço principal grava o Código IBGE
+        // (contatos.ibge_cidade não é dividido em principal/entrega/
+        // cobrança como os outros campos) — é o endereço usado pra nota
+        // fiscal.
+        if (keys.cidade === 'cidade' && endereco.ibge) {
+          form.setValue('ibge_cidade', endereco.ibge, { shouldDirty: true })
+        }
         numeroInputRef.current?.focus()
       },
       (message) => toast.warning('CEP', { description: message }),
@@ -387,6 +399,7 @@ export function ClientCreateModal({
         bairro: values.bairro || null,
         cidade: values.cidade || null,
         estado: values.estado?.toUpperCase() || null,
+        ibge_cidade: values.ibge_cidade || null,
         cep_entrega: values.cep_entrega || null,
         endereco_entrega: values.endereco_entrega || null,
         numero_entrega: values.numero_entrega || null,

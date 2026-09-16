@@ -17,7 +17,11 @@ import {
 import { Budget } from '@/stores/useBudgetStore'
 import { isValidUUID } from '@/lib/uuid'
 import { validateBudget } from '@/services/budgetApprovalService'
-import { getStatusLabel, getStatusBadgeClass } from '@/lib/budget-status'
+import {
+  getStatusLabel,
+  getStatusBadgeClass,
+  getDisplayValorTotal,
+} from '@/lib/budget-status'
 import { cn } from '@/lib/utils'
 
 interface FinancialApprovalRowProps {
@@ -105,7 +109,7 @@ export function FinancialApprovalRow({
         )}
       </TableCell>
       <TableCell className="text-right font-bold text-gray-900">
-        {fmt(budget.valor_total)}
+        {fmt(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
       </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1">

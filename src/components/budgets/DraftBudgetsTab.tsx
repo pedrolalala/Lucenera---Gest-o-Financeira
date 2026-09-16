@@ -21,6 +21,7 @@ import {
   getStatusBadgeClass,
   buildClientApprovalLink,
   isDraftStatus,
+  getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { sendInitialBudgetPdfAndEmail } from '@/lib/envio-inicial-cliente'
 import { cn } from '@/lib/utils'
@@ -207,7 +208,7 @@ export function DraftBudgetsTab() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-bold text-gray-900">
-                      {fmt(budget.valor_total)}
+                      {fmt(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

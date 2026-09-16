@@ -37,6 +37,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/use-auth'
+import { supabase } from '@/lib/supabase/client'
 import useBudgetStore, { type Budget } from '@/stores/useBudgetStore'
 import {
   approveBudgetFinancial,
@@ -49,6 +50,7 @@ import {
   FINANCIAL_APPROVAL_STATUS,
   getStatusBadgeClass,
   getStatusLabel,
+  getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { cn } from '@/lib/utils'
 
@@ -138,9 +140,29 @@ export function FinancialApprovalTab() {
     navigate(`/budgets/${budget.id}`)
   }
 
-  const handleApproveRequest = (budget: Budget) => {
+  // Achado 2026-09-14 (teste ao vivo): o `budget` desta lista pode estar
+  // desatualizado (ex.: item sem produto cadastrado adicionado depois do
+  // último fetchBudgets) — busca os itens direto do banco antes de abrir o
+  // diálogo, pra garantir que o aviso de "peça sem cadastro" reflita o
+  // estado real salvo, não um cache velho.
+  const handleApproveRequest = async (budget: Budget) => {
     setSelectedBudget(budget)
     setDialogOpen(true)
+    try {
+      const { data, error } = await supabase
+        .from('orcamento_itens')
+        .select(
+          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, produto:produtos(codigo_produto, referencia, nome, sku)',
+        )
+        .eq('orcamento_id', budget.id)
+      if (!error && data) {
+        setSelectedBudget((prev) =>
+          prev && prev.id === budget.id ? { ...prev, itens: data as any } : prev,
+        )
+      }
+    } catch {
+      // Fallback silencioso: mantém os itens já carregados na lista.
+    }
   }
 
   const handleConfirmApproval = async () => {
@@ -351,7 +373,7 @@ export function FinancialApprovalTab() {
                         )}
                       </TableCell>
                       <TableCell className="text-right font-bold text-gray-900">
-                        {BRL.format(budget.valor_total || 0)}
+                        {BRL.format(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">

@@ -165,6 +165,14 @@ RPCs/funções relevantes:
 - **Fix**: `aprovar_orcamento_financeiro` agora bloqueia (RAISE EXCEPTION) a aprovação do ramo venda quando existe item com `produto_id IS NULL` — a devolução não é afetada (já tem sua própria validação de `projeto_item_origem_id`). Frontend (`FinancialApprovalDialog.tsx`) replica esse aviso antes de tentar (banner + checkbox/input desabilitados) e agora exibe via toast qualquer erro retornado pela RPC (antes o `catch` do dialog engolia o erro silenciosamente).
 - Migration: `supabase/db/migrations/20260911_135_orcamento_aprovacao_financeira_fixes/001_fix_reset_falso_positivo_e_bloqueio_peca_sem_cadastro.sql` (repositório central).
 
+## SPEC-136 — Número da venda (`orcamentos.numero_venda`), distinto do número do orçamento (2026-09-11)
+
+- Nova coluna `orcamentos.numero_venda text` (nullable, sem backfill — orçamentos aprovados antes desta SPEC ficam com `NULL`).
+- Gerado dentro de `aprovar_orcamento_financeiro`, só no ramo venda (natureza_operacao != 'devolucao'), no mesmo instante em que o status vira `'Orçamento Aprovado'`. Sequência global, formato `'VENDA-0001'`, mesmo padrão de `set_orcamento_numero()` (`MAX(...)+1` sobre o prefixo). Devolução não gera número de venda — é crédito sobre venda já existente, não uma venda nova.
+- **Não é a mesma coisa que a tabela legada `public.vendas`** (numeração antiga do Connect — `cod_venda`/`num_nota`). Essa tabela existe, tem `historico_legado`, e `vw_financeiro_projetos`/`vw_projetos_pipeline`/`vw_projetos_resumo` já somam valores a partir dela — mas `aprovar_orcamento_financeiro` nunca insere nada ali, então esses 3 dashboards provavelmente não recebem nenhuma venda nova desde que o sistema de Orçamentos entrou em produção. Decisão explícita do usuário: não mexer nisso agora, `numero_venda` é um campo novo e independente. Gap documentado, não corrigido por esta SPEC.
+- `vw_estoque_saldos_projeto_item` (usada pelo sistema de Separação) ganhou a coluna `venda_numero` (= `orcamentos.numero_venda`), ao lado de `orcamento_numero` que já existia.
+- Migration: `supabase/db/migrations/20260911_136_orcamento_numero_venda/001_numero_venda.sql` (repositório central) — é superset da migration da SPEC-135 pra essa mesma função (pode ser aplicada sozinha).
+
 ## SPEC-007 — SSO entre sistemas
 
 - Este app é origem ao abrir o Financeiro pelo modal pós-aprovação e destino quando o CRM abre `Gerar Orçamento`.

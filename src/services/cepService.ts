@@ -4,6 +4,11 @@ export interface EnderecoCep {
   bairro: string
   cidade: string
   uf: string
+  // SPEC-119: ViaCEP já devolve o Código IBGE do município na mesma
+  // resposta -- sem ele, a emissão de nota fiscal falha (achado ao vivo
+  // na reunião 21/08). BrasilAPI v1 (fallback) não traz esse campo, então
+  // fica undefined quando o resultado vem do fallback.
+  ibge?: string
 }
 
 const cache = new Map<string, EnderecoCep | null>()
@@ -19,6 +24,7 @@ async function buscarViaCep(digits: string): Promise<EnderecoCep | null> {
     bairro: data.bairro || '',
     cidade: data.localidade || '',
     uf: (data.uf || '').toUpperCase(),
+    ibge: data.ibge || undefined,
   }
 }
 

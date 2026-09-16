@@ -133,23 +133,47 @@ export function ProjectCreateModal({
         (f) => f.id === val.responsavel_funcionario_id,
       )
 
-      const { error } = await supabase.from('projetos').insert({
-        codigo: val.codigo,
-        nome: val.nome,
-        nivel_estrategico: val.nivel_estrategico || null,
-        status: val.status,
-        cidade: val.cidade || null,
-        estado: val.estado || null,
-        cliente_id: val.cliente_id || null,
-        arquiteto_id: val.arquiteto_id || null,
-        responsavel_funcionario_id: val.responsavel_funcionario_id || null,
-        responsavel_nome: funcionarioSelecionado?.nome || null,
-        responsavel_obra_id: val.responsavel_obra_id || null,
-        area_do_projeto: val.tipo_projeto ? { tipo: val.tipo_projeto } : null,
-        historico: [],
-      })
+      const { data: novo, error } = await supabase
+        .from('projetos')
+        .insert({
+          codigo: val.codigo,
+          nome: val.nome,
+          nivel_estrategico: val.nivel_estrategico || null,
+          status: val.status,
+          cidade: val.cidade || null,
+          estado: val.estado || null,
+          cliente_id: val.cliente_id || null,
+          arquiteto_id: val.arquiteto_id || null,
+          responsavel_funcionario_id: val.responsavel_funcionario_id || null,
+          responsavel_nome: funcionarioSelecionado?.nome || null,
+          responsavel_obra_id: val.responsavel_obra_id || null,
+          area_do_projeto: val.tipo_projeto ? { tipo: val.tipo_projeto } : null,
+          historico: [],
+        })
+        .select('id')
+        .single()
 
       if (error) throw error
+
+      // Este modal só grava o arquiteto_id singular (legado) acima -- sem
+      // isso, o projeto nunca ganha uma linha em projeto_arquitetos (fonte
+      // real desde SPEC-077) e BudgetFormPage.tsx não consegue
+      // autopreencher o arquiteto ao selecionar este projeto num orçamento.
+      if (val.arquiteto_id) {
+        const { error: arqError } = await (supabase as any).rpc(
+          'replace_projeto_arquitetos',
+          {
+            p_projeto_id: novo.id,
+            p_arquitetos: [{ arquiteto_id: val.arquiteto_id, percentual: 100 }],
+          },
+        )
+        if (arqError) {
+          toast.error(
+            'Projeto criado, mas houve erro ao salvar o arquiteto: ' + arqError.message,
+          )
+        }
+      }
+
       toast.success('Projeto criado com sucesso!')
       onSuccess({ codigo: val.codigo })
       onOpenChange(false)

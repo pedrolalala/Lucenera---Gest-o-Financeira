@@ -12,6 +12,7 @@ import { ProductSelectButton } from '@/components/ProductSelectButton'
 import { Trash2, PackageSearch, PackagePlus } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
+import { getDisplayValorTotal } from '@/lib/budget-status'
 
 // SPEC-032: rótulos por campo só aparecem em telas < lg — em lg: e acima o
 // cabeçalho único (BudgetItemsHeader.tsx) já mostra o nome da coluna uma
@@ -65,6 +66,8 @@ export function BudgetItemCard({
     name: `itens.${index}.preco_unitario`,
   })
   const desconto = useWatch({ control, name: `itens.${index}.desconto` })
+  const naturezaOperacao =
+    useWatch({ control, name: 'natureza_operacao' }) || 'venda'
   const prevCustomId =
     useWatch({
       control,
@@ -356,7 +359,7 @@ export function BudgetItemCard({
               Subtotal
             </span>
             <span className="text-sm font-semibold text-gray-900 bg-gray-50 px-2 py-1.5 rounded-md text-right">
-              {BRL.format(itemSubtotal)}
+              {BRL.format(getDisplayValorTotal(itemSubtotal, naturezaOperacao))}
             </span>
           </div>
 

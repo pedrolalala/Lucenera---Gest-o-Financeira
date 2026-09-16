@@ -50,6 +50,11 @@ export function FinanceResultModal({
             <span className="font-medium">Orçamento:</span>{' '}
             {budget.numero || budget.id.split('-')[0].toUpperCase()}
           </p>
+          {result?.numero_venda && (
+            <p>
+              <span className="font-medium">Venda:</span> {result.numero_venda}
+            </p>
+          )}
           <p>
             <span className="font-medium">Itens criados:</span>{' '}
             {result?.projeto_itens_criados ?? 0}

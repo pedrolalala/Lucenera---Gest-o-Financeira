@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { OrcamentoDetail } from '@/services/projectFinancialApprovalService'
+import { getDisplayValorTotal } from '@/lib/budget-status'
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', {
@@ -53,7 +54,7 @@ export function ProjectOrcamentoList({
               )}
             </div>
             <span className="font-bold text-gray-900">
-              {fmt(orc.valor_total || 0)}
+              {fmt(getDisplayValorTotal(orc.valor_total, orc.natureza_operacao))}
             </span>
           </div>
           {(orc.condicoes_pagamento || orc.forma_pagamento) && (
@@ -108,7 +109,7 @@ export function ProjectOrcamentoList({
                         {item.desconto ? `${item.desconto}%` : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-medium text-gray-900">
-                        {fmt(subtotal)}
+                        {fmt(getDisplayValorTotal(subtotal, orc.natureza_operacao))}
                       </td>
                     </tr>
                   )

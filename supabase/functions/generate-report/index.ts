@@ -532,6 +532,13 @@ Deno.serve(async (req: Request) => {
         return a.id > b.id ? 1 : -1
       })
 
+      // Devolução já é tratada como negativo/crédito no banco (ver
+      // budget-status.ts no frontend) — o PDF precisa refletir o mesmo
+      // sinal na tabela de itens e nos totais, sem alterar o valor
+      // armazenado (valor_total continua positivo, só a exibição muda).
+      const isDevolucao = budget.natureza_operacao === 'devolucao'
+      const signed = (v: number) => (isDevolucao ? -Math.abs(v) : v)
+
       items.forEach((item: any) => {
         if (y < 60) {
           page = pdfDoc.addPage()
@@ -563,7 +570,7 @@ Deno.serve(async (req: Request) => {
         const fmtFinalVal = new Intl.NumberFormat('pt-BR', {
           style: 'currency',
           currency: 'BRL',
-        }).format(finalVal)
+        }).format(signed(finalVal))
 
         const cols = isInterno
           ? [lFixo, codReal, referencia, desc, qtd, fmtPreco, fmtFinalVal]
@@ -616,7 +623,7 @@ Deno.serve(async (req: Request) => {
       const fmtSubtotal = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
-      }).format(subtotal)
+      }).format(signed(subtotal))
       const fmtSinal = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
@@ -628,7 +635,7 @@ Deno.serve(async (req: Request) => {
       const fmtFinalTotal = new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
-      }).format(finalTotal)
+      }).format(signed(finalTotal))
 
       const rightPadX = width - 56
       let rowY = y - 15
