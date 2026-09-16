@@ -503,18 +503,17 @@ export default function BudgetFormPage() {
 
   // Pedido do usuário (2026-09-14): campo Vendedor do Orçamento deve listar
   // só estas 5 pessoas, nesta ordem — não é mais um "priorizar no topo",
-  // é uma lista fechada. Investigação achou 2 problemas de dado antes de
-  // poder filtrar por nome exato (migration 20260914_140):
-  // "Marina Pousa Barbara Gregorio" era 1 única funcionária com o nome
-  // errado (confirmado com o usuário — nunca existiu "Barbara Gregorio"
-  // separada neste banco, o vínculo de login dela é só "Marina"),
-  // corrigido pra "Marina Pousa"; e Filippo Giorgi (dono da Lucenera) não
-  // tinha nenhum cadastro em funcionarios, criado vinculado ao usuário CRM
-  // dele.
+  // é uma lista fechada. Investigação inicial (14/09) achou que
+  // "Marina Pousa Barbara Gregorio" seria erro de importação (achado
+  // revertido em 16/09: usuário decidiu manter o nome completo como está
+  // no banco, sem renomear) — por isso o filtro usa o nome completo, não
+  // "Marina Pousa". Filippo Giorgi (dono da Lucenera) não tinha nenhum
+  // cadastro em funcionarios, criado vinculado ao usuário CRM dele
+  // (migration 20260914_140).
   const VENDEDORES_PERMITIDOS = [
     'Thairine Cristina da Silva',
     'Thais Gomes Pegrucci Favaron',
-    'Marina Pousa',
+    'Marina Pousa Barbara Gregorio',
     'Vinicius Bortolin Costa',
     'Filippo Giorgi',
   ].map((n) => n.toLowerCase())
