@@ -65,6 +65,60 @@ async function toPDF(data: any[], title: string) {
   return await pdfDoc.save()
 }
 
+// SPEC-152 (item 7): tabela de parcelas do orçamento (número, vencimento
+// absoluto, valor) em vez da string "condicoes_pagamento" (contagem de
+// dias, ex. "14/44/75" -- Vinícius reagiu com "14 dias de quando?" na
+// reunião de 16/09). Reaproveita orcamentos.plano_parcelas (SPEC-152 item
+// 5/7) quando presente; senão cai no cálculo legado de divisão igual a
+// partir de prazo_pagamento_dias -- mesma lógica de
+// src/lib/budget-financial-summary.ts (calcularResumoFinanceiro), mas
+// duplicada aqui porque esta Edge Function roda isolada (Deno, sem acesso
+// ao bundle do frontend) e usa data_inicio_pagamento (data negociada com o
+// cliente) como base, não "hoje" (que só faz sentido pra pré-visualização
+// antes da aprovação, não pro documento impresso).
+function calcularParcelasPdf(
+  budget: any,
+  valorTotalFinal: number,
+): { numero: number; valor: number; vencimento: Date }[] {
+  const dataBase = budget.data_inicio_pagamento
+    ? new Date(`${budget.data_inicio_pagamento}T00:00:00`)
+    : budget.created_at
+      ? new Date(budget.created_at)
+      : new Date()
+
+  const plano = Array.isArray(budget.plano_parcelas) ? budget.plano_parcelas : null
+  if (plano && plano.length > 0) {
+    return [...plano]
+      .sort((a: any, b: any) => (a?.numero ?? 0) - (b?.numero ?? 0))
+      .map((p: any) => {
+        const vencimento = new Date(dataBase)
+        vencimento.setDate(vencimento.getDate() + (Number(p?.dias_offset) || 0))
+        return {
+          numero: Number(p?.numero) || 0,
+          valor: Number(p?.valor) || 0,
+          vencimento,
+        }
+      })
+  }
+
+  const prazos: number[] = Array.isArray(budget.prazo_pagamento_dias)
+    ? budget.prazo_pagamento_dias
+    : []
+  const qtd = Math.max(1, prazos.length)
+  const base = Math.round((valorTotalFinal / qtd) * 100) / 100
+  let acumulado = 0
+  return Array.from({ length: qtd }, (_, i) => {
+    const isUltima = i === qtd - 1
+    const valor = isUltima
+      ? Math.round((valorTotalFinal - acumulado) * 100) / 100
+      : base
+    if (!isUltima) acumulado += valor
+    const vencimento = new Date(dataBase)
+    vencimento.setDate(vencimento.getDate() + (prazos[i] ?? 0))
+    return { numero: i + 1, valor, vencimento }
+  })
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS')
     return new Response('ok', { headers: corsHeaders })
@@ -689,15 +743,42 @@ Deno.serve(async (req: Request) => {
         size: 8,
         font,
       })
+      y -= 14
 
-      page.drawText(budget.condicoes_pagamento || 'A Combinar', {
-        x: width - 250,
-        y: y - 12,
-        size: 9,
-        font: boldFont,
-      })
-
-      y -= 40
+      // SPEC-152: tabela de parcelas (número, vencimento absoluto, valor)
+      // em vez da string de dias corridos -- ver calcularParcelasPdf acima.
+      const parcelasPdf = calcularParcelasPdf(budget, finalTotal)
+      if (parcelasPdf.length <= 1) {
+        page.drawText('À vista', {
+          x: width - 250,
+          y,
+          size: 9,
+          font: boldFont,
+        })
+        y -= 15
+      } else {
+        for (const p of parcelasPdf) {
+          if (y < 60) {
+            page = pdfDoc.addPage()
+            y = height - 50
+          }
+          const vencStr = p.vencimento.toLocaleDateString('pt-BR', {
+            timeZone: 'UTC',
+          })
+          const valorStr = new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+          }).format(p.valor)
+          page.drawText(`Parcela ${p.numero}: ${vencStr} — ${valorStr}`, {
+            x: width - 250,
+            y,
+            size: 9,
+            font: boldFont,
+          })
+          y -= 13
+        }
+      }
+      y -= 15
       page.drawText('OBSERVAÇÕES: POLÍTICA DE TROCA / DEVOLUÇÃO:', {
         x: 40,
         y,

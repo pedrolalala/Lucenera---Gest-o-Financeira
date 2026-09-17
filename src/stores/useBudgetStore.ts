@@ -72,6 +72,10 @@ export interface Budget {
   prazo_inicio_cobranca_dias: number | null
   data_inicio_pagamento: string | null
   prazo_pagamento_dias: number[] | null
+  /** SPEC-152: valor/forma de pagamento/fornecedor de permuta customizados
+   * por parcela -- substitui gradualmente prazo_pagamento_dias como fonte
+   * de valor (aprovar_orcamento_financeiro usa isto quando presente). */
+  plano_parcelas?: import('@/lib/budget-financial-summary').PlanoParcelaItem[] | null
   frete_tipo: string | null
   frete_valor: number | null
   desconto_global: number | null

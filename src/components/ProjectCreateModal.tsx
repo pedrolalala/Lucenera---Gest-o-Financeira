@@ -27,8 +27,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import { ClientCreateModal } from '@/components/ClientCreateModal'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Plus } from 'lucide-react'
 
 const STATUS_OPTS = [
   'Estudo Inicial',
@@ -75,9 +76,16 @@ export function ProjectCreateModal({
   onSuccess,
   clientes,
   arquitetos,
+  onClienteCriado,
 }: any) {
   const [funcionarios, setFuncionarios] = useState<any[]>([])
-  const [contatos, setContatos] = useState<any[]>([])
+  // SPEC-152: "Responsável Obra" passa a listar só contatos marcados como
+  // Engenheiro (contato_tipos.tipo = 'engenheiro', constraint já existente)
+  // em vez de todos os contatos -- Arquiteto continua com sua própria lista
+  // (`arquitetos`, recebida via prop), sem filtro, por decisão do usuário.
+  const [engenheiros, setEngenheiros] = useState<any[]>([])
+  const [localClientes, setLocalClientes] = useState<any[]>(clientes || [])
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -99,6 +107,7 @@ export function ProjectCreateModal({
         responsavel_obra_id: '',
         tipo_projeto: '',
       })
+      setLocalClientes(clientes || [])
       supabase
         .from('funcionarios')
         .select('id, nome')
@@ -106,11 +115,19 @@ export function ProjectCreateModal({
         .order('nome')
         .then(({ data }) => data && setFuncionarios(data))
       supabase
-        .from('contatos')
-        .select('id, nome')
-        .then(({ data }) => data && setContatos(data))
+        .from('contato_tipos')
+        .select('tipo, contatos:contato_id(id, nome)')
+        .eq('tipo', 'engenheiro')
+        .then(({ data }) => {
+          if (!data) return
+          const lista = (data as any[])
+            .map((r) => r.contatos)
+            .filter(Boolean)
+            .sort((a: any, b: any) => (a.nome || '').localeCompare(b.nome || ''))
+          setEngenheiros(lista)
+        })
     }
-  }, [open, form])
+  }, [open, form, clientes])
 
   async function onSubmit(val: z.infer<typeof schema>) {
     try {
@@ -185,6 +202,7 @@ export function ProjectCreateModal({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -339,15 +357,28 @@ export function ProjectCreateModal({
                   <FormItem>
                     <FormLabel>Cliente</FormLabel>
                     <FormControl>
-                      <SearchableSelect
-                        options={clientes.map((c: any) => ({
-                          value: c.id,
-                          label: c.nome,
-                        }))}
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder="Buscar..."
-                      />
+                      <div className="flex gap-2 items-center">
+                        <div className="flex-1">
+                          <SearchableSelect
+                            options={localClientes.map((c: any) => ({
+                              value: c.id,
+                              label: c.nome,
+                            }))}
+                            value={field.value || ''}
+                            onChange={field.onChange}
+                            placeholder="Buscar..."
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setIsClientModalOpen(true)}
+                          title="Criar Novo Cliente"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -412,13 +443,13 @@ export function ProjectCreateModal({
                     <FormLabel>Responsável Obra</FormLabel>
                     <FormControl>
                       <SearchableSelect
-                        options={contatos.map((c) => ({
+                        options={engenheiros.map((c) => ({
                           value: c.id,
                           label: c.nome,
                         }))}
                         value={field.value || ''}
                         onChange={field.onChange}
-                        placeholder="Buscar..."
+                        placeholder="Buscar engenheiro..."
                       />
                     </FormControl>
                     <FormMessage />
@@ -438,5 +469,22 @@ export function ProjectCreateModal({
         </Form>
       </DialogContent>
     </Dialog>
+
+    {/* SPEC-152: "Novo Cliente" empilhado -- mesmo padrão já usado no
+        campo Cliente do orçamento (BudgetFormPage.tsx) e no CRM
+        (ProjectNew.tsx): abre sem fechar o formulário de "Criar Projeto". */}
+    <ClientCreateModal
+      open={isClientModalOpen}
+      onOpenChange={setIsClientModalOpen}
+      onSuccess={(newClient: any) => {
+        setLocalClientes((prev: any[]) => [
+          newClient,
+          ...prev.filter((c) => c.id !== newClient.id),
+        ])
+        form.setValue('cliente_id', newClient.id, { shouldValidate: true })
+        if (onClienteCriado) onClienteCriado(newClient)
+      }}
+    />
+    </>
   )
 }

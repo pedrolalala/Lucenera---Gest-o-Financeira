@@ -108,7 +108,26 @@ import type { ParsedPdfResult } from '@/lib/pdf-import'
 import type { ProductCatalogItem } from '@/services/productCatalogService'
 import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
 import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
+import { FORMA_PAGAMENTO_LABELS } from '@/lib/budget-financial-summary'
 import logoImg from '@/assets/lucenera-vertical-527dd.png'
+
+// SPEC-152: formas de pagamento que tipicamente não fazem sentido em mais
+// de 1 parcela (pagamento à vista, instantâneo). Todas as outras (boleto,
+// cartão, cheque, transferência, permuta, carteira) liberam o campo
+// "Quantidade de Parcelas" -- antes desta SPEC só boleto/cartão liberavam,
+// o que impedia parcelar em permuta/carteira/cheque/transferência.
+const FORMAS_PAGAMENTO_PARCELAVEIS = (v: string | null | undefined) =>
+  !['pix', 'dinheiro', ''].includes(v || '')
+
+// SPEC-152: parênteses de segurança pra qualquer `form.watch('parcelas')`
+// usado em cálculo de render -- durante a edição (Bug 1) o campo pode
+// conter transitoriamente string vazia/valor inválido antes do blur/submit
+// normalizar via zod preprocess; nunca deixa Array.from({length: NaN}).
+function normalizarQtdParcelas(v: unknown): number {
+  const n = typeof v === 'number' ? v : parseInt(String(v ?? ''), 10)
+  if (!Number.isFinite(n) || n < 1) return 1
+  return Math.min(120, Math.max(1, Math.floor(n)))
+}
 
 // SPEC-074: subgrupos do campo "Tipo", dependentes do Tipo de Operação
 // selecionado (natureza_operacao). Lista fixa, não normalizada em tabela.
@@ -264,13 +283,41 @@ const formSchema = z
       .transform((v) => (v === null || v === undefined ? 0 : v))
       .default(0),
     forma_pagamento: z.string().optional().nullable(),
-    parcelas: z.coerce
-      .number()
-      .int('Deve ser um valor inteiro')
-      .min(1)
-      .max(120)
+    // SPEC-152 (Bug 1): antes usava z.coerce.number() puro -- ao apagar o
+    // input pra digitar outro valor, o onChange já coagia "" pra NaN/0 a
+    // cada tecla e o handler manual (`parseInt(...) || 1`) cravava de volta
+    // em 1 antes do usuário conseguir terminar de digitar. z.preprocess
+    // permite que o estado do form guarde temporariamente '' (ou qualquer
+    // string em edição) sem falhar a validação — só normaliza pra inteiro
+    // (>=1, <=120, default 1) no momento em que o zodResolver de fato valida
+    // (submit, ou re-validação após o primeiro submit).
+    parcelas: z.preprocess((v) => {
+      if (v === '' || v === null || v === undefined) return 1
+      const n = typeof v === 'number' ? v : parseInt(String(v), 10)
+      return Number.isNaN(n) ? 1 : n
+    }, z.number().int('Deve ser um valor inteiro').min(1).max(120)).default(1),
+    // SPEC-152 (item 7): valor/forma de pagamento/fornecedor de permuta por
+    // parcela -- alimenta `orcamentos.plano_parcelas` no submit. Índice do
+    // array corresponde à parcela (0 = parcela 1). `valor` aceita string
+    // vazia transitoriamente pela mesma razão do campo `parcelas` acima; a
+    // soma é validada ao vivo fora do zod (precisa comparar com valorTotal,
+    // que é derivado de outros campos do form, não dá pra expressar num
+    // .refine() simples e reativo aqui).
+    parcelas_config: z
+      .array(
+        z.object({
+          // z.union com z.string() (não z.literal('')) para que o tipo
+          // estático (z.infer) aceite qualquer string em trânsito durante a
+          // digitação, não só ''; a normalização pra número de fato só
+          // acontece na leitura (Number(...)) em onSubmit/no efeito de
+          // sincronismo, nunca aqui.
+          valor: z.union([z.coerce.number(), z.string()]).optional(),
+          forma_pagamento: z.string().optional(),
+          permuta_fornecedor_id: z.string().optional().nullable(),
+        }),
+      )
       .optional()
-      .default(1),
+      .default([]),
     // Achado 2026-08-14: campo era obrigatório + só aceitava hoje/futuro,
     // mas orçamentos já aprovados (parcelas/boletos já gerados na
     // aprovação) têm data histórica — muitas vezes no passado, ou nula em
@@ -441,6 +488,20 @@ export default function BudgetFormPage() {
   // liberado pra todo mundo — é assim que vendedora monta um orçamento novo.
   const canEditValorProduto = role === 'admin' || !isEditing
 
+  // SPEC-152: fornecedor da permuta (contatos.tipo = 'fornecedor'), usado só
+  // quando alguma parcela do plano de pagamento tem forma_pagamento = 'permuta'.
+  const [fornecedoresPermuta, setFornecedoresPermuta] = useState<
+    { id: string; nome: string }[]
+  >([])
+  useEffect(() => {
+    supabase
+      .from('contatos')
+      .select('id, nome')
+      .eq('tipo', 'fornecedor')
+      .order('nome')
+      .then(({ data }) => data && setFornecedoresPermuta(data))
+  }, [])
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -466,6 +527,7 @@ export default function BudgetFormPage() {
       parcelas: 1,
       data_inicio_pagamento: undefined,
       parcelas_datas: [],
+      parcelas_config: [],
       frete_valor: 0,
       observacoes: '',
       validade: null,
@@ -494,6 +556,13 @@ export default function BudgetFormPage() {
   // pra `arquitetos`. Guard: só a chamada mais recente pode aplicar seus
   // resultados no form.
   const projectSelectSeqRef = useRef(0)
+  // SPEC-152 (item 7): enquanto o usuário não editar manualmente o valor de
+  // nenhuma parcela, o efeito abaixo mantém `parcelas_config` sincronizado
+  // com a divisão igual (recalcula ao vivo a cada mudança de valorTotal/
+  // quantidade/forma de pagamento -- é também o fix do Bug 2: a
+  // pré-visualização do plano de pagamento passa a vir 100% de
+  // `form.watch`, nunca de um snapshot antigo do orçamento carregado).
+  const parcelasConfigTouchedRef = useRef(false)
   const dataEmissaoWatch = form.watch('data_emissao')
   useEffect(() => {
     if (validadeEditadaManualmenteRef.current) return
@@ -669,6 +738,18 @@ export default function BudgetFormPage() {
                       ),
                     )
                 : [],
+            // SPEC-152: plano de parcelas customizado, quando já existir
+            // (orçamento salvo depois desta SPEC). Vazio aqui é normal para
+            // orçamento antigo -- o efeito de sincronismo abaixo preenche a
+            // divisão igual como valor inicial editável.
+            parcelas_config: Array.isArray((budget as any).plano_parcelas)
+              ? (budget as any).plano_parcelas.map((p: any) => ({
+                  valor: Number(p.valor) || 0,
+                  forma_pagamento:
+                    p.forma_pagamento || budget.forma_pagamento || '',
+                  permuta_fornecedor_id: p.permuta_fornecedor_id || null,
+                }))
+              : [],
             frete_tipo:
               (budget.frete_tipo as 'com_frete' | 'sem_frete' | undefined) ??
               undefined,
@@ -694,6 +775,15 @@ export default function BudgetFormPage() {
               })) || [],
             ),
           })
+          // Orçamento salvo depois da SPEC-152 já tem plano_parcelas
+          // customizado -- não deixa o efeito de sincronismo abaixo
+          // sobrescrever com a divisão igual assim que a página carrega.
+          if (
+            Array.isArray((budget as any).plano_parcelas) &&
+            (budget as any).plano_parcelas.length > 0
+          ) {
+            parcelasConfigTouchedRef.current = true
+          }
         }
       } catch {
         toast.error('Erro ao carregar orçamento')
@@ -804,6 +894,61 @@ export default function BudgetFormPage() {
   const valorComDesconto = valorAposSinal - descontoValorReais
   const valorTotal =
     valorComDesconto + (freteTipo === 'com_frete' ? freteValor : 0)
+
+  // SPEC-152 (itens 6 e 7): quantidade de parcelas "parcelável" pra fins de
+  // plano de pagamento -- qualquer forma de pagamento exceto pix/dinheiro
+  // (antes só boleto/cartao liberavam mais de 1 parcela, impedindo permuta/
+  // carteira/cheque/transferência parcelados).
+  const formaPagamentoWatch = form.watch('forma_pagamento')
+  const totalParcelasAtual = FORMAS_PAGAMENTO_PARCELAVEIS(formaPagamentoWatch)
+    ? normalizarQtdParcelas(form.watch('parcelas'))
+    : 1
+  const parcelasConfigWatch = form.watch('parcelas_config') || []
+
+  // Mantém `parcelas_config` (valor/forma de pagamento/fornecedor de
+  // permuta por parcela) sincronizado com a quantidade de parcelas e com o
+  // valor total -- ao vivo, via form.watch, nunca a partir de um snapshot
+  // antigo do orçamento (Bug 2). Enquanto o usuário não editar manualmente
+  // nenhum valor (parcelasConfigTouchedRef ainda false), recalcula a
+  // divisão igual a cada mudança; depois de editado manualmente, só
+  // redimensiona o array quando a quantidade de parcelas muda, preservando
+  // os valores já digitados.
+  useEffect(() => {
+    const atual = form.getValues('parcelas_config') || []
+    const tocado = parcelasConfigTouchedRef.current
+    if (!tocado && atual.length === totalParcelasAtual) {
+      // ainda checa se algum valor ficou desatualizado (valorTotal mudou)
+      const somaAtual =
+        Math.round(
+          atual.reduce((acc: number, p: any) => acc + (Number(p?.valor) || 0), 0) * 100,
+        ) / 100
+      if (Math.abs(somaAtual - Math.round(valorTotal * 100) / 100) < 0.01) return
+    } else if (tocado && atual.length === totalParcelasAtual) {
+      return
+    }
+    const valorBase =
+      totalParcelasAtual > 0
+        ? Math.round((valorTotal / totalParcelasAtual) * 100) / 100
+        : 0
+    let acumulado = 0
+    const next = Array.from({ length: totalParcelasAtual }, (_, i) => {
+      const existente = tocado ? atual[i] : undefined
+      if (existente) return existente
+      const isUltima = i === totalParcelasAtual - 1
+      const valor = isUltima
+        ? Math.round((valorTotal - acumulado) * 100) / 100
+        : valorBase
+      if (!isUltima) acumulado += valor
+      return {
+        valor,
+        forma_pagamento:
+          atual[i]?.forma_pagamento || formaPagamentoWatch || 'boleto',
+        permuta_fornecedor_id: atual[i]?.permuta_fornecedor_id || null,
+      }
+    })
+    form.setValue('parcelas_config', next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalParcelasAtual, valorTotal, formaPagamentoWatch])
 
   const customIdsKey = watchItens.map((i) => i.custom_id || '').join('|')
 
@@ -1221,11 +1366,25 @@ export default function BudgetFormPage() {
       let prazoDias: number | undefined
       let prazoPagamentoDias: number[] | undefined
       let dataInicioPagamentoStr: string | undefined
+      // SPEC-152 (item 7): `orcamentos.plano_parcelas` -- array com
+      // {numero, dias_offset, valor, forma_pagamento, permuta_fornecedor_id}
+      // por parcela, gradualmente substituindo prazo_pagamento_dias como
+      // fonte de valor (aprovar_orcamento_financeiro passa a usar isto
+      // quando presente em vez de dividir valor_total igualmente).
+      let planoParcelas:
+        | Array<{
+            numero: number
+            dias_offset: number
+            valor: number
+            forma_pagamento: string
+            permuta_fornecedor_id: string | null
+          }>
+        | undefined
       if (!editandoAprovado) {
-        const totalParcelas = ['boleto', 'cartao'].includes(
-          values.forma_pagamento || '',
+        const totalParcelas = FORMAS_PAGAMENTO_PARCELAVEIS(
+          values.forma_pagamento,
         )
-          ? values.parcelas || 1
+          ? normalizarQtdParcelas(values.parcelas)
           : 1
         const dataInicioDate = new Date(values.data_inicio_pagamento as Date)
         dataInicioDate.setHours(0, 0, 0, 0)
@@ -1254,6 +1413,55 @@ export default function BudgetFormPage() {
           ),
         )
         dataInicioPagamentoStr = format(dataInicioDate, 'yyyy-MM-dd')
+
+        // Regra dura (decisão do usuário, 2026-09-17): soma das parcelas
+        // deve bater EXATAMENTE com o valor a pagar -- bloqueia salvar se
+        // não bater, nunca arredonda silenciosamente. `valorTotal` é o
+        // mesmo valor reativo (form.watch) usado no card "Resumo" e gravado
+        // em `payload.valor_total` logo abaixo.
+        const config = values.parcelas_config || []
+        const valoresParcelas = Array.from({ length: totalParcelas }, (_, i) => {
+          const raw = config[i]?.valor
+          const n = raw === '' || raw === undefined ? NaN : Number(raw)
+          return Number.isFinite(n) ? n : 0
+        })
+        const somaParcelas = Math.round(
+          valoresParcelas.reduce((acc, v) => acc + v, 0) * 100,
+        ) / 100
+        const valorTotalArredondado = Math.round(valorTotal * 100) / 100
+        if (Math.abs(somaParcelas - valorTotalArredondado) > 0.01) {
+          toast.error(
+            `A soma das parcelas (${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(somaParcelas)}) precisa ser igual ao valor a pagar (${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorTotalArredondado)}).`,
+          )
+          setIsSubmitting(false)
+          return
+        }
+
+        planoParcelas = valoresParcelas.map((valor, i) => {
+          const formaLinha =
+            config[i]?.forma_pagamento || values.forma_pagamento || 'boleto'
+          if (
+            formaLinha === 'permuta' &&
+            !config[i]?.permuta_fornecedor_id
+          ) {
+            throw Object.assign(
+              new Error(
+                `Selecione o fornecedor da permuta na parcela ${i + 1}.`,
+              ),
+              { code: 'PARCELA_PERMUTA_SEM_FORNECEDOR' },
+            )
+          }
+          return {
+            numero: i + 1,
+            dias_offset: prazoPagamentoDias![i],
+            valor,
+            forma_pagamento: formaLinha,
+            permuta_fornecedor_id:
+              formaLinha === 'permuta'
+                ? config[i]?.permuta_fornecedor_id || null
+                : null,
+          }
+        })
       }
 
       const hasUnregisteredItems = values.itens.some(
@@ -1285,6 +1493,7 @@ export default function BudgetFormPage() {
               data_inicio_pagamento: dataInicioPagamentoStr,
               prazo_pagamento_dias: prazoPagamentoDias,
               condicoes_pagamento: (prazoPagamentoDias ?? []).join('/'),
+              plano_parcelas: planoParcelas ?? null,
             }),
         frete_tipo: values.frete_tipo,
         frete_valor: values.frete_tipo === 'sem_frete' ? 0 : values.frete_valor,
@@ -2823,6 +3032,9 @@ export default function BudgetFormPage() {
                             <SelectItem value="cheque">Cheque</SelectItem>
                             <SelectItem value="transferencia">Transferência</SelectItem>
                             <SelectItem value="permuta">Permuta</SelectItem>
+                            {/* SPEC-152: parcela recebida sem gerar boleto
+                                (aparece em relatórios de saldo em aberto). */}
+                            <SelectItem value="carteira">Carteira</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -2830,8 +3042,8 @@ export default function BudgetFormPage() {
                     )}
                   />
 
-                  {['boleto', 'cartao'].includes(
-                    form.watch('forma_pagamento') || '',
+                  {FORMAS_PAGAMENTO_PARCELAVEIS(
+                    form.watch('forma_pagamento'),
                   ) && (
                     <FormField
                       control={form.control}
@@ -2840,14 +3052,23 @@ export default function BudgetFormPage() {
                         <FormItem className="animate-in fade-in slide-in-from-top-2">
                           <FormLabel>Quantidade de Parcelas</FormLabel>
                           <FormControl>
+                            {/* SPEC-152 (Bug 1): não normaliza pra número a
+                                cada tecla -- deixa o valor "em edição" (que
+                                pode ser '' momentaneamente) passar direto
+                                pro form; o zod (z.preprocess) normaliza no
+                                submit/revalidação, e onBlur também corrige
+                                pra sempre deixar um inteiro >=1 visível. */}
                             <Input
                               type="number"
                               min="1"
+                              max="120"
                               step="1"
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(parseInt(e.target.value) || 1)
-                              }
+                              value={field.value ?? ''}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              onBlur={() => {
+                                field.onChange(normalizarQtdParcelas(field.value))
+                                field.onBlur()
+                              }}
                             />
                           </FormControl>
                           <FormMessage />
@@ -2908,11 +3129,7 @@ export default function BudgetFormPage() {
                   />
 
                   {(() => {
-                    const totalParcelas = ['boleto', 'cartao'].includes(
-                      form.watch('forma_pagamento') || '',
-                    )
-                      ? form.watch('parcelas') || 1
-                      : 1
+                    const totalParcelas = totalParcelasAtual
                     const dataInicio = form.watch('data_inicio_pagamento') as
                       | Date
                       | undefined
@@ -3005,6 +3222,172 @@ export default function BudgetFormPage() {
                               </div>
                             )
                           })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* SPEC-152 (item 7): valor/forma de pagamento/fornecedor
+                      de permuta por parcela -- alimenta orcamentos.plano_parcelas.
+                      Soma precisa bater exatamente com o valor a pagar (regra
+                      dura, decisão do usuário 2026-09-17). */}
+                  {(() => {
+                    const dataInicio = form.watch('data_inicio_pagamento') as
+                      | Date
+                      | undefined
+                    if (!dataInicio) return null
+                    const overrides = form.watch('parcelas_datas') || []
+                    const datas = Array.from(
+                      { length: totalParcelasAtual },
+                      (_, i) => {
+                        if (i === 0) return dataInicio
+                        const override = overrides[i - 1]
+                        return override
+                          ? new Date(override)
+                          : addMonths(dataInicio, i)
+                      },
+                    )
+                    const somaParcelas =
+                      Math.round(
+                        parcelasConfigWatch.reduce(
+                          (acc: number, p: any) => {
+                            const raw = p?.valor
+                            const n =
+                              raw === '' || raw === undefined
+                                ? NaN
+                                : Number(raw)
+                            return acc + (Number.isFinite(n) ? n : 0)
+                          },
+                          0,
+                        ) * 100,
+                      ) / 100
+                    const valorTotalArred = Math.round(valorTotal * 100) / 100
+                    const bateSoma = Math.abs(somaParcelas - valorTotalArred) < 0.01
+                    const formatCurrency = (v: number) =>
+                      new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                      }).format(v)
+                    return (
+                      <div className="md:col-span-2 space-y-3 rounded-lg border p-4 animate-in fade-in slide-in-from-top-2">
+                        <p className="text-sm font-medium">Plano de Parcelas</p>
+                        <p className="text-xs text-muted-foreground -mt-2">
+                          Valor, forma de pagamento e (se for permuta)
+                          fornecedor de cada parcela. A soma precisa bater
+                          exatamente com o valor a pagar.
+                        </p>
+                        <div className="space-y-2">
+                          {datas.map((data, idx) => {
+                            const linha = parcelasConfigWatch[idx] || {}
+                            const formaLinha =
+                              linha.forma_pagamento ||
+                              form.watch('forma_pagamento') ||
+                              'boleto'
+                            return (
+                              <div
+                                key={idx}
+                                className="grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr_1fr] gap-2 items-center rounded-md border p-2"
+                              >
+                                <div className="text-xs text-muted-foreground min-w-[110px]">
+                                  <span className="font-medium text-foreground">
+                                    Parcela {idx + 1}
+                                  </span>
+                                  <br />
+                                  {format(data, 'dd/MM/yyyy', { locale: ptBR })}
+                                </div>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="Valor"
+                                  value={linha.valor ?? ''}
+                                  onChange={(e) => {
+                                    parcelasConfigTouchedRef.current = true
+                                    const next = [...parcelasConfigWatch]
+                                    next[idx] = {
+                                      ...(next[idx] || {}),
+                                      valor: e.target.value,
+                                    }
+                                    form.setValue('parcelas_config', next, {
+                                      shouldDirty: true,
+                                    })
+                                  }}
+                                />
+                                <Select
+                                  value={formaLinha}
+                                  onValueChange={(v) => {
+                                    parcelasConfigTouchedRef.current = true
+                                    const next = [...parcelasConfigWatch]
+                                    next[idx] = {
+                                      ...(next[idx] || {}),
+                                      forma_pagamento: v,
+                                      permuta_fornecedor_id:
+                                        v === 'permuta'
+                                          ? next[idx]?.permuta_fornecedor_id
+                                          : null,
+                                    }
+                                    form.setValue('parcelas_config', next, {
+                                      shouldDirty: true,
+                                    })
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Forma de pagamento" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {Object.entries(FORMA_PAGAMENTO_LABELS).map(
+                                      ([value, label]) => (
+                                        <SelectItem key={value} value={value}>
+                                          {label}
+                                        </SelectItem>
+                                      ),
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                                {formaLinha === 'permuta' ? (
+                                  <Select
+                                    value={linha.permuta_fornecedor_id || ''}
+                                    onValueChange={(v) => {
+                                      parcelasConfigTouchedRef.current = true
+                                      const next = [...parcelasConfigWatch]
+                                      next[idx] = {
+                                        ...(next[idx] || {}),
+                                        permuta_fornecedor_id: v,
+                                      }
+                                      form.setValue('parcelas_config', next, {
+                                        shouldDirty: true,
+                                      })
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Fornecedor da permuta" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {fornecedoresPermuta.map((f) => (
+                                        <SelectItem key={f.id} value={f.id}>
+                                          {f.nome}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div />
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div
+                          className={cn(
+                            'text-sm font-medium rounded-md px-3 py-2',
+                            bateSoma
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-red-50 text-red-700',
+                          )}
+                        >
+                          Soma das parcelas: {formatCurrency(somaParcelas)} /{' '}
+                          {formatCurrency(valorTotalArred)}
+                          {!bateSoma && ' — precisa bater exatamente para salvar.'}
                         </div>
                       </div>
                     )
@@ -3307,6 +3690,16 @@ export default function BudgetFormPage() {
             }}
             clientes={clientes}
             arquitetos={arquitetos}
+            onClienteCriado={(newClient: any) => {
+              // SPEC-152: cliente criado de dentro de "Criar Projeto" --
+              // mesmo tratamento do ClientCreateModal de nível superior
+              // (SPEC-078 Bug 2): injeta local + reconcilia com o servidor.
+              setClientes((prev: any[]) => [
+                newClient,
+                ...prev.filter((c) => c.id !== newClient.id),
+              ])
+              if (fetchClientes) fetchClientes()
+            }}
           />
 
           <ClientCreateModal

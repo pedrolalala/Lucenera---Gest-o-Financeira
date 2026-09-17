@@ -10,6 +10,11 @@ export interface ParcelaPrevista {
   numero: number
   valor: number
   dataVencimento: Date
+  // SPEC-152: presentes quando a parcela veio de orcamentos.plano_parcelas
+  // customizado -- usados pelo PDF do orçamento (generate-report) e pela UI
+  // pra sinalizar carteira/permuta em vez de "boleto".
+  formaPagamento?: string
+  permutaFornecedorId?: string | null
 }
 
 export interface ResumoFinanceiro {
@@ -23,6 +28,16 @@ export interface ResumoFinanceiro {
   parcelas: ParcelaPrevista[]
 }
 
+// SPEC-152: item de orcamentos.plano_parcelas (jsonb), quando o orçamento
+// usa valor customizado por parcela em vez da divisão igual.
+export interface PlanoParcelaItem {
+  numero: number
+  dias_offset: number
+  valor: number
+  forma_pagamento?: string | null
+  permuta_fornecedor_id?: string | null
+}
+
 interface BudgetParaResumo {
   itens?: { quantidade: number; preco_unitario: number; desconto: number }[] | null
   desconto_global: number | null
@@ -32,6 +47,9 @@ interface BudgetParaResumo {
   frete_valor: number | null
   valor_total: number
   prazo_pagamento_dias: number[] | null
+  // SPEC-152: quando presente (array não vazio), substitui a divisão igual
+  // abaixo -- mesma fonte que aprovar_orcamento_financeiro usa no banco.
+  plano_parcelas?: PlanoParcelaItem[] | null
 }
 
 export function calcularResumoFinanceiro(budget: BudgetParaResumo): ResumoFinanceiro {
@@ -61,24 +79,47 @@ export function calcularResumoFinanceiro(budget: BudgetParaResumo): ResumoFinanc
   // produza um total de parcelas diferente do que o banco vai gerar.
   const valorTotal = Number(budget.valor_total) || 0
 
-  const prazos = Array.isArray(budget.prazo_pagamento_dias) ? budget.prazo_pagamento_dias : []
-  const qtdParcelas = Math.max(1, prazos.length)
-  const valorBase = Math.round((valorTotal / qtdParcelas) * 100) / 100
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
 
-  let acumulado = 0
-  const parcelas: ParcelaPrevista[] = Array.from({ length: qtdParcelas }, (_, i) => {
-    const isUltima = i === qtdParcelas - 1
-    const valor = isUltima
-      ? Math.round((valorTotal - acumulado) * 100) / 100
-      : valorBase
-    if (!isUltima) acumulado += valor
-    const offset = prazos[i] ?? 0
-    const dataVencimento = new Date(hoje)
-    dataVencimento.setDate(dataVencimento.getDate() + offset)
-    return { numero: i + 1, valor, dataVencimento }
-  })
+  // SPEC-152: plano_parcelas (valor customizado por parcela) substitui a
+  // divisão igual quando presente -- mesma fonte de verdade usada por
+  // aprovar_orcamento_financeiro no banco.
+  const planoCustomizado = Array.isArray(budget.plano_parcelas)
+    ? [...budget.plano_parcelas].sort((a, b) => a.numero - b.numero)
+    : null
+
+  let parcelas: ParcelaPrevista[]
+  if (planoCustomizado && planoCustomizado.length > 0) {
+    parcelas = planoCustomizado.map((p) => {
+      const dataVencimento = new Date(hoje)
+      dataVencimento.setDate(dataVencimento.getDate() + (p.dias_offset ?? 0))
+      return {
+        numero: p.numero,
+        valor: Number(p.valor) || 0,
+        dataVencimento,
+        formaPagamento: p.forma_pagamento || undefined,
+        permutaFornecedorId: p.permuta_fornecedor_id ?? null,
+      }
+    })
+  } else {
+    const prazos = Array.isArray(budget.prazo_pagamento_dias) ? budget.prazo_pagamento_dias : []
+    const qtdParcelas = Math.max(1, prazos.length)
+    const valorBase = Math.round((valorTotal / qtdParcelas) * 100) / 100
+
+    let acumulado = 0
+    parcelas = Array.from({ length: qtdParcelas }, (_, i) => {
+      const isUltima = i === qtdParcelas - 1
+      const valor = isUltima
+        ? Math.round((valorTotal - acumulado) * 100) / 100
+        : valorBase
+      if (!isUltima) acumulado += valor
+      const offset = prazos[i] ?? 0
+      const dataVencimento = new Date(hoje)
+      dataVencimento.setDate(dataVencimento.getDate() + offset)
+      return { numero: i + 1, valor, dataVencimento }
+    })
+  }
 
   return {
     valorBruto,
@@ -100,4 +141,7 @@ export const FORMA_PAGAMENTO_LABELS: Record<string, string> = {
   cheque: 'Cheque',
   dinheiro: 'Dinheiro',
   permuta: 'Permuta',
+  // SPEC-152: parcela recebida sem gerar boleto (aparece em relatórios de
+  // saldo em aberto/pendências) -- ver enum public.pagamento_forma.
+  carteira: 'Carteira',
 }
