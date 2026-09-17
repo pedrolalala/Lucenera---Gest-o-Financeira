@@ -171,7 +171,11 @@ function orcamentoArquitetosParaPicker(budget: Budget): ArquitetoSplit[] {
   }
   if (budget.arquiteto_id && budget.arquiteto?.nome) {
     return [
-      { arquiteto_id: budget.arquiteto_id, nome: budget.arquiteto.nome, percentual: 100 },
+      {
+        arquiteto_id: budget.arquiteto_id,
+        nome: budget.arquiteto.nome,
+        percentual: 100,
+      },
     ]
   }
   return []
@@ -215,8 +219,12 @@ function itensRealmenteMudaram(
   const originaisSerializados = (itensOriginais || [])
     .map(serializarItemParaComparacao)
     .sort()
-  const atuaisSerializados = itensAtuais.map(serializarItemParaComparacao).sort()
-  return JSON.stringify(originaisSerializados) !== JSON.stringify(atuaisSerializados)
+  const atuaisSerializados = itensAtuais
+    .map(serializarItemParaComparacao)
+    .sort()
+  return (
+    JSON.stringify(originaisSerializados) !== JSON.stringify(atuaisSerializados)
+  )
 }
 
 const formSchema = z
@@ -291,11 +299,13 @@ const formSchema = z
     // string em edição) sem falhar a validação — só normaliza pra inteiro
     // (>=1, <=120, default 1) no momento em que o zodResolver de fato valida
     // (submit, ou re-validação após o primeiro submit).
-    parcelas: z.preprocess((v) => {
-      if (v === '' || v === null || v === undefined) return 1
-      const n = typeof v === 'number' ? v : parseInt(String(v), 10)
-      return Number.isNaN(n) ? 1 : n
-    }, z.number().int('Deve ser um valor inteiro').min(1).max(120)).default(1),
+    parcelas: z
+      .preprocess((v) => {
+        if (v === '' || v === null || v === undefined) return 1
+        const n = typeof v === 'number' ? v : parseInt(String(v), 10)
+        return Number.isNaN(n) ? 1 : n
+      }, z.number().int('Deve ser um valor inteiro').min(1).max(120))
+      .default(1),
     // SPEC-152 (item 7): valor/forma de pagamento/fornecedor de permuta por
     // parcela -- alimenta `orcamentos.plano_parcelas` no submit. Índice do
     // array corresponde à parcela (0 = parcela 1). `valor` aceita string
@@ -703,7 +713,8 @@ export default function BudgetFormPage() {
           const naturezaEdit = (budget as any).natureza_operacao || 'venda'
           const opcoesEdit = SUBGRUPOS_POR_TIPO[naturezaEdit] || []
           const subgrupoEdit =
-            (budget as any).subgrupo || (opcoesEdit.length === 1 ? opcoesEdit[0] : '')
+            (budget as any).subgrupo ||
+            (opcoesEdit.length === 1 ? opcoesEdit[0] : '')
           form.reset({
             natureza_operacao: naturezaEdit,
             subgrupo: subgrupoEdit,
@@ -920,9 +931,13 @@ export default function BudgetFormPage() {
       // ainda checa se algum valor ficou desatualizado (valorTotal mudou)
       const somaAtual =
         Math.round(
-          atual.reduce((acc: number, p: any) => acc + (Number(p?.valor) || 0), 0) * 100,
+          atual.reduce(
+            (acc: number, p: any) => acc + (Number(p?.valor) || 0),
+            0,
+          ) * 100,
         ) / 100
-      if (Math.abs(somaAtual - Math.round(valorTotal * 100) / 100) < 0.01) return
+      if (Math.abs(somaAtual - Math.round(valorTotal * 100) / 100) < 0.01)
+        return
     } else if (tocado && atual.length === totalParcelasAtual) {
       return
     }
@@ -1099,7 +1114,10 @@ export default function BudgetFormPage() {
         if (splits.length > 0) {
           setProjectDetails((prev) =>
             prev
-              ? { ...prev, arquiteto_nome: splits.map((s) => s.nome).join(', ') }
+              ? {
+                  ...prev,
+                  arquiteto_nome: splits.map((s) => s.nome).join(', '),
+                }
               : prev,
           )
         }
@@ -1114,7 +1132,13 @@ export default function BudgetFormPage() {
         // que só grave o campo singular).
         form.setValue(
           'arquitetos',
-          [{ arquiteto_id: (projeto.arquiteto as any).id, nome: (projeto.arquiteto as any).nome, percentual: 100 }],
+          [
+            {
+              arquiteto_id: (projeto.arquiteto as any).id,
+              nome: (projeto.arquiteto as any).nome,
+              percentual: 100,
+            },
+          ],
           {
             shouldValidate: true,
             shouldDirty: true,
@@ -1274,14 +1298,12 @@ export default function BudgetFormPage() {
   // obrigatório vazio, ex. Data de Início do Pagamento ou Frete), o
   // react-hook-form só marca o campo em vermelho -- sem nenhum toast,
   // nenhuma requisição disparada. Usuário não tem como saber que nada foi
-  // salvo. `handleExplicitos` (Enviar para o Cliente etc.) já avisa; o
-  // submit genérico (Criar/Salvar) não tinha esse mesmo tratamento.
+  // salvo. O submit genérico (Criar/Salvar) não tinha esse tratamento.
   function onInvalid(errors: any) {
     const primeiraChave = Object.keys(errors)[0]
     const mensagem = primeiraChave ? errors[primeiraChave]?.message : null
     toast.error('Corrija os campos destacados antes de salvar.', {
-      description:
-        typeof mensagem === 'string' ? mensagem : undefined,
+      description: typeof mensagem === 'string' ? mensagem : undefined,
     })
   }
 
@@ -1420,14 +1442,16 @@ export default function BudgetFormPage() {
         // mesmo valor reativo (form.watch) usado no card "Resumo" e gravado
         // em `payload.valor_total` logo abaixo.
         const config = values.parcelas_config || []
-        const valoresParcelas = Array.from({ length: totalParcelas }, (_, i) => {
-          const raw = config[i]?.valor
-          const n = raw === '' || raw === undefined ? NaN : Number(raw)
-          return Number.isFinite(n) ? n : 0
-        })
-        const somaParcelas = Math.round(
-          valoresParcelas.reduce((acc, v) => acc + v, 0) * 100,
-        ) / 100
+        const valoresParcelas = Array.from(
+          { length: totalParcelas },
+          (_, i) => {
+            const raw = config[i]?.valor
+            const n = raw === '' || raw === undefined ? NaN : Number(raw)
+            return Number.isFinite(n) ? n : 0
+          },
+        )
+        const somaParcelas =
+          Math.round(valoresParcelas.reduce((acc, v) => acc + v, 0) * 100) / 100
         const valorTotalArredondado = Math.round(valorTotal * 100) / 100
         if (Math.abs(somaParcelas - valorTotalArredondado) > 0.01) {
           toast.error(
@@ -1440,10 +1464,7 @@ export default function BudgetFormPage() {
         planoParcelas = valoresParcelas.map((valor, i) => {
           const formaLinha =
             config[i]?.forma_pagamento || values.forma_pagamento || 'boleto'
-          if (
-            formaLinha === 'permuta' &&
-            !config[i]?.permuta_fornecedor_id
-          ) {
+          if (formaLinha === 'permuta' && !config[i]?.permuta_fornecedor_id) {
             throw Object.assign(
               new Error(
                 `Selecione o fornecedor da permuta na parcela ${i + 1}.`,
@@ -1682,7 +1703,9 @@ export default function BudgetFormPage() {
     const newItems = payload.entries.map((entry) => ({
       uid: crypto.randomUUID(),
       custom_id: formatCircuitId(entry.custom_id),
-      produto_id: produtoIdValido ? (multiLProduct as ProductSearchItem).id : '',
+      produto_id: produtoIdValido
+        ? (multiLProduct as ProductSearchItem).id
+        : '',
       descricao: isManual
         ? payload.descricao
         : produtoIdValido
@@ -1792,8 +1815,7 @@ export default function BudgetFormPage() {
     updateProductMeta(selections.map((s) => s.product))
     const currentItems = form.getValues('itens') || []
     const newItems = selections.flatMap(({ product, entries }) => {
-      const isProduto =
-        product.source === 'produtos' && isValidUUID(product.id)
+      const isProduto = product.source === 'produtos' && isValidUUID(product.id)
       return entries.map((entry) => ({
         uid: crypto.randomUUID(),
         custom_id: formatCircuitId(entry.custom_id),
@@ -1934,7 +1956,15 @@ export default function BudgetFormPage() {
     // tinham sido liberados aqui nem na tela — cheque/transferência
     // importados de XML caíam no fallback 'pix' (linha removida abaixo).
     // permuta é novo (pedido explícito na reunião 14/08).
-    const validFormas = ['pix', 'cartao', 'boleto', 'dinheiro', 'cheque', 'transferencia', 'permuta']
+    const validFormas = [
+      'pix',
+      'cartao',
+      'boleto',
+      'dinheiro',
+      'cheque',
+      'transferencia',
+      'permuta',
+    ]
     const formaPgtoRaw =
       results.find((r) => r.forma_pagamento)?.forma_pagamento?.toLowerCase() ||
       ''
@@ -2136,7 +2166,9 @@ export default function BudgetFormPage() {
         )
         .eq('orcamento_id', budgetToEdit.id)
       if (!error && data) {
-        setBudgetToEdit((prev) => (prev ? { ...prev, itens: data as any } : prev))
+        setBudgetToEdit((prev) =>
+          prev ? { ...prev, itens: data as any } : prev,
+        )
       }
     } catch {
       // Não bloqueia a abertura do diálogo por falha na atualização — só
@@ -2198,7 +2230,10 @@ export default function BudgetFormPage() {
               {/* SPEC-136 (pendência fechada 2026-09-14, a pedido do
                   usuário): número da venda, quando já aprovado. */}
               {isEditing && budgetToEdit?.numero_venda && (
-                <span className="text-gray-400"> — Venda: {budgetToEdit.numero_venda}</span>
+                <span className="text-gray-400">
+                  {' '}
+                  — Venda: {budgetToEdit.numero_venda}
+                </span>
               )}
             </p>
           </div>
@@ -2230,9 +2265,7 @@ export default function BudgetFormPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onSelect={() => setGerenciamentoOpen(true)}
-                >
+                <DropdownMenuItem onSelect={() => setGerenciamentoOpen(true)}>
                   <LineChart className="w-4 h-4 mr-2" />
                   Gerenciamento
                 </DropdownMenuItem>
@@ -2242,7 +2275,10 @@ export default function BudgetFormPage() {
           <Button variant="outline" asChild>
             <Link to="/budgets">Cancelar</Link>
           </Button>
-          <Button onClick={form.handleSubmit(onSubmit, onInvalid)} disabled={isSubmitting}>
+          <Button
+            onClick={form.handleSubmit(onSubmit, onInvalid)}
+            disabled={isSubmitting}
+          >
             {isSubmitting ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
@@ -2254,7 +2290,10 @@ export default function BudgetFormPage() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
+        <form
+          onSubmit={form.handleSubmit(onSubmit, onInvalid)}
+          className="space-y-6"
+        >
           <Card>
             <CardHeader>
               <CardTitle>Informações Gerais</CardTitle>
@@ -2278,7 +2317,9 @@ export default function BudgetFormPage() {
                     <Button
                       type="button"
                       size="sm"
-                      variant={naturezaOperacao === 'venda' ? 'default' : 'ghost'}
+                      variant={
+                        naturezaOperacao === 'venda' ? 'default' : 'ghost'
+                      }
                       disabled={isEditing}
                       className="rounded-sm"
                       onClick={() => {
@@ -2436,6 +2477,34 @@ export default function BudgetFormPage() {
                               {e.nome}
                             </SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* SPEC-146: Perfil (Ribeirão/São Paulo) movido de "Pagamento
+                    e Totais" pra cá, ao lado de Empresa — pedido do usuário
+                    pra ficar visível logo no topo do orçamento. */}
+                <FormField
+                  control={form.control}
+                  name="perfil"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Perfil</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || undefined}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Não informado" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="ribeirao">Ribeirão</SelectItem>
+                          <SelectItem value="sao_paulo">São Paulo</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -3030,7 +3099,9 @@ export default function BudgetFormPage() {
                                 banco, nunca tinham sido liberados aqui;
                                 permuta é novo. */}
                             <SelectItem value="cheque">Cheque</SelectItem>
-                            <SelectItem value="transferencia">Transferência</SelectItem>
+                            <SelectItem value="transferencia">
+                              Transferência
+                            </SelectItem>
                             <SelectItem value="permuta">Permuta</SelectItem>
                             {/* SPEC-152: parcela recebida sem gerar boleto
                                 (aparece em relatórios de saldo em aberto). */}
@@ -3066,7 +3137,9 @@ export default function BudgetFormPage() {
                               value={field.value ?? ''}
                               onChange={(e) => field.onChange(e.target.value)}
                               onBlur={() => {
-                                field.onChange(normalizarQtdParcelas(field.value))
+                                field.onChange(
+                                  normalizarQtdParcelas(field.value),
+                                )
                                 field.onBlur()
                               }}
                             />
@@ -3141,9 +3214,9 @@ export default function BudgetFormPage() {
                           Vencimentos das demais parcelas
                         </p>
                         <p className="text-xs text-muted-foreground -mt-2">
-                          Por padrão, cada parcela vence 1 mês após a
-                          anterior. Edite individualmente se a negociação com
-                          o cliente definiu datas diferentes.
+                          Por padrão, cada parcela vence 1 mês após a anterior.
+                          Edite individualmente se a negociação com o cliente
+                          definiu datas diferentes.
                         </p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {Array.from(
@@ -3186,18 +3259,12 @@ export default function BudgetFormPage() {
                                       onSelect={(date) => {
                                         const next = [...overrides]
                                         next[idx] = date ?? null
-                                        form.setValue(
-                                          'parcelas_datas',
-                                          next,
-                                          {
-                                            shouldValidate: true,
-                                            shouldDirty: true,
-                                          },
-                                        )
+                                        form.setValue('parcelas_datas', next, {
+                                          shouldValidate: true,
+                                          shouldDirty: true,
+                                        })
                                       }}
-                                      disabled={(date) =>
-                                        date < dataInicio
-                                      }
+                                      disabled={(date) => date < dataInicio}
                                       initialFocus
                                       locale={ptBR}
                                     />
@@ -3249,20 +3316,16 @@ export default function BudgetFormPage() {
                     )
                     const somaParcelas =
                       Math.round(
-                        parcelasConfigWatch.reduce(
-                          (acc: number, p: any) => {
-                            const raw = p?.valor
-                            const n =
-                              raw === '' || raw === undefined
-                                ? NaN
-                                : Number(raw)
-                            return acc + (Number.isFinite(n) ? n : 0)
-                          },
-                          0,
-                        ) * 100,
+                        parcelasConfigWatch.reduce((acc: number, p: any) => {
+                          const raw = p?.valor
+                          const n =
+                            raw === '' || raw === undefined ? NaN : Number(raw)
+                          return acc + (Number.isFinite(n) ? n : 0)
+                        }, 0) * 100,
                       ) / 100
                     const valorTotalArred = Math.round(valorTotal * 100) / 100
-                    const bateSoma = Math.abs(somaParcelas - valorTotalArred) < 0.01
+                    const bateSoma =
+                      Math.abs(somaParcelas - valorTotalArred) < 0.01
                     const formatCurrency = (v: number) =>
                       new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
@@ -3387,7 +3450,8 @@ export default function BudgetFormPage() {
                         >
                           Soma das parcelas: {formatCurrency(somaParcelas)} /{' '}
                           {formatCurrency(valorTotalArred)}
-                          {!bateSoma && ' — precisa bater exatamente para salvar.'}
+                          {!bateSoma &&
+                            ' — precisa bater exatamente para salvar.'}
                         </div>
                       </div>
                     )
@@ -3451,31 +3515,6 @@ export default function BudgetFormPage() {
                       )}
                     />
                   )}
-
-                  <FormField
-                    control={form.control}
-                    name="perfil"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Perfil</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value || undefined}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Não informado" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="ribeirao">Ribeirão</SelectItem>
-                            <SelectItem value="sao_paulo">São Paulo</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
 
                   <FormItem>
                     <FormLabel>Desconto Global</FormLabel>
@@ -3569,8 +3608,8 @@ export default function BudgetFormPage() {
                         </FormControl>
                         <p className="text-xs text-gray-500 mt-1">
                           Valor fixo. Deduzido do subtotal antes do desconto —
-                          reduz o Valor Total e, consequentemente, as
-                          parcelas geradas na aprovação financeira.
+                          reduz o Valor Total e, consequentemente, as parcelas
+                          geradas na aprovação financeira.
                         </p>
                         <FormMessage />
                       </FormItem>
