@@ -3326,6 +3326,18 @@ export default function BudgetFormPage() {
                     const valorTotalArred = Math.round(valorTotal * 100) / 100
                     const bateSoma =
                       Math.abs(somaParcelas - valorTotalArred) < 0.01
+                    // SPEC-155 (Bug 2): mesma checagem do onSubmit (linha
+                    // ~1467), só pra decidir se mostra o aviso consolidado
+                    // abaixo -- a validação que de fato bloqueia salvar
+                    // continua sendo a do onSubmit.
+                    const faltaFornecedorPermuta = datas.some((_, i) => {
+                      const linha = parcelasConfigWatch[i] || {}
+                      const forma =
+                        linha.forma_pagamento ||
+                        form.watch('forma_pagamento') ||
+                        'boleto'
+                      return forma === 'permuta' && !linha.permuta_fornecedor_id
+                    })
                     const formatCurrency = (v: number) =>
                       new Intl.NumberFormat('pt-BR', {
                         style: 'currency',
@@ -3408,31 +3420,54 @@ export default function BudgetFormPage() {
                                   </SelectContent>
                                 </Select>
                                 {formaLinha === 'permuta' ? (
-                                  <Select
-                                    value={linha.permuta_fornecedor_id || ''}
-                                    onValueChange={(v) => {
-                                      parcelasConfigTouchedRef.current = true
-                                      const next = [...parcelasConfigWatch]
-                                      next[idx] = {
-                                        ...(next[idx] || {}),
-                                        permuta_fornecedor_id: v,
-                                      }
-                                      form.setValue('parcelas_config', next, {
-                                        shouldDirty: true,
-                                      })
-                                    }}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Fornecedor da permuta" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {fornecedoresPermuta.map((f) => (
-                                        <SelectItem key={f.id} value={f.id}>
-                                          {f.nome}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                  <div className="space-y-1">
+                                    <Select
+                                      value={linha.permuta_fornecedor_id || ''}
+                                      onValueChange={(v) => {
+                                        parcelasConfigTouchedRef.current = true
+                                        const next = [...parcelasConfigWatch]
+                                        next[idx] = {
+                                          ...(next[idx] || {}),
+                                          permuta_fornecedor_id: v,
+                                        }
+                                        form.setValue('parcelas_config', next, {
+                                          shouldDirty: true,
+                                        })
+                                      }}
+                                    >
+                                      {/* SPEC-155 (Bug 2): a validação de
+                                          fornecedor obrigatório pra permuta já
+                                          existia no submit e no backend, mas
+                                          o campo não indicava isso
+                                          visualmente — usuário só descobria
+                                          na aprovação financeira, já tarde
+                                          pra corrigir sem sair da tela.
+                                          Borda vermelha + aviso inline
+                                          assim que "Permuta" é selecionado
+                                          sem fornecedor. */}
+                                      <SelectTrigger
+                                        className={cn(
+                                          !linha.permuta_fornecedor_id &&
+                                            'border-red-500 focus:ring-red-500',
+                                        )}
+                                      >
+                                        <SelectValue placeholder="Fornecedor da permuta *" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {fornecedoresPermuta.map((f) => (
+                                          <SelectItem key={f.id} value={f.id}>
+                                            {f.nome}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {!linha.permuta_fornecedor_id && (
+                                      <p className="text-xs text-red-600">
+                                        Obrigatório para permuta — sem isso o
+                                        orçamento não pode ser aprovado.
+                                      </p>
+                                    )}
+                                  </div>
                                 ) : (
                                   <div />
                                 )}
@@ -3453,6 +3488,13 @@ export default function BudgetFormPage() {
                           {!bateSoma &&
                             ' — precisa bater exatamente para salvar.'}
                         </div>
+                        {faltaFornecedorPermuta && (
+                          <div className="text-sm font-medium rounded-md px-3 py-2 bg-red-50 text-red-700">
+                            Selecione o fornecedor em toda parcela marcada
+                            como Permuta — precisa disso para salvar e para
+                            aprovar financeiramente.
+                          </div>
+                        )}
                       </div>
                     )
                   })()}
