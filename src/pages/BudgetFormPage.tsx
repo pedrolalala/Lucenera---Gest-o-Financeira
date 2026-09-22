@@ -498,18 +498,28 @@ export default function BudgetFormPage() {
   // liberado pra todo mundo — é assim que vendedora monta um orçamento novo.
   const canEditValorProduto = role === 'admin' || !isEditing
 
-  // SPEC-152: fornecedor da permuta (contatos.tipo = 'fornecedor'), usado só
-  // quando alguma parcela do plano de pagamento tem forma_pagamento = 'permuta'.
-  const [fornecedoresPermuta, setFornecedoresPermuta] = useState<
-    { id: string; nome: string }[]
+  // SPEC-152/156: contraparte da permuta, usado só quando alguma parcela do
+  // plano de pagamento tem forma_pagamento = 'permuta'. SPEC-156 (2026-09-21,
+  // pedido do usuário): a permuta nem sempre é com um fornecedor -- às vezes
+  // o próprio cliente oferece um produto/serviço em troca. Passa a buscar
+  // contatos.tipo IN ('fornecedor', 'cliente') em vez de só 'fornecedor'.
+  const [contatosPermuta, setContatosPermuta] = useState<
+    { id: string; nome: string; tipo: string }[]
   >([])
   useEffect(() => {
     supabase
       .from('contatos')
-      .select('id, nome')
-      .eq('tipo', 'fornecedor')
+      .select('id, nome, tipo')
+      .in('tipo', ['fornecedor', 'cliente'])
       .order('nome')
-      .then(({ data }) => data && setFornecedoresPermuta(data))
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Erro ao carregar contatos para permuta:', error)
+          toast.error('Não foi possível carregar a lista de fornecedores/clientes para permuta.')
+          return
+        }
+        if (data) setContatosPermuta(data)
+      })
   }, [])
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -572,7 +582,16 @@ export default function BudgetFormPage() {
   // quantidade/forma de pagamento -- é também o fix do Bug 2: a
   // pré-visualização do plano de pagamento passa a vir 100% de
   // `form.watch`, nunca de um snapshot antigo do orçamento carregado).
-  const parcelasConfigTouchedRef = useRef(false)
+  // SPEC-156 (2026-09-21, pedido do usuário): antes, editar UMA parcela
+  // travava o array inteiro (`parcelasConfigTouchedRef` era um único
+  // boolean global) -- nenhuma outra parcela nunca mais recalculava depois
+  // disso, forçando o usuário a digitar manualmente todas as parcelas pra
+  // soma fechar. Agora cada índice trancado é rastreado individualmente:
+  // ao editar o valor de UMA parcela, só ela trava (fica exatamente com o
+  // valor digitado) -- todas as outras (destravadas) são redistribuídas
+  // igualmente pelo restante (valorTotal - soma das travadas), sempre
+  // fazendo a soma total bater.
+  const parcelasValorTravadasRef = useRef<Set<number>>(new Set())
   const dataEmissaoWatch = form.watch('data_emissao')
   useEffect(() => {
     if (validadeEditadaManualmenteRef.current) return
@@ -786,15 +805,13 @@ export default function BudgetFormPage() {
               })) || [],
             ),
           })
-          // Orçamento salvo depois da SPEC-152 já tem plano_parcelas
-          // customizado -- não deixa o efeito de sincronismo abaixo
-          // sobrescrever com a divisão igual assim que a página carrega.
-          if (
-            Array.isArray((budget as any).plano_parcelas) &&
-            (budget as any).plano_parcelas.length > 0
-          ) {
-            parcelasConfigTouchedRef.current = true
-          }
+          // SPEC-156: nenhuma parcela começa "travada" ao carregar um
+          // orçamento existente -- o efeito de sincronismo (useEffect logo
+          // abaixo de `recalcularParcelasConfig`) já não sobrescreve um
+          // plano_parcelas carregado cuja soma bate com valorTotal (é
+          // sempre o caso pra um orçamento salvo, a soma exata já era regra
+          // obrigatória antes de salvar). Só passa a travar parcela por
+          // parcela conforme o usuário edita alguma manualmente nesta sessão.
         }
       } catch {
         toast.error('Erro ao carregar orçamento')
@@ -916,19 +933,77 @@ export default function BudgetFormPage() {
     : 1
   const parcelasConfigWatch = form.watch('parcelas_config') || []
 
-  // Mantém `parcelas_config` (valor/forma de pagamento/fornecedor de
-  // permuta por parcela) sincronizado com a quantidade de parcelas e com o
-  // valor total -- ao vivo, via form.watch, nunca a partir de um snapshot
-  // antigo do orçamento (Bug 2). Enquanto o usuário não editar manualmente
-  // nenhum valor (parcelasConfigTouchedRef ainda false), recalcula a
-  // divisão igual a cada mudança; depois de editado manualmente, só
-  // redimensiona o array quando a quantidade de parcelas muda, preservando
-  // os valores já digitados.
+  // SPEC-156: redistribui `parcelas_config` -- opcionalmente aplicando um
+  // valor explícito (`overrideIdx`/`overrideValor`, vindo do onChange do
+  // campo Valor de uma parcela) -- mantendo a soma sempre igual a
+  // valorTotal. Parcelas em `parcelasValorTravadasRef` (editadas
+  // manualmente pelo usuário nesta sessão) nunca são recalculadas; o
+  // restante (valorTotal - soma das travadas) é dividido igualmente entre
+  // as parcelas destravadas. Usada tanto pelo onChange do campo Valor
+  // quanto pelo efeito abaixo (quando quantidade de parcelas/valorTotal/
+  // forma de pagamento mudam).
+  function recalcularParcelasConfig(overrideIdx?: number, overrideValor?: string) {
+    const atual = form.getValues('parcelas_config') || []
+    const travadas = parcelasValorTravadasRef.current
+    // Índice travado que não existe mais (quantidade de parcelas diminuiu)
+    // não faz sentido continuar reservando espaço pra ele.
+    Array.from(travadas).forEach((i) => {
+      if (i >= totalParcelasAtual) travadas.delete(i)
+    })
+    if (overrideIdx !== undefined) travadas.add(overrideIdx)
+
+    const parseValor = (raw: unknown): number => {
+      if (raw === '' || raw === undefined || raw === null) return 0
+      const n = Number(raw)
+      return Number.isFinite(n) ? n : 0
+    }
+
+    const idsLivres: number[] = []
+    let somaTravada = 0
+    for (let i = 0; i < totalParcelasAtual; i++) {
+      if (i === overrideIdx) {
+        somaTravada += parseValor(overrideValor)
+        continue
+      }
+      if (travadas.has(i)) {
+        somaTravada += parseValor(atual[i]?.valor)
+        continue
+      }
+      idsLivres.push(i)
+    }
+
+    const restante = Math.round((valorTotal - somaTravada) * 100) / 100
+    const valorBase =
+      idsLivres.length > 0 ? Math.round((restante / idsLivres.length) * 100) / 100 : 0
+    let acumulado = 0
+    const next = Array.from({ length: totalParcelasAtual }, (_, i) => {
+      const formaAtual = atual[i]?.forma_pagamento || formaPagamentoWatch || 'boleto'
+      const permutaAtual = atual[i]?.permuta_fornecedor_id || null
+      if (i === overrideIdx) {
+        return { valor: overrideValor, forma_pagamento: formaAtual, permuta_fornecedor_id: permutaAtual }
+      }
+      if (travadas.has(i)) {
+        return { valor: atual[i]?.valor ?? 0, forma_pagamento: formaAtual, permuta_fornecedor_id: permutaAtual }
+      }
+      const isUltimaLivre = i === idsLivres[idsLivres.length - 1]
+      const valor = isUltimaLivre
+        ? Math.round((restante - acumulado) * 100) / 100
+        : valorBase
+      if (!isUltimaLivre) acumulado += valor
+      return { valor, forma_pagamento: formaAtual, permuta_fornecedor_id: permutaAtual }
+    })
+    form.setValue('parcelas_config', next, { shouldDirty: true })
+  }
+
+  // Mantém `parcelas_config` sincronizado com a quantidade de parcelas e
+  // com o valor total -- ao vivo, via form.watch, nunca a partir de um
+  // snapshot antigo do orçamento (Bug 2 da SPEC-152). Só recalcula quando
+  // necessário (evita loop: setValue aqui não muda nenhuma das deps deste
+  // efeito, então não retrigger a si mesmo).
   useEffect(() => {
     const atual = form.getValues('parcelas_config') || []
-    const tocado = parcelasConfigTouchedRef.current
-    if (!tocado && atual.length === totalParcelasAtual) {
-      // ainda checa se algum valor ficou desatualizado (valorTotal mudou)
+    const travadas = parcelasValorTravadasRef.current
+    if (travadas.size === 0 && atual.length === totalParcelasAtual) {
       const somaAtual =
         Math.round(
           atual.reduce(
@@ -938,30 +1013,8 @@ export default function BudgetFormPage() {
         ) / 100
       if (Math.abs(somaAtual - Math.round(valorTotal * 100) / 100) < 0.01)
         return
-    } else if (tocado && atual.length === totalParcelasAtual) {
-      return
     }
-    const valorBase =
-      totalParcelasAtual > 0
-        ? Math.round((valorTotal / totalParcelasAtual) * 100) / 100
-        : 0
-    let acumulado = 0
-    const next = Array.from({ length: totalParcelasAtual }, (_, i) => {
-      const existente = tocado ? atual[i] : undefined
-      if (existente) return existente
-      const isUltima = i === totalParcelasAtual - 1
-      const valor = isUltima
-        ? Math.round((valorTotal - acumulado) * 100) / 100
-        : valorBase
-      if (!isUltima) acumulado += valor
-      return {
-        valor,
-        forma_pagamento:
-          atual[i]?.forma_pagamento || formaPagamentoWatch || 'boleto',
-        permuta_fornecedor_id: atual[i]?.permuta_fornecedor_id || null,
-      }
-    })
-    form.setValue('parcelas_config', next)
+    recalcularParcelasConfig()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalParcelasAtual, valorTotal, formaPagamentoWatch])
 
@@ -1467,7 +1520,7 @@ export default function BudgetFormPage() {
           if (formaLinha === 'permuta' && !config[i]?.permuta_fornecedor_id) {
             throw Object.assign(
               new Error(
-                `Selecione o fornecedor da permuta na parcela ${i + 1}.`,
+                `Selecione o fornecedor ou cliente da permuta na parcela ${i + 1}.`,
               ),
               { code: 'PARCELA_PERMUTA_SEM_FORNECEDOR' },
             )
@@ -3348,8 +3401,10 @@ export default function BudgetFormPage() {
                         <p className="text-sm font-medium">Plano de Parcelas</p>
                         <p className="text-xs text-muted-foreground -mt-2">
                           Valor, forma de pagamento e (se for permuta)
-                          fornecedor de cada parcela. A soma precisa bater
-                          exatamente com o valor a pagar.
+                          fornecedor ou cliente de cada parcela. Editar o
+                          valor de uma parcela redistribui automaticamente o
+                          restante entre as demais — a soma sempre bate com
+                          o valor a pagar.
                         </p>
                         <div className="space-y-2">
                           {datas.map((data, idx) => {
@@ -3376,22 +3431,13 @@ export default function BudgetFormPage() {
                                   min="0"
                                   placeholder="Valor"
                                   value={linha.valor ?? ''}
-                                  onChange={(e) => {
-                                    parcelasConfigTouchedRef.current = true
-                                    const next = [...parcelasConfigWatch]
-                                    next[idx] = {
-                                      ...(next[idx] || {}),
-                                      valor: e.target.value,
-                                    }
-                                    form.setValue('parcelas_config', next, {
-                                      shouldDirty: true,
-                                    })
-                                  }}
+                                  onChange={(e) =>
+                                    recalcularParcelasConfig(idx, e.target.value)
+                                  }
                                 />
                                 <Select
                                   value={formaLinha}
                                   onValueChange={(v) => {
-                                    parcelasConfigTouchedRef.current = true
                                     const next = [...parcelasConfigWatch]
                                     next[idx] = {
                                       ...(next[idx] || {}),
@@ -3421,10 +3467,28 @@ export default function BudgetFormPage() {
                                 </Select>
                                 {formaLinha === 'permuta' ? (
                                   <div className="space-y-1">
-                                    <Select
+                                    {/* SPEC-155 (Bug 2): a validação de
+                                        contraparte obrigatória pra permuta já
+                                        existia no submit e no backend, mas o
+                                        campo não indicava isso visualmente —
+                                        usuário só descobria na aprovação
+                                        financeira, já tarde pra corrigir sem
+                                        sair da tela. Borda vermelha + aviso
+                                        inline assim que "Permuta" é
+                                        selecionado sem contraparte.
+                                        SPEC-156 (2026-09-21): trocado de
+                                        <Select> pra SearchableSelect --
+                                        fornecedor+cliente combinados passam
+                                        de ~3000 contatos, uma lista fixa
+                                        ficava impraticável de rolar/achar. */}
+                                    <SearchableSelect
+                                      options={contatosPermuta.map((c) => ({
+                                        value: c.id,
+                                        label: `${c.nome} (${c.tipo === 'fornecedor' ? 'Fornecedor' : 'Cliente'})`,
+                                        searchTerms: [c.nome],
+                                      }))}
                                       value={linha.permuta_fornecedor_id || ''}
-                                      onValueChange={(v) => {
-                                        parcelasConfigTouchedRef.current = true
+                                      onChange={(v) => {
                                         const next = [...parcelasConfigWatch]
                                         next[idx] = {
                                           ...(next[idx] || {}),
@@ -3434,33 +3498,14 @@ export default function BudgetFormPage() {
                                           shouldDirty: true,
                                         })
                                       }}
-                                    >
-                                      {/* SPEC-155 (Bug 2): a validação de
-                                          fornecedor obrigatório pra permuta já
-                                          existia no submit e no backend, mas
-                                          o campo não indicava isso
-                                          visualmente — usuário só descobria
-                                          na aprovação financeira, já tarde
-                                          pra corrigir sem sair da tela.
-                                          Borda vermelha + aviso inline
-                                          assim que "Permuta" é selecionado
-                                          sem fornecedor. */}
-                                      <SelectTrigger
-                                        className={cn(
-                                          !linha.permuta_fornecedor_id &&
-                                            'border-red-500 focus:ring-red-500',
-                                        )}
-                                      >
-                                        <SelectValue placeholder="Fornecedor da permuta *" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {fornecedoresPermuta.map((f) => (
-                                          <SelectItem key={f.id} value={f.id}>
-                                            {f.nome}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                      placeholder="Fornecedor ou cliente da permuta *"
+                                      searchPlaceholder="Buscar por nome..."
+                                      emptyText="Nenhum contato encontrado."
+                                      className={cn(
+                                        !linha.permuta_fornecedor_id &&
+                                          'border-red-500 focus:ring-red-500',
+                                      )}
+                                    />
                                     {!linha.permuta_fornecedor_id && (
                                       <p className="text-xs text-red-600">
                                         Obrigatório para permuta — sem isso o
@@ -3490,9 +3535,9 @@ export default function BudgetFormPage() {
                         </div>
                         {faltaFornecedorPermuta && (
                           <div className="text-sm font-medium rounded-md px-3 py-2 bg-red-50 text-red-700">
-                            Selecione o fornecedor em toda parcela marcada
-                            como Permuta — precisa disso para salvar e para
-                            aprovar financeiramente.
+                            Selecione o fornecedor ou cliente em toda parcela
+                            marcada como Permuta — precisa disso para salvar
+                            e para aprovar financeiramente.
                           </div>
                         )}
                       </div>
