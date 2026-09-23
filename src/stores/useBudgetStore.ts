@@ -60,6 +60,9 @@ export interface Budget {
   projeto_id: string
   arquiteto_id: string | null
   vendedor_id: string | null
+  /** SPEC-158 (P2.3): quem de fato criou o orçamento (capturado do login na
+   * criação, nunca editável) -- distinto do vendedor (SPEC-140, lista fixa). */
+  digitado_por?: string | null
   status: string
   /** SPEC-071: 'venda' (padrão), 'devolucao', 'outros' ou 'sac' — trava na criação. */
   natureza_operacao?: string
@@ -275,8 +278,14 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       delete (finalBudget as any).numero
     }
 
+    // SPEC-158 (P2.3): "digitador" -- quem de fato criou o orçamento,
+    // sempre capturado do login, nunca editável pela UI (não faz parte do
+    // form/values em BudgetFormPage.tsx). Diferente de enviado_cliente_por,
+    // é gravado em QUALQUER criação, independente do status inicial.
+    const { data: userData } = await supabase.auth.getUser()
+    finalBudget.digitado_por = userData?.user?.id || null
+
     if (finalBudget.status === 'enviado_cliente') {
-      const { data: userData } = await supabase.auth.getUser()
       finalBudget.enviado_cliente_em = new Date().toISOString()
       finalBudget.enviado_cliente_por = userData?.user?.id || null
     }

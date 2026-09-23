@@ -52,6 +52,7 @@ RPCs/funções relevantes:
 - `cliente_id`
 - `arquiteto_id`
 - `vendedor_id`
+- `digitado_por` (SPEC-158 P2.3, uuid, nullable, FK `usuarios(id) ON DELETE SET NULL`): quem de fato criou o orçamento, capturado automaticamente do login em `addBudget()` — nunca editável pela UI, distinto de `vendedor_id` (lista fixa de 5 pessoas, SPEC-140). Orçamentos criados antes desta SPEC ficam `null` (sem backfill).
 - `status`
 - `valor_total`
 - `numero`

@@ -205,6 +205,7 @@ Deno.serve(async (req: Request) => {
           cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social, email, telefone, cpf_cnpj, endereco, cep, cidade, estado),
           empresa:empresas!orcamentos_empresa_id_fkey(nome, razao_social, logradouro, numero, bairro, cidade, estado, cep, cnpj),
           vendedor:funcionarios!orcamentos_vendedor_id_fkey(nome),
+          digitador:usuarios!orcamentos_digitado_por_fkey(nome),
           arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
           arquitetos:orcamento_arquitetos(percentual, arquiteto:contatos!orcamento_arquitetos_arquiteto_id_fkey(nome)),
           projeto:projetos!orcamentos_projeto_id_fkey(codigo),
@@ -527,10 +528,19 @@ Deno.serve(async (req: Request) => {
       const arquitetosMultiplos = (budget.arquitetos || [])
         .filter((a: any) => a.arquiteto?.nome)
         .map((a: any) => a.arquiteto.nome)
-      const arquitetoTexto =
+      const arquitetoTextoCompleto =
         arquitetosMultiplos.length > 0
           ? arquitetosMultiplos.join(' / ')
           : budget.arquiteto?.nome || '-'
+      // SPEC-158 (P2.3): achado do revisor -- sem truncar, 2+ arquitetos de
+      // nome médio/longo (join " / ") estouram a faixa reservada (x=220 até
+      // x=400, onde agora começa a coluna "Digitador") e sobrepõem
+      // visualmente o texto. Mesmo padrão de corte já usado na descrição do
+      // item (descMaxLen/substring), aqui com "..." pra indicar corte.
+      const arquitetoTexto =
+        arquitetoTextoCompleto.length > 30
+          ? `${arquitetoTextoCompleto.substring(0, 30)}...`
+          : arquitetoTextoCompleto
 
       page.drawText('Arquiteto Externo', { x: 220, y, size: 9, font })
       page.drawText(arquitetoTexto, {
@@ -539,6 +549,20 @@ Deno.serve(async (req: Request) => {
         size: 9,
         font: boldFont,
       })
+
+      // SPEC-158 (P2.3): "digitador" -- quem de fato criou o orçamento,
+      // capturado do login na criação (distinto do vendedor, que é sempre
+      // uma das 5 pessoas fixas da SPEC-140). Pedido do usuário: aparecer
+      // no layout do orçamento enviado pro cliente aprovar.
+      if (budget.digitador?.nome) {
+        page.drawText('Digitador', { x: 400, y, size: 9, font })
+        page.drawText(budget.digitador.nome, {
+          x: 400,
+          y: y - 12,
+          size: 9,
+          font: boldFont,
+        })
+      }
 
       y -= 30
 
