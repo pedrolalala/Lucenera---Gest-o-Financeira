@@ -43,6 +43,17 @@ interface GerenciamentoDialogProps {
   descontoAtual: number
   descontoTipo: 'percentual' | 'valor'
   onAplicarDesconto: (percentual: number) => void
+  // SPEC-158 (P1.4): reunião de 22/09/2026 -- Vinícius tentou editar o
+  // desconto de um item específico DE DENTRO do painel de Gerenciamento e
+  // não achou onde ("tem ali, mas não tem opção aqui de colocar o
+  // desconto"). O desconto por item já é um campo real do orçamento
+  // (editável na linha do item, fora deste painel -- ver
+  // BudgetItemCard.tsx/EditableItemCard.tsx), só não existia nenhuma coluna
+  // pra editá-lo AQUI. `index` é a posição no field array `itens` do
+  // formulário (mesma ordem de `form.watch('itens')`, que é o que este
+  // dialog recebe em `itens`) -- não é `uid`, porque itens novos (ainda não
+  // salvos) não têm `uid` ainda.
+  onDescontoItemChange?: (index: number, desconto: number) => void
 }
 
 const fmt = (v: number) =>
@@ -97,6 +108,7 @@ export function GerenciamentoDialog({
   descontoAtual,
   descontoTipo,
   onAplicarDesconto,
+  onDescontoItemChange,
 }: GerenciamentoDialogProps) {
   const [custosProdutos, setCustosProdutos] = useState<Record<string, number>>(
     {},
@@ -156,11 +168,13 @@ export function GerenciamentoDialog({
     const lucroPct = vendaTotal > 0 ? (lucroTotal / vendaTotal) * 100 : 0
     return {
       key,
+      idx,
       isAvulso,
       nome: item.produto_id
         ? produtoNomes[item.produto_id] || 'Produto'
         : item.descricao || 'Item avulso',
       quantidade: item.quantidade,
+      desconto: Number(item.desconto) || 0,
       vendaUnit: vendaUnitComDesconto,
       vendaTotal,
       custoUnitario,
@@ -224,6 +238,7 @@ export function GerenciamentoDialog({
             <TableRow>
               <TableHead>Peça</TableHead>
               <TableHead className="text-right">Qtd</TableHead>
+              <TableHead className="text-right">Desc. item (%)</TableHead>
               <TableHead className="text-right">Venda (unit.)</TableHead>
               <TableHead className="text-right">Custo (unit.)</TableHead>
               <TableHead className="text-right">Lucro</TableHead>
@@ -237,6 +252,26 @@ export function GerenciamentoDialog({
                   {l.nome}
                 </TableCell>
                 <TableCell className="text-right">{l.quantidade}</TableCell>
+                <TableCell className="text-right">
+                  {onDescontoItemChange ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      className="w-20 ml-auto text-right"
+                      value={l.desconto}
+                      onChange={(e) =>
+                        onDescontoItemChange(
+                          l.idx,
+                          Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))),
+                        )
+                      }
+                    />
+                  ) : (
+                    `${l.desconto}%`
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   {fmt(l.vendaUnit)}
                 </TableCell>
@@ -281,7 +316,7 @@ export function GerenciamentoDialog({
             {linhas.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="text-center text-muted-foreground"
                 >
                   {loading ? 'Carregando...' : 'Nenhum item no orçamento.'}

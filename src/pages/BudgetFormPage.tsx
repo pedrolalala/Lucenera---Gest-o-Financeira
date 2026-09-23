@@ -4000,6 +4000,17 @@ export default function BudgetFormPage() {
             shouldDirty: true,
           })
         }}
+        // SPEC-158 (P1.4): edita o desconto do item DIRETO do painel de
+        // Gerenciamento. `index` é a posição no field array (mesma ordem de
+        // `form.watch('itens')`, passado como `itens` acima) -- grava no
+        // campo real `itens.{index}.desconto`, o mesmo usado na linha do
+        // item (BudgetItemCard.tsx), não é uma simulação separada.
+        onDescontoItemChange={(index, desconto) => {
+          form.setValue(`itens.${index}.desconto`, desconto, {
+            shouldValidate: true,
+            shouldDirty: true,
+          })
+        }}
       />
     </div>
   )
