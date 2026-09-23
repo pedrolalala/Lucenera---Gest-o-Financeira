@@ -669,7 +669,7 @@ export function ProductSearchModal({
               className="shrink-0"
             >
               <PackagePlus className="mr-2 h-4 w-4" />
-              Criar novo produto
+              Adicionar item sem cadastro
             </Button>
           </div>
 
@@ -725,7 +725,7 @@ export function ProductSearchModal({
                             onClick={() => setCreateOpen(true)}
                           >
                             <PackagePlus className="mr-2 h-4 w-4" />
-                            Criar novo produto
+                            Adicionar item sem cadastro
                           </Button>
                         </div>
                       </TableCell>

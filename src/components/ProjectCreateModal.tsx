@@ -440,7 +440,13 @@ export function ProjectCreateModal({
                 name="responsavel_obra_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Responsável Obra</FormLabel>
+                    {/* SPEC-158 (P2.1): rótulo passa a ser "Engenheiro". A
+                        SPEC-152 já fazia o campo listar só engenheiros e o
+                        placeholder já dizia isso -- faltava o rótulo, que
+                        continuava "Responsável Obra" e confundia com o campo
+                        "Responsável" logo acima. A coluna do banco
+                        (responsavel_obra_id) não muda. */}
+                    <FormLabel>Engenheiro</FormLabel>
                     <FormControl>
                       <SearchableSelect
                         options={engenheiros.map((c) => ({

@@ -3945,6 +3945,23 @@ export default function BudgetFormPage() {
               <Upload className="w-4 h-4 mr-2" />
               Importar PDFs
             </Button>
+            {/* SPEC-158 (P2.4): mesmo botão Salvar do topo, repetido no
+                rodapé -- pedido do usuário na reunião de 22/09/2026
+                ("traz esse salvar aqui para baixo também"), formulário
+                fica longo e o botão do topo sai de vista ao rolar.
+                Mesma ação (form.handleSubmit), não é um fluxo novo. */}
+            <Button
+              onClick={form.handleSubmit(onSubmit, onInvalid)}
+              disabled={isSubmitting}
+              className="w-full sm:w-auto"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              {isEditing ? 'Salvar Alterações' : 'Criar Orçamento'}
+            </Button>
           </div>
         </form>
       </Form>

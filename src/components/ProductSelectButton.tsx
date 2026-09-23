@@ -31,27 +31,44 @@ export function ProductSelectButton({
       const isRevenda = !isValidUUID(value)
 
       if (isRevenda) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('revenda_ubiqua')
           .select('referencia, descricao, cod_produto')
           .eq('id', value)
           .single()
 
+        if (error) {
+          console.error('Erro ao carregar produto de revenda:', error)
+          return
+        }
         if (!cancelled && data) {
           setLabel(
             `${data.cod_produto ? `[${data.cod_produto}] ` : ''}${data.descricao}${data.referencia ? ` | Ref: ${data.referencia}` : ''} [Ubiqua]`,
           )
         }
       } else {
-        const { data } = await supabase
+        // SPEC-158 (2026-09-22): marca entra no rótulo -- pedido do
+        // usuário ("Descrição, no caso, é o nome, né, do produto, a
+        // referência e a marca... Falta que a marca não vai aparecer
+        // aqui"). Item criado via "Adicionar item sem cadastro" (P2.2)
+        // agora sempre tem marca_id real, então essa informação existe
+        // pra mostrar.
+        const { data, error } = await supabase
           .from('produtos')
-          .select('nome, sku, referencia, codigo_produto')
+          .select('nome, sku, referencia, codigo_produto, marca:marcas(nome)')
           .eq('id', value)
           .single()
 
+        if (error) {
+          console.error('Erro ao carregar produto:', error)
+          return
+        }
         if (!cancelled && data) {
+          const marcaNome = Array.isArray(data.marca)
+            ? data.marca[0]?.nome
+            : (data.marca as { nome: string } | null)?.nome
           setLabel(
-            `${data.codigo_produto ? `[${data.codigo_produto}] ` : ''}${data.nome}${data.sku ? ` | SKU: ${data.sku}` : ''}${data.referencia ? ` | Ref: ${data.referencia}` : ''}`,
+            `${data.codigo_produto ? `[${data.codigo_produto}] ` : ''}${data.nome}${data.sku ? ` | SKU: ${data.sku}` : ''}${data.referencia ? ` | Ref: ${data.referencia}` : ''}${marcaNome ? ` | Marca: ${marcaNome}` : ''}`,
           )
         }
       }

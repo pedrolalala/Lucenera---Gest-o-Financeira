@@ -241,7 +241,7 @@ export function BudgetItemCard({
                         disabled={!canEditValorProduto}
                         title={
                           canEditValorProduto
-                            ? 'Criar novo produto'
+                            ? 'Adicionar item sem cadastro'
                             : 'Só administrador pode criar produto'
                         }
                         className="shrink-0 h-9 w-9"

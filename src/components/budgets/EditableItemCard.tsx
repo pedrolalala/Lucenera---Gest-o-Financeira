@@ -155,7 +155,7 @@ export function EditableItemCard({
                   variant="outline"
                   size="icon"
                   onClick={() => onCreateProduct?.(orcId, item.id)}
-                  title="Criar novo produto"
+                  title="Adicionar item sem cadastro"
                   className="shrink-0 h-9 w-9"
                 >
                   <PackagePlus className="w-4 h-4" />

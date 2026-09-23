@@ -18,14 +18,19 @@ export interface ProductCatalogPayload {
   sku?: string | null
   nome: string
   marca_id: string
-  categoria_id: string
+  // SPEC-158 (P2.2): categoria_id deixou de ser obrigatória -- o modal
+  // simplificado ("Adicionar item sem cadastro") não coleta categoria; a
+  // RPC criar_produto_orcamento (migration
+  // 20260923_158b_item_sem_cadastro_simplificado) só valida quando vem
+  // preenchida. produtos.categoria_id é nullable no schema real.
+  categoria_id?: string | null
   fornecedor_principal_id?: string | null
-  unidade: string
+  unidade?: string
   referencia?: string | null
   descricao_tecnica?: string | null
-  preco_custo: number
+  preco_custo?: number
   preco_venda: number
-  valor_venda: number
+  valor_venda?: number
   ncm?: string | null
   tipo_fiscal?: string | null
   cst?: string | null
