@@ -301,7 +301,10 @@ export function BudgetTableRow({
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Orcamento_${budget.numero || budgetId.split('-')[0].toUpperCase()}.pdf`
+      // SPEC-164: aprovado sai como venda (mesmo número do PDF).
+      a.download = budget.numero_venda
+        ? `Venda_${budget.numero_venda}.pdf`
+        : `Orcamento_${budget.numero || budgetId.split('-')[0].toUpperCase()}.pdf`
       document.body.appendChild(a)
       a.click()
       a.remove()

@@ -500,9 +500,20 @@ Deno.serve(async (req: Request) => {
       })
       clienteLineY -= 12
 
-      page.drawText('Orçamento', { x: width - 120, y, size: 11, font })
+      // SPEC-164: orçamento já aprovado (virou venda, tem numero_venda da
+      // SPEC-136) sai com o número da VENDA no canto superior direito, igual
+      // ao Connect -- "ele já foi aprovado". Orçamento ainda não aprovado (e
+      // revenda Ubiqua, que não tem numero_venda) continua com o número do
+      // orçamento.
+      const numeroVenda: string | null = budget.numero_venda || null
+      page.drawText(numeroVenda ? 'Venda' : 'Orçamento', {
+        x: width - 120,
+        y,
+        size: 11,
+        font,
+      })
       page.drawText(
-        `${budget.numero || budget.id.split('-')[0].toUpperCase()}`,
+        `${numeroVenda || budget.numero || budget.id.split('-')[0].toUpperCase()}`,
         {
           x: width - 120,
           y: y - 18,
