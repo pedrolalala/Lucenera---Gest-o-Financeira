@@ -70,6 +70,8 @@ export interface Budget {
   subgrupo?: string | null
   data_emissao: string
   validade: string | null
+  /** SPEC-167: previsão de entrega (date 'yyyy-MM-dd'), opcional. */
+  previsao_entrega?: string | null
   condicoes_pagamento: string | null
   forma_pagamento: string | null
   prazo_inicio_cobranca_dias: number | null

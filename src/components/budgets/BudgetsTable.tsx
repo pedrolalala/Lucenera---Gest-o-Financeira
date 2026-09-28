@@ -31,6 +31,7 @@ export function BudgetsTable({ data, onEdit }: BudgetsTableProps) {
         <TableHeader>
           <TableRow className="bg-gray-50/50 hover:bg-gray-50/50">
             <TableHead className="w-[120px]">Emissão</TableHead>
+            <TableHead className="w-[130px]">Previsão Entrega</TableHead>
             <TableHead>Empresa</TableHead>
             <TableHead>Código</TableHead>
             <TableHead>Cliente</TableHead>

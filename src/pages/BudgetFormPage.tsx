@@ -352,6 +352,8 @@ const formSchema = z
       .default(0),
     observacoes: z.string().optional().nullable(),
     validade: z.date().optional().nullable(),
+    // SPEC-167: previsão de entrega do orçamento (opcional).
+    previsao_entrega: z.date().optional().nullable(),
     // SPEC-064: rótulo Ribeirão/São Paulo, só visualização.
     perfil: z.string().optional().nullable(),
     itens: z
@@ -551,6 +553,7 @@ export default function BudgetFormPage() {
       frete_valor: 0,
       observacoes: '',
       validade: null,
+      previsao_entrega: null,
       perfil: '',
       itens: [],
     },
@@ -789,6 +792,12 @@ export default function BudgetFormPage() {
               ? new Date(budget.data_emissao)
               : new Date(),
             validade: budget.validade ? new Date(budget.validade) : null,
+            // SPEC-167: coluna `date` ('yyyy-MM-dd') -- `new Date(str)`
+            // leria como meia-noite UTC e mostraria o dia anterior no
+            // Brasil; T00:00:00 força a data local.
+            previsao_entrega: budget.previsao_entrega
+              ? new Date(`${budget.previsao_entrega}T00:00:00`)
+              : null,
             perfil: budget.perfil || '',
             itens: sortItemsByCircuitId(
               budget.itens?.map((i) => ({
@@ -1575,6 +1584,9 @@ export default function BudgetFormPage() {
         data_emissao: values.data_emissao.toISOString(),
         validade: values.validade
           ? format(values.validade, 'yyyy-MM-dd')
+          : null,
+        previsao_entrega: values.previsao_entrega
+          ? format(values.previsao_entrega, 'yyyy-MM-dd')
           : null,
         // SPEC-064: rótulo Ribeirão/São Paulo, só visualização — não
         // influencia cálculo, aprovação nem nenhum outro fluxo.
@@ -2960,6 +2972,59 @@ export default function BudgetFormPage() {
                               validadeEditadaManualmenteRef.current = true
                               field.onChange(d)
                             }}
+                            initialFocus
+                            locale={ptBR}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* SPEC-167: previsão de entrega -- data única por
+                    orçamento, opcional, informada manualmente. */}
+                <FormField
+                  control={form.control}
+                  name="previsao_entrega"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel className="flex items-center justify-between gap-2">
+                        <span>Previsão de Entrega</span>
+                        {field.value && (
+                          <button
+                            type="button"
+                            className="text-xs font-normal text-primary hover:underline"
+                            onClick={() => field.onChange(null)}
+                          >
+                            Limpar
+                          </button>
+                        )}
+                      </FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={'outline'}
+                              className={cn(
+                                'w-full pl-3 text-left font-normal',
+                                !field.value && 'text-muted-foreground',
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, 'PPP', { locale: ptBR })
+                              ) : (
+                                <span>Selecione</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value || undefined}
+                            onSelect={field.onChange}
                             initialFocus
                             locale={ptBR}
                           />

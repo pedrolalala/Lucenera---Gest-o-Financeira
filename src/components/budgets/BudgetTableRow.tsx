@@ -341,6 +341,13 @@ export function BudgetTableRow({
             ? format(new Date(budget.data_emissao), 'dd/MM/yyyy')
             : '-'}
         </TableCell>
+        {/* SPEC-167: coluna `date` -- formata a string direto, sem passar
+            por Date (evita mostrar o dia anterior por fuso). */}
+        <TableCell className="text-gray-600">
+          {budget.previsao_entrega
+            ? budget.previsao_entrega.split('-').reverse().join('/')
+            : '-'}
+        </TableCell>
         <TableCell className="font-semibold text-gray-900">
           {budget.empresa?.nome || '-'}
         </TableCell>
