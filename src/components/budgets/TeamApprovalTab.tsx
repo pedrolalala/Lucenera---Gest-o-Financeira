@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import {
   Eye,
   Loader2,
@@ -40,6 +42,18 @@ import {
   getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { cn } from '@/lib/utils'
+// SPEC-174 N2a: pop-up obrigatório de Previsão de Entrega antes de avançar
+// para o financeiro.
+import { TeamApprovalDeliveryDialog } from '@/components/budgets/TeamApprovalDeliveryDialog'
+// SPEC-174 N3: aviso de orçamento vencido antes de aprovar (decisão do
+// usuário, 01/10).
+import { BudgetExpiredRedirectDialog } from '@/components/budgets/BudgetExpiredRedirectDialog'
+import {
+  getBudgetVencimento,
+  isBudgetVencido,
+  markPriceUpdatePromptAsked,
+  wasPriceUpdatePromptAsked,
+} from '@/lib/budget-expiration'
 
 const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -83,6 +97,13 @@ export function TeamApprovalTab() {
   const [returnBudget, setReturnBudget] = useState<Budget | null>(null)
   const [motivo, setMotivo] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // SPEC-174 N2a: orçamento aguardando confirmação da previsão de entrega
+  // antes de avançar para "Aprovação Financeira".
+  const [deliveryBudget, setDeliveryBudget] = useState<Budget | null>(null)
+  // SPEC-174 N3: orçamento vencido aguardando a decisão "atualizar preços
+  // antes de aprovar?" -- aparece antes do pop-up de Previsão de Entrega.
+  const [expiredPriceBudget, setExpiredPriceBudget] =
+    useState<Budget | null>(null)
 
   const canManage = role === 'admin' || role === 'gerente'
 
@@ -150,15 +171,63 @@ export function TeamApprovalTab() {
     navigate(`/budgets/${budget.id}`)
   }
 
-  const handleApprove = async (budget: Budget) => {
-    try {
-      await equipeAprovarOrcamento(budget)
-      toast.success('Orçamento aprovado pela equipe', {
-        description: 'Encaminhado para revisão financeira.',
-      })
-    } catch (error: any) {
-      toast.error('Erro ao aprovar orçamento', { description: error?.message })
+  // SPEC-174 N2a: abre o pop-up obrigatório de Previsão de Entrega em vez de
+  // aprovar direto -- a confirmação da data é pré-requisito para avançar.
+  // SPEC-174 N3: antes disso, se o orçamento estiver vencido e ainda não
+  // tiver sido perguntado nesta sessão, mostra o aviso de atualização de
+  // preço (decisão do usuário, 01/10).
+  const handleApprove = (budget: Budget) => {
+    if (isBudgetVencido(budget) && !wasPriceUpdatePromptAsked(budget.id)) {
+      setExpiredPriceBudget(budget)
+      return
     }
+    setDeliveryBudget(budget)
+  }
+
+  // SPEC-174 N3: "Não, manter preços atuais" -- não pergunta de novo nesta
+  // sessão para este orçamento e segue com a aprovação normal.
+  const handleKeepPricesAndApprove = () => {
+    if (!expiredPriceBudget) return
+    markPriceUpdatePromptAsked(expiredPriceBudget.id)
+    setDeliveryBudget(expiredPriceBudget)
+    setExpiredPriceBudget(null)
+  }
+
+  const handleConfirmDelivery = async (date: Date) => {
+    if (!deliveryBudget) return
+    const dataFormatada = format(date, 'yyyy-MM-dd')
+
+    // Grava no mesmo campo da SPEC-167 (sem coluna nova). Não é uma
+    // transição de status, então vai direto na tabela como o resto do
+    // formulário de orçamento já faz (useBudgetStore.updateBudget).
+    // `previsao_entrega` ainda não está no types.ts gerado (stale desde a
+    // SPEC-167) -- passar por uma variável Partial<Budget>, como o store já
+    // faz, evita o erro de "excess property" que um objeto literal geraria.
+    const previsaoEntregaPayload: Partial<Budget> = {
+      previsao_entrega: dataFormatada,
+    }
+    const { error: updateError } = await supabase
+      .from('orcamentos')
+      .update(previsaoEntregaPayload)
+      .eq('id', deliveryBudget.id)
+
+    if (updateError) {
+      throw new Error(
+        updateError.message || 'Erro ao gravar a previsão de entrega.',
+      )
+    }
+
+    // Observação registrada em historico_status_orcamentos (via RPC
+    // equipe_aprovar_orcamento, p_observacao) para auditoria da data
+    // confirmada nesta etapa.
+    await equipeAprovarOrcamento(
+      deliveryBudget,
+      `Previsão de entrega confirmada pela equipe: ${format(date, 'dd/MM/yyyy', { locale: ptBR })}.`,
+    )
+    toast.success('Orçamento aprovado pela equipe', {
+      description: 'Encaminhado para revisão financeira.',
+    })
+    setDeliveryBudget(null)
   }
 
   const handleOpenReturn = (budget: Budget) => {
@@ -428,6 +497,33 @@ export function TeamApprovalTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BudgetExpiredRedirectDialog
+        open={!!expiredPriceBudget}
+        onOpenChange={(open) => {
+          if (!open) setExpiredPriceBudget(null)
+        }}
+        budgetId={expiredPriceBudget?.id || ''}
+        vencimento={
+          expiredPriceBudget ? getBudgetVencimento(expiredPriceBudget) : null
+        }
+        budgetNumero={expiredPriceBudget?.numero}
+        onKeepPrices={handleKeepPricesAndApprove}
+      />
+
+      <TeamApprovalDeliveryDialog
+        open={!!deliveryBudget}
+        onOpenChange={(open) => {
+          if (!open) setDeliveryBudget(null)
+        }}
+        initialDate={
+          deliveryBudget?.previsao_entrega
+            ? new Date(`${deliveryBudget.previsao_entrega}T00:00:00`)
+            : null
+        }
+        budgetNumero={deliveryBudget?.numero}
+        onConfirm={handleConfirmDelivery}
+      />
     </div>
   )
 }

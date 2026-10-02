@@ -30,6 +30,7 @@ import {
   getStatusLabel,
   getStatusBadgeClass,
   getDisplayValorTotal,
+  TEAM_APPROVAL_STATUS,
 } from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -77,6 +78,22 @@ import {
   type ApprovalResult,
 } from '@/services/budgetApprovalService'
 import { FinancialApprovalDialog } from '@/components/budgets/FinancialApprovalDialog'
+// SPEC-174 N2a: toda gravação feita enquanto o orçamento está em
+// "Aprovação da Equipe" exige confirmar a Previsão de Entrega antes de salvar.
+import { TeamApprovalDeliveryDialog } from '@/components/budgets/TeamApprovalDeliveryDialog'
+// SPEC-174 N3: aviso de orçamento vencido (validade de 10 dias) oferecendo
+// atualizar os preços -- ao abrir para editar e antes de abrir o diálogo de
+// Aprovação Financeira.
+import {
+  BudgetPriceUpdateDialog,
+  type BudgetPriceUpdateItemInput,
+} from '@/components/budgets/BudgetPriceUpdateDialog'
+import {
+  getBudgetVencimento,
+  isBudgetVencido,
+  markPriceUpdatePromptAsked,
+  wasPriceUpdatePromptAsked,
+} from '@/lib/budget-expiration'
 import { FinanceResultModal } from '@/components/budgets/FinanceResultModal'
 import { supabase } from '@/lib/supabase/client'
 import {
@@ -488,6 +505,28 @@ export default function BudgetFormPage() {
   } | null>(null)
   const [showApprovalDialog, setShowApprovalDialog] = useState(false)
   const [gerenciamentoOpen, setGerenciamentoOpen] = useState(false)
+  // SPEC-174 N2a: pop-up obrigatório de Previsão de Entrega -- dispara em
+  // QUALQUER gravação (botão "Salvar Alterações" ou submit do form) feita
+  // enquanto o orçamento está em "Aprovação da Equipe". pendingTeamDeliveryValues
+  // guarda os valores já validados do form até a confirmação; o ref evita
+  // reabrir o pop-up na segunda chamada de onSubmit (depois de confirmado).
+  const [showTeamDeliveryDialog, setShowTeamDeliveryDialog] = useState(false)
+  const [pendingTeamDeliveryValues, setPendingTeamDeliveryValues] = useState<
+    z.infer<typeof formSchema> | null
+  >(null)
+  const teamDeliveryConfirmedRef = useRef(false)
+  // SPEC-174 N3: contexto do aviso de orçamento vencido -- `then` guarda a
+  // ação a retomar depois da decisão (ex.: abrir o diálogo de Aprovação
+  // Financeira); undefined quando o aviso só é informativo (aberto para
+  // editar), sem nada pendente além de deixar o usuário salvar normalmente.
+  const [showPriceUpdateDialog, setShowPriceUpdateDialog] = useState(false)
+  const [priceUpdateContext, setPriceUpdateContext] = useState<{
+    budgetId: string
+    vencimento: Date | null
+    budgetNumero: string | null
+    itens: BudgetPriceUpdateItemInput[]
+    then?: () => void
+  } | null>(null)
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(
     null,
   )
@@ -821,6 +860,12 @@ export default function BudgetFormPage() {
           // sempre o caso pra um orçamento salvo, a soma exata já era regra
           // obrigatória antes de salvar). Só passa a travar parcela por
           // parcela conforme o usuário edita alguma manualmente nesta sessão.
+
+          // SPEC-174 N3: orçamento vencido (validade padrão de 10 dias,
+          // SPEC-095) ao ser aberto para editar -- oferece atualizar os
+          // preços. Não se repete na mesma sessão para este orçamento
+          // (decisão do usuário, 01/10).
+          maybeShowExpiredPriceDialog(budget)
         }
       } catch {
         toast.error('Erro ao carregar orçamento')
@@ -1370,6 +1415,21 @@ export default function BudgetFormPage() {
   }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    // SPEC-174 N2a: toda gravação feita enquanto o orçamento está em
+    // "Aprovação da Equipe" exige confirmar a Previsão de Entrega antes de
+    // seguir -- intercepta aqui (fora do try/setIsSubmitting) e só continua
+    // depois que handleConfirmTeamDelivery chamar onSubmit de novo com o
+    // ref já marcado.
+    if (
+      isEditing &&
+      budgetToEdit?.status === TEAM_APPROVAL_STATUS &&
+      !teamDeliveryConfirmedRef.current
+    ) {
+      setPendingTeamDeliveryValues(values)
+      setShowTeamDeliveryDialog(true)
+      return
+    }
+
     try {
       setIsSubmitting(true)
 
@@ -1704,6 +1764,10 @@ export default function BudgetFormPage() {
       )
     } finally {
       setIsSubmitting(false)
+      // SPEC-174 N2a: zera o ref de confirmação -- se der erro e a pessoa
+      // tentar salvar de novo, o pop-up de Previsão de Entrega volta a
+      // aparecer (em vez de pular a checagem com um estado velho).
+      teamDeliveryConfirmedRef.current = false
     }
   }
 
@@ -2215,6 +2279,78 @@ export default function BudgetFormPage() {
     toast.success('XML exportado com sucesso.')
   }
 
+  // SPEC-174 N3: abre o aviso de orçamento vencido (validade de 10 dias)
+  // oferecendo atualizar os preços -- usado tanto ao abrir o orçamento para
+  // editar (sem `then`, só deixa o usuário seguir editando/salvando) quanto
+  // antes de abrir o diálogo de Aprovação Financeira (`then` reabre o fluxo
+  // normal depois da decisão). Não repete na mesma sessão para o mesmo
+  // orçamento (decisão do usuário, 01/10). Retorna true quando o aviso foi
+  // aberto (quem chama deve interromper o fluxo original até a decisão).
+  function maybeShowExpiredPriceDialog(
+    budget: Budget,
+    then?: () => void,
+  ): boolean {
+    if (!isBudgetVencido(budget) || wasPriceUpdatePromptAsked(budget.id)) {
+      return false
+    }
+    const itensAtuais = form.getValues('itens')
+    setPriceUpdateContext({
+      budgetId: budget.id,
+      vencimento: getBudgetVencimento(budget),
+      budgetNumero: budget.numero,
+      itens: itensAtuais.map((item, index) => ({
+        key: String(index),
+        produto_id: item.produto_id || null,
+        preco_unitario: Number(item.preco_unitario) || 0,
+        desconto: Number(item.desconto) || 0,
+        quantidade: Number(item.quantidade) || 0,
+      })),
+      then,
+    })
+    setShowPriceUpdateDialog(true)
+    return true
+  }
+
+  // SPEC-174 N3: "Sim, atualizar preços" -- só preenche o form (não salva
+  // sozinho); o usuário revisa e salva normalmente. Sugere também renovar a
+  // validade (+10 dias a partir de hoje).
+  const handleApplyPriceUpdate = (
+    precosPorChave: Map<string, number>,
+    renovarValidade: boolean,
+  ) => {
+    precosPorChave.forEach((novoPreco, key) => {
+      form.setValue(`itens.${Number(key)}.preco_unitario`, novoPreco, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+    })
+    if (renovarValidade) {
+      validadeEditadaManualmenteRef.current = true
+      form.setValue('validade', addDays(new Date(), 10), {
+        shouldDirty: true,
+      })
+    }
+    if (priceUpdateContext) markPriceUpdatePromptAsked(priceUpdateContext.budgetId)
+    toast.success(
+      `Preços atualizados em ${precosPorChave.size} ite${precosPorChave.size === 1 ? 'm' : 'ns'}.`,
+      { description: 'Revise e salve o orçamento para confirmar.' },
+    )
+    setShowPriceUpdateDialog(false)
+    const then = priceUpdateContext?.then
+    setPriceUpdateContext(null)
+    then?.()
+  }
+
+  // SPEC-174 N3: "Não, manter preços atuais" -- segue com os preços
+  // antigos e não pergunta de novo nesta sessão para este orçamento.
+  const handleSkipPriceUpdate = () => {
+    if (priceUpdateContext) markPriceUpdatePromptAsked(priceUpdateContext.budgetId)
+    setShowPriceUpdateDialog(false)
+    const then = priceUpdateContext?.then
+    setPriceUpdateContext(null)
+    then?.()
+  }
+
   // Achado 2026-09-14 (teste ao vivo): abrir o diálogo de Aprovação
   // Financeira usa `budgetToEdit.itens`, que só é carregado uma vez quando a
   // página abre — se um item sem produto cadastrado foi adicionado nesta
@@ -2238,6 +2374,12 @@ export default function BudgetFormPage() {
     } catch {
       // Não bloqueia a abertura do diálogo por falha na atualização — só
       // usa os itens já carregados como fallback.
+    }
+    // SPEC-174 N3: antes de abrir a Aprovação Financeira, avisa se o
+    // orçamento está vencido -- "Sim"/"Não" retomam a abertura normal do
+    // diálogo depois da decisão (maybeShowExpiredPriceDialog cuida disso).
+    if (maybeShowExpiredPriceDialog(budgetToEdit, () => setShowApprovalDialog(true))) {
+      return
     }
     setShowApprovalDialog(true)
   }
@@ -2263,6 +2405,21 @@ export default function BudgetFormPage() {
         description: error?.message,
       })
       throw error
+    }
+  }
+
+  // SPEC-174 N2a: confirma a Previsão de Entrega exigida pelo pop-up e
+  // retoma o submit pendente (botão "Salvar Alterações" ou form submit)
+  // com a data confirmada já aplicada ao form.
+  const handleConfirmTeamDelivery = async (date: Date) => {
+    if (!pendingTeamDeliveryValues) return
+    form.setValue('previsao_entrega', date, { shouldDirty: true })
+    teamDeliveryConfirmedRef.current = true
+    setShowTeamDeliveryDialog(false)
+    try {
+      await onSubmit({ ...pendingTeamDeliveryValues, previsao_entrega: date })
+    } finally {
+      setPendingTeamDeliveryValues(null)
     }
   }
 
@@ -4031,6 +4188,30 @@ export default function BudgetFormPage() {
         </form>
       </Form>
 
+      {/* SPEC-174 N3: aviso de orçamento vencido oferecendo atualizar os
+          preços -- disparado ao abrir para editar e antes da Aprovação
+          Financeira. Nunca salva sozinho: só preenche o form. */}
+      <BudgetPriceUpdateDialog
+        open={showPriceUpdateDialog}
+        onOpenChange={(open) => {
+          if (open) return
+          // Fechar pelo X/backdrop só marca como perguntado nesta sessão --
+          // não retoma automaticamente a ação pendente (`then`), que só
+          // dispara pelos botões explícitos (handleApplyPriceUpdate /
+          // handleSkipPriceUpdate).
+          setShowPriceUpdateDialog(false)
+          if (priceUpdateContext) {
+            markPriceUpdatePromptAsked(priceUpdateContext.budgetId)
+          }
+          setPriceUpdateContext(null)
+        }}
+        vencimento={priceUpdateContext?.vencimento ?? null}
+        itens={priceUpdateContext?.itens ?? []}
+        budgetNumero={priceUpdateContext?.budgetNumero}
+        onApply={handleApplyPriceUpdate}
+        onSkip={handleSkipPriceUpdate}
+      />
+
       {budgetToEdit && (
         <FinancialApprovalDialog
           budget={budgetToEdit}
@@ -4050,6 +4231,20 @@ export default function BudgetFormPage() {
           }}
         />
       )}
+
+      {/* SPEC-174 N2a: pop-up obrigatório -- qualquer gravação enquanto o
+          orçamento está em "Aprovação da Equipe" precisa confirmar a
+          Previsão de Entrega antes de salvar. */}
+      <TeamApprovalDeliveryDialog
+        open={showTeamDeliveryDialog}
+        onOpenChange={(open) => {
+          setShowTeamDeliveryDialog(open)
+          if (!open) setPendingTeamDeliveryValues(null)
+        }}
+        initialDate={pendingTeamDeliveryValues?.previsao_entrega ?? null}
+        budgetNumero={budgetToEdit?.numero}
+        onConfirm={handleConfirmTeamDelivery}
+      />
 
       <GerenciamentoDialog
         open={gerenciamentoOpen}
