@@ -39,6 +39,8 @@ export interface BudgetItem {
   item_pai_id?: string
   /** SPEC-071: só preenchido em item de devolução — projeto_itens da venda de origem. */
   projeto_item_origem_id?: string | null
+  /** SPEC-178: setor da venda de origem de onde sai a devolução. */
+  setor_origem?: string | null
   produto?: {
     nome: string
     codigo_produto?: number
@@ -209,6 +211,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         sub_ordem,
         item_pai_id,
         projeto_item_origem_id,
+        setor_origem,
         produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade, porc_st)
       )
     `)
@@ -317,6 +320,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         sub_ordem: subOrdens[idx],
         item_pai_id: i.item_pai_id || null,
         projeto_item_origem_id: i.projeto_item_origem_id || null,
+        setor_origem: i.projeto_item_origem_id ? i.setor_origem || null : null,
       }))
 
       const { error: itemsError } = await supabase
@@ -372,6 +376,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         sub_ordem: subOrdens[idx],
         item_pai_id: i.item_pai_id || null,
         projeto_item_origem_id: i.projeto_item_origem_id || null,
+        setor_origem: i.projeto_item_origem_id ? i.setor_origem || null : null,
       }))
       const { error: rpcError } = await (supabase as any).rpc(
         'replace_orcamento_itens',

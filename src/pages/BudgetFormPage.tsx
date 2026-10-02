@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -69,6 +69,7 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useOptions } from '@/hooks/use-options'
@@ -107,6 +108,7 @@ import {
   DevolucaoItemSearchModal,
   type DevolucaoSelection,
 } from '@/components/budgets/DevolucaoItemSearchModal'
+import { validarItensDevolucao } from '@/services/devolucoesService'
 import { BatchPdfImport } from '@/components/budgets/BatchPdfImport'
 import { ImportConnectXmlModal } from '@/components/budgets/ImportConnectXmlModal'
 import {
@@ -170,6 +172,27 @@ const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
     'DEV COMPRA',
   ],
   sac: ['SAC'],
+}
+
+// SPEC-177: em qual aba do formulário cada campo aparece (usado para abrir a
+// aba certa quando a validação falha).
+const CAMPOS_ABA_CLIENTE = new Set([
+  'natureza_operacao',
+  'subgrupo',
+  'empresa_id',
+  'perfil',
+  'projeto_codigo',
+  'cliente_id',
+  'arquitetos',
+  'vendedor_id',
+  'data_emissao',
+  'validade',
+  'previsao_entrega',
+  'status',
+])
+function abaDoCampo(campo: string): 'cliente' | 'produtos' | 'pagamento' {
+  if (campo === 'itens') return 'produtos'
+  return CAMPOS_ABA_CLIENTE.has(campo) ? 'cliente' : 'pagamento'
 }
 
 // SPEC-077: monta o valor do ArchitectSplitPicker a partir do orçamento
@@ -394,6 +417,8 @@ const formSchema = z
           // SPEC-071: só preenchido em item de devolução — aponta pro
           // projeto_itens da venda de origem que está sendo devolvida.
           projeto_item_origem_id: z.string().optional().nullable(),
+          // SPEC-178: setor da venda de origem (uma linha por setor).
+          setor_origem: z.string().optional().nullable(),
         }),
       )
       .min(1, 'Adicione pelo menos um item'),
@@ -438,6 +463,8 @@ export default function BudgetFormPage() {
 
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
   const [isBatchImportOpen, setIsBatchImportOpen] = useState(false)
+  // SPEC-177: aba ativa do formulário (cliente/arquiteto, produtos, pagamento).
+  const [abaAtiva, setAbaAtiva] = useState<'cliente' | 'produtos' | 'pagamento'>('cliente')
   const [isXmlImportOpen, setIsXmlImportOpen] = useState(false)
   const [pendingXmlImport, setPendingXmlImport] =
     useState<ResolvedXmlBudget | null>(null)
@@ -712,7 +739,7 @@ export default function BudgetFormPage() {
               *,
               itens:orcamento_itens(
                 id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem,
-                descricao, projeto_item_origem_id,
+                descricao, projeto_item_origem_id, setor_origem,
                 produto:produtos(codigo_produto, referencia, nome, sku)
               )
             `,
@@ -850,6 +877,7 @@ export default function BudgetFormPage() {
                 sub_ordem: i.sub_ordem ?? 0,
                 projeto_item_origem_id:
                   (i as any).projeto_item_origem_id ?? null,
+                setor_origem: (i as any).setor_origem ?? null,
               })) || [],
             ),
           })
@@ -1408,6 +1436,9 @@ export default function BudgetFormPage() {
   // salvo. O submit genérico (Criar/Salvar) não tinha esse tratamento.
   function onInvalid(errors: any) {
     const primeiraChave = Object.keys(errors)[0]
+    // SPEC-177: os campos ficam em abas — abre a aba do primeiro erro para o
+    // usuário ver o campo destacado.
+    if (primeiraChave) setAbaAtiva(abaDoCampo(primeiraChave))
     const mensagem = primeiraChave ? errors[primeiraChave]?.message : null
     toast.error('Corrija os campos destacados antes de salvar.', {
       description: typeof mensagem === 'string' ? mensagem : undefined,
@@ -1428,6 +1459,25 @@ export default function BudgetFormPage() {
       setPendingTeamDeliveryValues(values)
       setShowTeamDeliveryDialog(true)
       return
+    }
+
+    // SPEC-178: devolução só de venda efetivada, da MESMA empresa da venda,
+    // e sem passar do saldo disponível — conferido de novo ao salvar (vale
+    // para devolução já gravada e para troca de empresa depois dos itens).
+    if (values.natureza_operacao === 'devolucao') {
+      try {
+        const erroDevolucao = await validarItensDevolucao(values.empresa_id, values.itens as any)
+        if (erroDevolucao) {
+          setAbaAtiva(erroDevolucao.startsWith('Selecione a empresa') ? 'cliente' : 'produtos')
+          toast.error('Devolução bloqueada', { description: erroDevolucao })
+          return
+        }
+      } catch (error: any) {
+        toast.error('Não foi possível conferir a venda de origem da devolução.', {
+          description: error?.message,
+        })
+        return
+      }
     }
 
     try {
@@ -1997,6 +2047,27 @@ export default function BudgetFormPage() {
     )
 
     const currentItems = form.getValues('itens') || []
+
+    // SPEC-178: a devolução herda da venda de origem — empresa, vendedor e
+    // arquitetos. Na primeira seleção copia da venda; depois a empresa fica
+    // travada e o modal só deixa escolher venda da mesma empresa.
+    const jaTinhaItemDevolucao = currentItems.some(
+      (i: any) => i.projeto_item_origem_id,
+    )
+    const vendaBase = selecoes[0].venda
+    if (!jaTinhaItemDevolucao && vendaBase.empresa_id) {
+      form.setValue('empresa_id', vendaBase.empresa_id, {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      if (vendaBase.vendedor_id) {
+        form.setValue('vendedor_id', vendaBase.vendedor_id, { shouldDirty: true })
+      }
+      if (vendaBase.arquitetos.length > 0) {
+        form.setValue('arquitetos', vendaBase.arquitetos, { shouldDirty: true })
+      }
+    }
+
     const maxL = currentItems.reduce((max, item) => {
       const match = (item.custom_id || '').match(/L(\d+)/i)
       return Math.max(max, match ? parseInt(match[1], 10) : 0)
@@ -2011,9 +2082,15 @@ export default function BudgetFormPage() {
           : '',
       descricao: s.venda.produto || '',
       quantidade: s.quantidade,
-      preco_unitario: s.venda.preco_unitario,
-      desconto: s.venda.desconto,
+      // SPEC-178: a devolução sai pelo valor LÍQUIDO da venda de origem —
+      // preço já com o desconto do item e o desconto global da venda
+      // (ex.: R$ 4.031,21 com 8% = R$ 3.708,71). Por isso o desconto da
+      // linha fica 0: o desconto da venda já está no preço.
+      preco_unitario: s.venda.preco_liquido,
+      desconto: 0,
       projeto_item_origem_id: s.venda.projeto_item_id,
+      // SPEC-178 (R3): uma linha por setor — nunca somar setores.
+      setor_origem: s.venda.setor,
     }))
 
     replace([...currentItems, ...newItems], { shouldFocus: false })
@@ -2363,7 +2440,7 @@ export default function BudgetFormPage() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, produto:produtos(codigo_produto, referencia, nome, sku)',
+          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, setor_origem, produto:produtos(codigo_produto, referencia, nome, sku)',
         )
         .eq('orcamento_id', budgetToEdit.id)
       if (!error && data) {
@@ -2431,6 +2508,133 @@ export default function BudgetFormPage() {
       </div>
     )
   }
+
+  // SPEC-177: resumo do que JÁ está preenchido, acima das abas e visível em
+  // todas elas — o valor é o que chama atenção (negrito escuro); o que falta
+  // aparece apagado. Motivo: o administrador não percebeu que a arquiteta já
+  // estava vinculada numa devolução (o campo vazio "Adicionar arquiteto..."
+  // chamava mais atenção que o nome vinculado).
+  const brl = (v: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+  const resumoClienteId = form.watch('cliente_id')
+  const clienteAtual = clientes.find((c) => c.id === resumoClienteId) as any
+  const clienteResumo = clienteAtual
+    ? clienteAtual.razao_social?.trim() && clienteAtual.razao_social !== clienteAtual.nome
+      ? `${clienteAtual.razao_social} - ${clienteAtual.nome}`
+      : clienteAtual.nome
+    : null
+  const projetoCodigoAtual = form.watch('projeto_codigo')
+  const projetoResumo = projetoCodigoAtual
+    ? `${projetoCodigoAtual}${projectDetails?.nome ? ` - ${projectDetails.nome}` : ''}`
+    : null
+  const arquitetosAtuais = (form.watch('arquitetos') || []) as ArquitetoSplit[]
+  const vendedorIdAtual = form.watch('vendedor_id')
+  const vendedorResumo =
+    vendedorIdAtual && vendedorIdAtual !== 'none'
+      ? sortedVendedores.find((v) => v.id === vendedorIdAtual)?.nome ||
+        assignedVendedorNome ||
+        null
+      : null
+  const resumoEmpresaId = form.watch('empresa_id')
+  // SPEC-178: devolução com item lançado tem a empresa fixada pela venda.
+  const temItemDevolucao =
+    naturezaOperacao === 'devolucao' &&
+    (form.watch('itens') || []).some((i: any) => i.projeto_item_origem_id)
+  const empresaResumo = empresas.find((e) => e.id === resumoEmpresaId)?.nome || null
+  const previsaoAtual = form.watch('previsao_entrega')
+
+  const itemResumo = (rotulo: string, valor: ReactNode | null, extra?: string) => (
+    <div className="min-w-0">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{rotulo}</p>
+      {valor ? (
+        <p className={cn('font-semibold text-slate-900 truncate', extra)}>{valor}</p>
+      ) : (
+        <p className="text-sm italic text-slate-400">Não informado</p>
+      )}
+    </div>
+  )
+
+  const resumoOrcamento = (
+    <Card className="border-primary/20 bg-primary/[0.03]">
+      <CardContent className="p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
+          {itemResumo('Cliente', clienteResumo, 'text-base')}
+          {itemResumo('Projeto', projetoResumo)}
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              Arquiteto
+            </p>
+            {arquitetosAtuais.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 mt-0.5">
+                {arquitetosAtuais.map((a) => (
+                  <span
+                    key={a.arquiteto_id}
+                    className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-sm font-semibold text-slate-900"
+                  >
+                    {a.nome}
+                    {arquitetosAtuais.length > 1 && (
+                      <span className="text-xs font-medium text-slate-600">
+                        {Number(a.percentual).toLocaleString('pt-BR')}%
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm italic text-slate-400">Não informado</p>
+            )}
+          </div>
+          {itemResumo('Vendedor', vendedorResumo)}
+          {itemResumo('Empresa', empresaResumo)}
+          {itemResumo(
+            'Previsão de entrega',
+            previsaoAtual ? format(previsaoAtual, 'dd/MM/yyyy') : null,
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+
+  // SPEC-177: resumo de valores fixo no rodapé, visível em todas as abas.
+  // Mesmas linhas, ordem (SPEC-110) e cálculos do antigo "Pagamento e Totais".
+  const barraTotais = (
+    <div className="sticky bottom-0 z-20 -mx-1 rounded-xl border bg-white/95 px-5 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur">
+      <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-gray-600">
+          <span>
+            Subtotal dos itens{' '}
+            <span className="font-medium text-gray-900">
+              {brl(getDisplayValorTotal(valorSubtotal, naturezaOperacao))}
+            </span>
+          </span>
+          <span>
+            Desconto global (
+            {descontoTipo === 'percentual'
+              ? `${descontoGlobalPerc}%`
+              : `${descontoPercentualEquivalente.toFixed(2)}%`}
+            ){' '}
+            <span className="font-medium text-red-600">-{brl(descontoValorReais)}</span>
+          </span>
+          {valorSinal > 0 && (
+            <span>
+              Sinal <span className="font-medium text-amber-700">-{brl(valorSinal)}</span>
+            </span>
+          )}
+          {freteTipo === 'com_frete' && freteValor > 0 && (
+            <span>
+              Frete <span className="font-medium text-blue-600">+{brl(freteValor)}</span>
+            </span>
+          )}
+        </div>
+        <div className="flex items-baseline gap-3">
+          <span className="font-semibold text-gray-900">Valor Total</span>
+          <span className="text-2xl font-bold text-primary">
+            {brl(getDisplayValorTotal(valorTotal, naturezaOperacao))}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in pb-20 w-full max-w-none">
@@ -2516,11 +2720,42 @@ export default function BudgetFormPage() {
           onSubmit={form.handleSubmit(onSubmit, onInvalid)}
           className="space-y-6"
         >
+          {resumoOrcamento}
+
+          {/* SPEC-177: o formulário vira 3 abas. As abas ficam montadas (só
+              escondidas) para não perder estado de campos e modais; o resumo
+              de valores fica na barra fixa do rodapé, visível em todas. */}
+          <Tabs
+            value={abaAtiva}
+            onValueChange={(v) => setAbaAtiva(v as typeof abaAtiva)}
+            className="space-y-4"
+          >
+            <TabsList className="h-auto w-full justify-start gap-1 flex-wrap">
+              <TabsTrigger value="cliente" className="px-4 py-2">
+                1. Dados do Cliente / Arquiteto
+              </TabsTrigger>
+              <TabsTrigger value="produtos" className="px-4 py-2">
+                2. Produtos
+                <span className="ml-2 rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary">
+                  {fields.length}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger value="pagamento" className="px-4 py-2">
+                3. Condição de Pagamento
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent
+              value="cliente"
+              forceMount
+              className="mt-0 data-[state=inactive]:hidden destaque-preenchido"
+            >
           <Card>
             <CardHeader>
-              <CardTitle>Informações Gerais</CardTitle>
+              <CardTitle>Dados do Cliente / Arquiteto</CardTitle>
               <CardDescription>
-                Detalhes do cliente e dados comerciais.
+                Operação, empresa, projeto, cliente, arquiteto, vendedor e
+                datas.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -2687,6 +2922,7 @@ export default function BudgetFormPage() {
                         onValueChange={field.onChange}
                         defaultValue={field.value}
                         value={field.value}
+                        disabled={temItemDevolucao}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -2701,6 +2937,11 @@ export default function BudgetFormPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {temItemDevolucao && (
+                        <p className="text-xs text-muted-foreground">
+                          Definida pela venda de origem da devolução.
+                        </p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -3195,6 +3436,13 @@ export default function BudgetFormPage() {
             </CardContent>
           </Card>
 
+            </TabsContent>
+
+            <TabsContent
+              value="produtos"
+              forceMount
+              className="mt-0 data-[state=inactive]:hidden"
+            >
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -3342,12 +3590,23 @@ export default function BudgetFormPage() {
             </CardContent>
           </Card>
 
+            </TabsContent>
+
+            <TabsContent
+              value="pagamento"
+              forceMount
+              className="mt-0 data-[state=inactive]:hidden destaque-preenchido"
+            >
           <Card>
             <CardHeader>
-              <CardTitle>Pagamento e Totais</CardTitle>
+              <CardTitle>Condição de Pagamento</CardTitle>
+              <CardDescription>
+                Forma de pagamento, parcelas, frete, desconto, sinal e
+                observações. Os totais ficam na barra fixa abaixo.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="max-w-3xl">
                 <div className="space-y-6">
                   <FormField
                     control={form.control}
@@ -3944,87 +4203,13 @@ export default function BudgetFormPage() {
                   />
                 </div>
 
-                <div className="bg-gray-50 rounded-xl p-6 flex flex-col justify-end h-full border">
-                  {/* SPEC-110: ordem exibida segue a mesma ordem dos campos
-                      editáveis ao lado (Desconto Global, depois Sinal) —
-                      antes o resumo mostrava Sinal antes de Desconto
-                      (SPEC-078, seguindo a ordem do CÁLCULO), inconsistente
-                      com a ordem dos campos e apontado como confuso pelo
-                      usuário. O cálculo em si (sinal deduzido antes do
-                      desconto) não muda, só a ordem de exibição das linhas. */}
-                  <div className="space-y-3 mb-6">
-                    <div className="flex justify-between items-center text-sm text-gray-600">
-                      <span>Subtotal dos itens</span>
-                      <span className="font-medium">
-                        {new Intl.NumberFormat('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        }).format(
-                          getDisplayValorTotal(valorSubtotal, naturezaOperacao),
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm text-gray-600">
-                      <span>
-                        Desconto global (
-                        {descontoTipo === 'percentual'
-                          ? `${descontoGlobalPerc}%`
-                          : `${descontoPercentualEquivalente.toFixed(2)}%`}
-                        )
-                      </span>
-                      <span className="font-medium text-red-600">
-                        -
-                        {new Intl.NumberFormat('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        }).format(descontoValorReais)}
-                      </span>
-                    </div>
-                    {valorSinal > 0 && (
-                      <div className="flex justify-between items-center text-sm text-gray-600">
-                        <span>Sinal</span>
-                        <span className="font-medium text-amber-700">
-                          -
-                          {new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                          }).format(valorSinal)}
-                        </span>
-                      </div>
-                    )}
-                    {freteTipo === 'com_frete' && freteValor > 0 && (
-                      <div className="flex justify-between items-center text-sm text-gray-600">
-                        <span>Frete</span>
-                        <span className="font-medium text-blue-600">
-                          +
-                          {new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL',
-                          }).format(freteValor)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-200 space-y-2">
-                    <div className="flex justify-between items-end">
-                      <span className="text-gray-900 font-semibold">
-                        Valor Total
-                      </span>
-                      <span className="text-3xl font-bold text-primary">
-                        {new Intl.NumberFormat('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        }).format(
-                          getDisplayValorTotal(valorTotal, naturezaOperacao),
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
               </div>
             </CardContent>
           </Card>
+            </TabsContent>
+          </Tabs>
+
+          {barraTotais}
 
           <ProjectCreateModal
             open={isProjectModalOpen}
@@ -4109,6 +4294,8 @@ export default function BudgetFormPage() {
             // com o orçamento (budgetToEdit.projeto_id) e handleProjectSelect
             // nunca dispara sozinho.
             projetoId={projectDetails?.id || budgetToEdit?.projeto_id}
+            empresaId={temItemDevolucao ? resumoEmpresaId : null}
+            empresaNome={temItemDevolucao ? empresaResumo : null}
             onConfirm={applyDevolucaoSelection}
           />
 

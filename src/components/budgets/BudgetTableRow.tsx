@@ -372,8 +372,15 @@ export function BudgetTableRow({
         <TableCell className="text-gray-700">
           {budget.cliente?.razao_social || budget.cliente?.nome || '-'}
         </TableCell>
-        <TableCell className="text-gray-500 text-sm">
-          {budget.arquiteto?.nome || '-'}
+        {/* SPEC-177: mostra todos os arquitetos da divisão (SPEC-077), não só
+            o principal, no mesmo tom do cliente para não passar despercebido. */}
+        <TableCell className="text-gray-700 text-sm">
+          {budget.arquitetos?.length
+            ? budget.arquitetos
+                .map((a) => a.arquiteto?.nome)
+                .filter(Boolean)
+                .join(', ') || budget.arquiteto?.nome || '-'
+            : budget.arquiteto?.nome || '-'}
         </TableCell>
         <TableCell>
           <div className="flex flex-col gap-1">

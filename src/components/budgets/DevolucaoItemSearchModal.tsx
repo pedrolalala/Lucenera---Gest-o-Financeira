@@ -16,12 +16,23 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui/table'
-import { Loader2, Search, Check, Undo2 } from 'lucide-react'
+import { Loader2, Search, Check, Undo2, Ban } from 'lucide-react'
 import { useDebounce } from '@/hooks/use-debounce'
 import {
   getVendasOrigemParaDevolucao,
+  SETOR_DEVOLUCAO_LABEL,
+  type SetorDevolucao,
   type VendaOrigemItem,
 } from '@/services/devolucoesService'
+
+// SPEC-178: cor do setor — físico (reserva/em separação/entregue) volta ao
+// estoque; entrega futura é devolução virtual (só reduz a necessidade de compra).
+const SETOR_CLASSE: Record<SetorDevolucao, string> = {
+  reserva: 'border-emerald-300 bg-emerald-50 text-emerald-800',
+  em_separacao: 'border-sky-300 bg-sky-50 text-sky-800',
+  entregue: 'border-slate-300 bg-slate-100 text-slate-800',
+  entrega_futura: 'border-amber-300 bg-amber-50 text-amber-800',
+}
 
 const FMT = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -42,6 +53,8 @@ export function DevolucaoItemSearchModal({
   onOpenChange,
   clienteId,
   projetoId,
+  empresaId,
+  empresaNome,
   onConfirm,
 }: {
   open: boolean
@@ -50,6 +63,11 @@ export function DevolucaoItemSearchModal({
   // SPEC-105: casa por projeto atual também, não só por cliente — ver
   // comentário em devolucoesService.ts.
   projetoId: string | null | undefined
+  // SPEC-178: empresa já fixada pela venda de origem (quando a devolução já
+  // tem itens). Sem itens ainda, a empresa é a da primeira venda escolhida
+  // aqui — a devolução herda empresa/equipe da venda, nunca o contrário.
+  empresaId: string | null | undefined
+  empresaNome: string | null | undefined
   onConfirm: (itens: DevolucaoSelection[]) => void
 }) {
   const [search, setSearch] = useState('')
@@ -78,35 +96,24 @@ export function DevolucaoItemSearchModal({
       .finally(() => setLoading(false))
   }, [open, clienteId, projetoId, debounced])
 
-  const toggleSelect = (venda: VendaOrigemItem) => {
+  // SPEC-178: a seleção é a própria quantidade "A Devolver" (última coluna):
+  // maior que zero seleciona a linha, zero/vazio tira. Nunca passa do saldo
+  // disponível para devolução.
+  const setQuantidade = (venda: VendaOrigemItem, quantidade: number) => {
     setSelected((s) => {
       const n = new Map(s)
-      if (n.has(venda.projeto_item_id)) n.delete(venda.projeto_item_id)
-      else
-        n.set(venda.projeto_item_id, {
-          venda,
-          quantidade: Math.min(1, venda.quantidade_disponivel),
-        })
+      const q = Math.min(venda.quantidade_disponivel, Math.max(0, quantidade || 0))
+      if (q > 0) n.set(venda.chave, { venda, quantidade: q })
+      else n.delete(venda.chave)
       return n
     })
   }
 
-  const updateQuantidade = (projetoItemId: string, quantidade: number) => {
-    setSelected((s) => {
-      const n = new Map(s)
-      const entry = n.get(projetoItemId)
-      if (entry) {
-        n.set(projetoItemId, {
-          ...entry,
-          quantidade: Math.max(
-            0.01,
-            Math.min(entry.venda.quantidade_disponivel, quantidade),
-          ),
-        })
-      }
-      return n
-    })
-  }
+  const primeiraSelecionada = selected.values().next().value as DevolucaoSelection | undefined
+  const empresaTravaId = empresaId || primeiraSelecionada?.venda.empresa_id || null
+  const empresaTravaNome = empresaId ? empresaNome : primeiraSelecionada?.venda.empresa_nome
+  const empresaDiferente = (v: VendaOrigemItem) =>
+    !!empresaTravaId && v.empresa_id !== empresaTravaId
 
   const handleConfirm = () => {
     onConfirm(Array.from(selected.values()))
@@ -135,10 +142,20 @@ export function DevolucaoItemSearchModal({
             />
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            A busca cruza todos os projetos deste cliente e também as vendas
-            já feitas neste projeto — mostra qualquer venda anterior com
-            saldo ainda disponível para devolução (reserva + entrega futura +
-            entregue).
+            Mostra as vendas efetivadas deste cliente e deste projeto com
+            saldo disponível para devolução. A devolução herda a empresa e a
+            equipe da venda
+            {empresaTravaNome ? (
+              <>
+                {' '}— aqui só itens vendidos pela{' '}
+                <strong>{empresaTravaNome}</strong>
+              </>
+            ) : null}
+            . O valor já vem com o desconto dado na venda. Informe a quantidade
+            em "A Devolver" — uma linha por setor (Reserva, Em separação e
+            Entregue voltam ao estoque; Entrega futura é devolução virtual, só
+            reduz a necessidade de compra). O saldo é do que foi vendido, não
+            do estoque do produto.
           </p>
         </div>
 
@@ -155,89 +172,131 @@ export function DevolucaoItemSearchModal({
           ) : (
             <Table>
               <TableHeader className="sticky top-0 bg-background z-10">
+                {/* SPEC-178: ordem pedida — L / Código / Referência /
+                    Descrição / Número da Venda / Quantidade da Venda / A
+                    Devolver (quantidade digitada, sempre por último). */}
                 <TableRow>
-                  <TableHead className="w-24">Devolver</TableHead>
-                  <TableHead>Produto</TableHead>
-                  <TableHead>Código</TableHead>
-                  <TableHead>Projeto</TableHead>
-                  <TableHead>Orçamento</TableHead>
-                  <TableHead>Preço Unit.</TableHead>
-                  <TableHead>Disponível p/ Devolução</TableHead>
+                  <TableHead className="w-16">L</TableHead>
+                  <TableHead className="w-24">Código</TableHead>
+                  <TableHead className="w-40">Referência</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead className="w-32">Nº da Venda</TableHead>
+                  <TableHead className="w-44 text-center">Qtd. da Venda</TableHead>
+                  {/* SPEC-178 (R3): uma linha por setor da venda. */}
+                  <TableHead className="w-36 text-center">Setor</TableHead>
+                  <TableHead className="w-32 text-center">A Devolver</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {vendas.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={8}
                       className="text-center text-muted-foreground py-8"
                     >
-                      Nenhuma venda com saldo disponível para devolução
-                      encontrada para este cliente.
+                      Nenhuma venda efetivada com saldo disponível para
+                      devolução encontrada para este cliente/projeto.
                     </TableCell>
                   </TableRow>
                 ) : (
                   vendas.map((v) => {
-                    const isSelected = selected.has(v.projeto_item_id)
+                    const isSelected = selected.has(v.chave)
+                    const bloqueada = empresaDiferente(v)
                     return (
                       <TableRow
-                        key={v.projeto_item_id}
+                        key={v.chave}
                         data-state={isSelected ? 'selected' : undefined}
-                        className={isSelected ? 'bg-primary/10' : undefined}
+                        className={
+                          bloqueada
+                            ? 'bg-muted/40 text-muted-foreground'
+                            : isSelected
+                              ? 'bg-primary/10'
+                              : undefined
+                        }
                       >
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={isSelected ? 'default' : 'outline'}
-                              onClick={() => toggleSelect(v)}
-                            >
-                              {isSelected ? (
-                                <Check className="w-3.5 h-3.5" />
-                              ) : (
-                                'Selecionar'
-                              )}
-                            </Button>
-                          </div>
-                          {isSelected && (
-                            <Input
-                              type="number"
-                              min="0.01"
-                              max={v.quantidade_disponivel}
-                              step="0.01"
-                              value={
-                                selected.get(v.projeto_item_id)?.quantidade ?? 1
-                              }
-                              onChange={(e) =>
-                                updateQuantidade(
-                                  v.projeto_item_id,
-                                  parseFloat(e.target.value) || 0,
-                                )
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-20 h-7 text-xs text-center px-1 mt-1"
-                              title="Quantidade a devolver desta venda"
-                            />
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {v.produto || '-'}
+                        <TableCell className="font-mono text-sm">
+                          {v.l_fixo || '-'}
                         </TableCell>
                         <TableCell className="font-mono text-sm text-primary">
                           {v.produto_codigo ?? '-'}
                         </TableCell>
                         <TableCell className="text-sm">
-                          {v.projeto_codigo || '-'}
+                          {v.referencia || '-'}
                         </TableCell>
                         <TableCell className="text-sm">
-                          {v.orcamento_numero || '-'}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {FMT.format(v.preco_unitario)}
+                          <div className="font-medium">{v.produto || '-'}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {v.desconto_venda_percentual > 0 ? (
+                              <>
+                                {FMT.format(v.preco_unitario)} − desconto da
+                                venda{' '}
+                                {v.desconto_venda_percentual.toLocaleString('pt-BR', {
+                                  maximumFractionDigits: 2,
+                                })}
+                                % ={' '}
+                                <span className="font-semibold text-foreground">
+                                  {FMT.format(v.preco_liquido)} un.
+                                </span>
+                              </>
+                            ) : (
+                              <>{FMT.format(v.preco_liquido)} un.</>
+                            )}
+                          </div>
+                          {bloqueada && (
+                            <div className="mt-1 flex items-center gap-1 text-xs font-medium text-destructive">
+                              <Ban className="w-3.5 h-3.5" />
+                              Vendido pela {v.empresa_nome || 'outra empresa'} —
+                              não pode entrar na mesma devolução que itens da{' '}
+                              {empresaTravaNome || 'outra empresa'}.
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm font-semibold">
-                          {v.quantidade_disponivel}
+                          {v.venda_numero}
+                          {v.empresa_nome && (
+                            <div className="text-xs font-normal text-muted-foreground">
+                              {v.empresa_nome}
+                            </div>
+                          )}
+                        </TableCell>
+                        {/* R1/R2: o saldo é do que foi VENDIDO (vendido −
+                            já devolvido), não do estoque do produto. */}
+                        <TableCell className="text-sm text-center">
+                          <span className="font-semibold">{v.quantidade_venda}</span>
+                          <div className="text-xs text-muted-foreground">
+                            já devolvido: {v.quantidade_devolvida} · saldo do
+                            item: {v.saldo_item}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span
+                            className={`inline-block rounded-md border px-2 py-0.5 text-xs font-semibold ${SETOR_CLASSE[v.setor]}`}
+                          >
+                            {SETOR_DEVOLUCAO_LABEL[v.setor]}
+                          </span>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            saldo no setor: {v.quantidade_disponivel}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Input
+                            type="number"
+                            min="0"
+                            max={v.quantidade_disponivel}
+                            step="1"
+                            placeholder="0"
+                            disabled={bloqueada}
+                            value={selected.get(v.chave)?.quantidade ?? ''}
+                            onChange={(e) =>
+                              setQuantidade(v, parseFloat(e.target.value) || 0)
+                            }
+                            className="w-24 h-8 mx-auto text-center"
+                            title={
+                              bloqueada
+                                ? 'Venda de outra empresa'
+                                : `Até ${v.quantidade_disponivel} (saldo de ${SETOR_DEVOLUCAO_LABEL[v.setor]} nesta venda)`
+                            }
+                          />
                         </TableCell>
                       </TableRow>
                     )

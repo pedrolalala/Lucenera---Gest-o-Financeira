@@ -13,6 +13,7 @@ import { Trash2, PackageSearch, PackagePlus } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 import { getDisplayValorTotal } from '@/lib/budget-status'
+import { SETOR_DEVOLUCAO_LABEL, type SetorDevolucao } from '@/services/devolucoesService'
 
 // SPEC-032: rótulos por campo só aparecem em telas < lg — em lg: e acima o
 // cabeçalho único (BudgetItemsHeader.tsx) já mostra o nome da coluna uma
@@ -68,6 +69,11 @@ export function BudgetItemCard({
   const desconto = useWatch({ control, name: `itens.${index}.desconto` })
   const naturezaOperacao =
     useWatch({ control, name: 'natureza_operacao' }) || 'venda'
+  // SPEC-178 (R3): setor da venda de origem desta linha de devolução.
+  const setorOrigem = useWatch({
+    control,
+    name: `itens.${index}.setor_origem`,
+  }) as SetorDevolucao | null | undefined
   const prevCustomId =
     useWatch({
       control,
@@ -174,6 +180,14 @@ export function BudgetItemCard({
 
           {/* Descrição - Flexible (flex: 1) */}
           <div className="flex-1 min-w-0">
+            {naturezaOperacao === 'devolucao' && setorOrigem && (
+              <span
+                className="mb-1 inline-block rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800"
+                title="Setor da venda de origem de onde sai esta devolução"
+              >
+                Devolução · {SETOR_DEVOLUCAO_LABEL[setorOrigem] || setorOrigem}
+              </span>
+            )}
             {hasProduct ? (
               <FormField
                 control={control}

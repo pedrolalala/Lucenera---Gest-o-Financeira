@@ -79,3 +79,33 @@
 .animate-float {
   animation: float 4s ease-in-out infinite;
 }
+
+/* SPEC-177: no formulário de orçamento, o que JÁ está preenchido chama
+   atenção (valor em negrito escuro) e o que falta fica discreto (rótulo
+   pequeno, placeholder claro) — mesmo padrão do Cadastro. Escopado às abas
+   "Dados do Cliente / Arquiteto" e "Condição de Pagamento". */
+.destaque-preenchido label:not(.text-destructive) {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+.destaque-preenchido input:not([type='checkbox']):not([type='radio']):not(:placeholder-shown):not(:disabled) {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.destaque-preenchido input::placeholder {
+  color: hsl(var(--muted-foreground) / 0.6);
+  font-weight: 400;
+}
+.destaque-preenchido button[role='combobox']:not([data-placeholder]):not(.text-muted-foreground),
+.destaque-preenchido button[aria-haspopup='dialog'][class*='justify-start']:not(.text-muted-foreground),
+.destaque-preenchido button[aria-haspopup='dialog'].text-left:not(.text-muted-foreground) {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.destaque-preenchido button[role='combobox'][data-placeholder],
+.destaque-preenchido button[role='combobox'].text-muted-foreground,
+.destaque-preenchido button[aria-haspopup='dialog'].text-muted-foreground {
+  color: hsl(var(--muted-foreground) / 0.7);
+  font-weight: 400;
+}

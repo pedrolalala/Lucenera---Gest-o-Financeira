@@ -76,23 +76,22 @@ export function ArchitectSplitPicker({
     )
   }
 
+  // SPEC-177: o arquiteto já vinculado vem primeiro e em destaque (card com
+  // nome em negrito); o campo de busca vem depois, discreto. Antes o campo
+  // vazio "Adicionar arquiteto..." aparecia em cima e o vínculo existente
+  // ficava em texto pequeno embaixo — passava despercebido.
   return (
     <div className="space-y-2">
-      <SearchableSelect
-        options={availableOptions}
-        value={pendingSelection}
-        onChange={handleAdd}
-        placeholder="Adicionar arquiteto..."
-        searchPlaceholder="Buscar arquiteto..."
-        emptyText="Nenhum arquiteto encontrado."
-        disabled={disabled}
-      />
-
       {value.length > 0 && (
         <div className="space-y-2">
           {value.map((item) => (
-            <div key={item.arquiteto_id} className="flex items-center gap-2">
-              <span className="flex-1 text-sm truncate">{item.nome}</span>
+            <div
+              key={item.arquiteto_id}
+              className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5"
+            >
+              <span className="flex-1 truncate text-sm font-semibold text-slate-900">
+                {item.nome}
+              </span>
               {/* Com 1 único arquiteto o percentual é sempre 100% — não vale
                   poluir a UI com input/soma, só mostra o nome. */}
               {value.length > 1 && (
@@ -107,7 +106,7 @@ export function ArchitectSplitPicker({
                     onChange={(e) =>
                       handlePercentualChange(item.arquiteto_id, parseFloat(e.target.value) || 0)
                     }
-                    className="h-9 w-24 text-right"
+                    className="h-8 w-24 text-right bg-white"
                   />
                   <span className="text-sm text-muted-foreground">%</span>
                 </div>
@@ -118,7 +117,8 @@ export function ArchitectSplitPicker({
                 size="icon"
                 disabled={disabled}
                 onClick={() => handleRemove(item.arquiteto_id)}
-                className="h-9 w-9 text-destructive"
+                className="h-8 w-8 text-destructive"
+                title="Remover arquiteto"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -131,6 +131,17 @@ export function ArchitectSplitPicker({
           )}
         </div>
       )}
+
+      <SearchableSelect
+        options={availableOptions}
+        value={pendingSelection}
+        onChange={handleAdd}
+        placeholder={value.length > 0 ? 'Adicionar outro arquiteto...' : 'Adicionar arquiteto...'}
+        searchPlaceholder="Buscar arquiteto..."
+        emptyText="Nenhum arquiteto encontrado."
+        disabled={disabled}
+        className={value.length > 0 ? 'h-8 border-dashed text-xs' : undefined}
+      />
     </div>
   )
 }
