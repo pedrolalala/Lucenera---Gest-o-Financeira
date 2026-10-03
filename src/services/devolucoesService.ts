@@ -252,10 +252,15 @@ export async function getVendasOrigemParaDevolucao(
 
 // SPEC-178: conferência na hora de salvar o orçamento de devolução — vale
 // também para devolução já gravada e para troca de empresa depois de lançar
-// os itens. Regras: (1) toda linha vem de uma VENDA efetivada (com número de
-// venda); (2) a venda de origem é da MESMA empresa da devolução; (3) a
-// quantidade a devolver não passa do saldo disponível para devolução.
-// Devolve a mensagem do primeiro problema, ou null se estiver tudo certo.
+// os itens. BLOQUEIA: (1) linha sem VENDA efetivada (sem número de venda);
+// (3) quantidade acima do saldo. AVISA sem bloquear (decisão do usuário,
+// 03/10 — "sem a trava, porém com um aviso"): (2) venda de origem de outra
+// empresa que não a da devolução.
+export interface ConferenciaDevolucao {
+  erro: string | null
+  aviso: string | null
+}
+
 export async function validarItensDevolucao(
   empresaId: string | null | undefined,
   itens: {
@@ -264,10 +269,10 @@ export async function validarItensDevolucao(
     quantidade: number
     descricao?: string
   }[],
-): Promise<string | null> {
+): Promise<ConferenciaDevolucao> {
   const linhas = itens.filter((i) => i.projeto_item_origem_id)
-  if (linhas.length === 0) return null
-  if (!empresaId) return 'Selecione a empresa da devolução antes de salvar.'
+  if (linhas.length === 0) return { erro: null, aviso: null }
+  if (!empresaId) return { erro: 'Selecione a empresa da devolução antes de salvar.', aviso: null }
 
   const origemIds = [...new Set(linhas.map((i) => i.projeto_item_origem_id as string))]
   const { data: saldos, error } = await supabase
@@ -299,30 +304,41 @@ export async function validarItensDevolucao(
     }
   })
 
+  const avisos: string[] = []
   for (const i of linhas) {
     const nome = i.descricao || 'item'
     const saldo: any = saldoMap.get(i.projeto_item_origem_id as string)
     if (!saldo || !saldo.venda_numero) {
-      return `"${nome}" não está vinculado a uma venda efetivada (sem número de venda). Toda devolução precisa vir de uma venda.`
+      return {
+        erro: `"${nome}" não está vinculado a uma venda efetivada (sem número de venda). Toda devolução precisa vir de uma venda.`,
+        aviso: null,
+      }
     }
     const orc: any = orcMap.get(saldo.orcamento_id)
     if (!orc || orc.empresa_id !== empresaId) {
       const empresaVenda = Array.isArray(orc?.empresa) ? orc.empresa[0]?.nome : orc?.empresa?.nome
-      return `"${nome}" foi vendido pela empresa ${empresaVenda || 'de outra venda'} (${saldo.venda_numero}). A devolução precisa ser feita pela mesma empresa da venda.`
+      const aviso = `${saldo.venda_numero} foi vendida pela ${empresaVenda || 'outra empresa'}, diferente da empresa desta devolução.`
+      if (!avisos.includes(aviso)) avisos.push(aviso)
     }
     const setores = saldoPorSetor(saldo)
     const disponivel =
       setores.reserva + setores.entrega_futura + setores.em_separacao + setores.entregue
     if ((qtdPorOrigem.get(i.projeto_item_origem_id as string) || 0) > disponivel + 1e-9) {
-      return `"${nome}": a quantidade a devolver passa do saldo do item (vendido − já devolvido = ${disponivel}) na ${saldo.venda_numero}.`
+      return {
+        erro: `"${nome}": a quantidade a devolver passa do saldo do item (vendido − já devolvido = ${disponivel}) na ${saldo.venda_numero}.`,
+        aviso: null,
+      }
     }
     if (i.setor_origem) {
       const setor = i.setor_origem as SetorDevolucao
       const k = `${i.projeto_item_origem_id}:${setor}`
       if ((qtdPorSetor.get(k) || 0) > (setores[setor] ?? 0) + 1e-9) {
-        return `"${nome}": a quantidade a devolver de ${SETOR_DEVOLUCAO_LABEL[setor] || setor} passa do saldo desse setor (${setores[setor] ?? 0}) na ${saldo.venda_numero}.`
+        return {
+          erro: `"${nome}": a quantidade a devolver de ${SETOR_DEVOLUCAO_LABEL[setor] || setor} passa do saldo desse setor (${setores[setor] ?? 0}) na ${saldo.venda_numero}.`,
+          aviso: null,
+        }
       }
     }
   }
-  return null
+  return { erro: null, aviso: avisos.length ? avisos.join(' ') : null }
 }

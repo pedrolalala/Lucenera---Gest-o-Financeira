@@ -16,8 +16,9 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui/table'
-import { Loader2, Search, Check, Undo2, Ban } from 'lucide-react'
+import { Loader2, Search, Check, Undo2, AlertTriangle } from 'lucide-react'
 import { useDebounce } from '@/hooks/use-debounce'
+import { toast } from 'sonner'
 import {
   getVendasOrigemParaDevolucao,
   SETOR_DEVOLUCAO_LABEL,
@@ -96,10 +97,30 @@ export function DevolucaoItemSearchModal({
       .finally(() => setLoading(false))
   }, [open, clienteId, projetoId, debounced])
 
+  // Empresa de referência para o aviso: a da devolução (se já tem itens) ou a
+  // da primeira linha escolhida aqui.
+  const primeiraSelecionada = selected.values().next().value as DevolucaoSelection | undefined
+  const empresaTravaId = empresaId || primeiraSelecionada?.venda.empresa_id || null
+  const empresaTravaNome = empresaId ? empresaNome : primeiraSelecionada?.venda.empresa_nome
+  const empresaDiferente = (v: VendaOrigemItem) =>
+    !!empresaTravaId && v.empresa_id !== empresaTravaId
+
   // SPEC-178: a seleção é a própria quantidade "A Devolver" (última coluna):
   // maior que zero seleciona a linha, zero/vazio tira. Nunca passa do saldo
   // disponível para devolução.
   const setQuantidade = (venda: VendaOrigemItem, quantidade: number) => {
+    // Decisão do usuário (03/10): venda de outra empresa NÃO bloqueia — só
+    // avisa, uma vez, quando a linha é escolhida.
+    if (
+      quantidade > 0 &&
+      !selected.has(venda.chave) &&
+      empresaDiferente(venda)
+    ) {
+      toast.warning('Atenção: venda de outra empresa', {
+        description: `${venda.venda_numero} foi vendida pela ${venda.empresa_nome || 'outra empresa'}, diferente de ${empresaTravaNome || 'a empresa desta devolução'}.`,
+        duration: 8000,
+      })
+    }
     setSelected((s) => {
       const n = new Map(s)
       const q = Math.min(venda.quantidade_disponivel, Math.max(0, quantidade || 0))
@@ -108,12 +129,6 @@ export function DevolucaoItemSearchModal({
       return n
     })
   }
-
-  const primeiraSelecionada = selected.values().next().value as DevolucaoSelection | undefined
-  const empresaTravaId = empresaId || primeiraSelecionada?.venda.empresa_id || null
-  const empresaTravaNome = empresaId ? empresaNome : primeiraSelecionada?.venda.empresa_nome
-  const empresaDiferente = (v: VendaOrigemItem) =>
-    !!empresaTravaId && v.empresa_id !== empresaTravaId
 
   const handleConfirm = () => {
     onConfirm(Array.from(selected.values()))
@@ -147,15 +162,16 @@ export function DevolucaoItemSearchModal({
             equipe da venda
             {empresaTravaNome ? (
               <>
-                {' '}— aqui só itens vendidos pela{' '}
-                <strong>{empresaTravaNome}</strong>
+                {' '}(<strong>{empresaTravaNome}</strong>); item de venda de
+                outra empresa pode entrar, mas o sistema avisa
               </>
             ) : null}
             . O valor já vem com o desconto dado na venda. Informe a quantidade
-            em "A Devolver" — uma linha por setor (Reserva, Em separação e
-            Entregue voltam ao estoque; Entrega futura é devolução virtual, só
-            reduz a necessidade de compra). O saldo é do que foi vendido, não
-            do estoque do produto.
+            em "A Devolver" — uma linha por setor (Reserva e Em separação voltam
+            ao estoque na aprovação; Entregue fica "aguardando recebimento" até a
+            Separação Parcial confirmar que a peça chegou; Entrega futura é
+            devolução virtual, só reduz a necessidade de compra). O saldo é do que
+            foi vendido, não do estoque do produto.
           </p>
         </div>
 
@@ -201,18 +217,12 @@ export function DevolucaoItemSearchModal({
                 ) : (
                   vendas.map((v) => {
                     const isSelected = selected.has(v.chave)
-                    const bloqueada = empresaDiferente(v)
+                    const outraEmpresa = empresaDiferente(v)
                     return (
                       <TableRow
                         key={v.chave}
                         data-state={isSelected ? 'selected' : undefined}
-                        className={
-                          bloqueada
-                            ? 'bg-muted/40 text-muted-foreground'
-                            : isSelected
-                              ? 'bg-primary/10'
-                              : undefined
-                        }
+                        className={isSelected ? 'bg-primary/10' : undefined}
                       >
                         <TableCell className="font-mono text-sm">
                           {v.l_fixo || '-'}
@@ -242,11 +252,11 @@ export function DevolucaoItemSearchModal({
                               <>{FMT.format(v.preco_liquido)} un.</>
                             )}
                           </div>
-                          {bloqueada && (
-                            <div className="mt-1 flex items-center gap-1 text-xs font-medium text-destructive">
-                              <Ban className="w-3.5 h-3.5" />
-                              Vendido pela {v.empresa_nome || 'outra empresa'} —
-                              não pode entrar na mesma devolução que itens da{' '}
+                          {outraEmpresa && (
+                            <div className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              Venda de outra empresa ({v.empresa_nome || '?'}) —
+                              a devolução está na{' '}
                               {empresaTravaNome || 'outra empresa'}.
                             </div>
                           )}
@@ -285,17 +295,12 @@ export function DevolucaoItemSearchModal({
                             max={v.quantidade_disponivel}
                             step="1"
                             placeholder="0"
-                            disabled={bloqueada}
                             value={selected.get(v.chave)?.quantidade ?? ''}
                             onChange={(e) =>
                               setQuantidade(v, parseFloat(e.target.value) || 0)
                             }
                             className="w-24 h-8 mx-auto text-center"
-                            title={
-                              bloqueada
-                                ? 'Venda de outra empresa'
-                                : `Até ${v.quantidade_disponivel} (saldo de ${SETOR_DEVOLUCAO_LABEL[v.setor]} nesta venda)`
-                            }
+                            title={`Até ${v.quantidade_disponivel} (saldo de ${SETOR_DEVOLUCAO_LABEL[v.setor]} nesta venda)`}
                           />
                         </TableCell>
                       </TableRow>

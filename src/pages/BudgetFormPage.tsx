@@ -732,11 +732,16 @@ export default function BudgetFormPage() {
 
         if (!budget) {
           // fetch from supabase
+          // SPEC-177 (teste 03/10): mesmo embed de arquitetos da lista
+          // (useBudgetStore). Sem ele, abrir o orçamento pelo link direto ou
+          // com F5 deixava o arquiteto vazio — e salvar apagava o vínculo.
           const { data, error } = await supabase
             .from('orcamentos')
             .select(
               `
               *,
+              arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
+              arquitetos:orcamento_arquitetos(percentual, arquiteto:arquiteto_id(id, nome)),
               itens:orcamento_itens(
                 id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem,
                 descricao, projeto_item_origem_id, setor_origem,
@@ -1461,16 +1466,22 @@ export default function BudgetFormPage() {
       return
     }
 
-    // SPEC-178: devolução só de venda efetivada, da MESMA empresa da venda,
-    // e sem passar do saldo disponível — conferido de novo ao salvar (vale
-    // para devolução já gravada e para troca de empresa depois dos itens).
+    // SPEC-178: devolução só de venda efetivada e sem passar do saldo —
+    // conferido de novo ao salvar. Venda de outra empresa só AVISA (decisão do
+    // usuário, 03/10: sem trava, com aviso).
     if (values.natureza_operacao === 'devolucao') {
       try {
-        const erroDevolucao = await validarItensDevolucao(values.empresa_id, values.itens as any)
-        if (erroDevolucao) {
-          setAbaAtiva(erroDevolucao.startsWith('Selecione a empresa') ? 'cliente' : 'produtos')
-          toast.error('Devolução bloqueada', { description: erroDevolucao })
+        const conferencia = await validarItensDevolucao(values.empresa_id, values.itens as any)
+        if (conferencia.erro) {
+          setAbaAtiva(conferencia.erro.startsWith('Selecione a empresa') ? 'cliente' : 'produtos')
+          toast.error('Devolução bloqueada', { description: conferencia.erro })
           return
+        }
+        if (conferencia.aviso) {
+          toast.warning('Atenção: venda de outra empresa', {
+            description: conferencia.aviso,
+            duration: 10000,
+          })
         }
       } catch (error: any) {
         toast.error('Não foi possível conferir a venda de origem da devolução.', {
@@ -2049,8 +2060,8 @@ export default function BudgetFormPage() {
     const currentItems = form.getValues('itens') || []
 
     // SPEC-178: a devolução herda da venda de origem — empresa, vendedor e
-    // arquitetos. Na primeira seleção copia da venda; depois a empresa fica
-    // travada e o modal só deixa escolher venda da mesma empresa.
+    // arquitetos — na primeira seleção. A empresa continua editável (decisão
+    // do usuário, 03/10: sem trava, com aviso quando a venda é de outra empresa).
     const jaTinhaItemDevolucao = currentItems.some(
       (i: any) => i.projeto_item_origem_id,
     )
@@ -2073,9 +2084,13 @@ export default function BudgetFormPage() {
       return Math.max(max, match ? parseInt(match[1], 10) : 0)
     }, 0)
 
-    const newItems = selecoes.map((s, idx) => ({
+    // SPEC-178 (teste 03/10): a linha de devolução mantém o L (local) da venda
+    // de origem — antes era renumerada (L15 da venda virava L02). Só item da
+    // venda sem L recebe o próximo número livre.
+    let proximoL = maxL
+    const newItems = selecoes.map((s) => ({
       uid: crypto.randomUUID(),
-      custom_id: formatCircuitId(`L${maxL + idx + 1}`),
+      custom_id: formatCircuitId(s.venda.l_fixo || `L${++proximoL}`),
       produto_id:
         s.venda.produto_id && isValidUUID(s.venda.produto_id)
           ? s.venda.produto_id
@@ -2536,7 +2551,8 @@ export default function BudgetFormPage() {
         null
       : null
   const resumoEmpresaId = form.watch('empresa_id')
-  // SPEC-178: devolução com item lançado tem a empresa fixada pela venda.
+  // SPEC-178: devolução com item já lançado (a empresa da venda vira a
+  // referência do aviso no modal).
   const temItemDevolucao =
     naturezaOperacao === 'devolucao' &&
     (form.watch('itens') || []).some((i: any) => i.projeto_item_origem_id)
@@ -2922,7 +2938,6 @@ export default function BudgetFormPage() {
                         onValueChange={field.onChange}
                         defaultValue={field.value}
                         value={field.value}
-                        disabled={temItemDevolucao}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -2939,7 +2954,8 @@ export default function BudgetFormPage() {
                       </Select>
                       {temItemDevolucao && (
                         <p className="text-xs text-muted-foreground">
-                          Definida pela venda de origem da devolução.
+                          Veio da venda de origem da devolução. Se trocar, o
+                          sistema avisa ao salvar.
                         </p>
                       )}
                       <FormMessage />
