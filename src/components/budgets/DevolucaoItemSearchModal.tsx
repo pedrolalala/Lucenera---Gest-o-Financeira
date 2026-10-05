@@ -56,6 +56,7 @@ export function DevolucaoItemSearchModal({
   projetoId,
   empresaId,
   empresaNome,
+  vendaOrigemId,
   onConfirm,
 }: {
   open: boolean
@@ -69,6 +70,8 @@ export function DevolucaoItemSearchModal({
   // aqui — a devolução herda empresa/equipe da venda, nunca o contrário.
   empresaId: string | null | undefined
   empresaNome: string | null | undefined
+  // SPEC-181: venda vinculada à devolução — a busca mostra só os itens dela.
+  vendaOrigemId?: string | null
   onConfirm: (itens: DevolucaoSelection[]) => void
 }) {
   const [search, setSearch] = useState('')
@@ -86,16 +89,16 @@ export function DevolucaoItemSearchModal({
       setSelected(new Map())
       return
     }
-    if (!clienteId && !projetoId) {
+    if (!clienteId && !projetoId && !vendaOrigemId) {
       setVendas([])
       return
     }
     setLoading(true)
-    getVendasOrigemParaDevolucao(clienteId, projetoId, debounced)
+    getVendasOrigemParaDevolucao(clienteId, projetoId, debounced, vendaOrigemId)
       .then(setVendas)
       .catch(() => setVendas([]))
       .finally(() => setLoading(false))
-  }, [open, clienteId, projetoId, debounced])
+  }, [open, clienteId, projetoId, debounced, vendaOrigemId])
 
   // Empresa de referência para o aviso: a da devolução (se já tem itens) ou a
   // da primeira linha escolhida aqui.
@@ -157,16 +160,10 @@ export function DevolucaoItemSearchModal({
             />
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Mostra as vendas efetivadas deste cliente e deste projeto com
-            saldo disponível para devolução. A devolução herda a empresa e a
-            equipe da venda
-            {empresaTravaNome ? (
-              <>
-                {' '}(<strong>{empresaTravaNome}</strong>); item de venda de
-                outra empresa pode entrar, mas o sistema avisa
-              </>
-            ) : null}
-            . O valor já vem com o desconto dado na venda. Informe a quantidade
+            {vendaOrigemId
+              ? 'Mostra os itens da venda vinculada com saldo disponível para devolução.'
+              : 'Mostra as vendas efetivadas deste cliente e deste projeto com saldo disponível para devolução.'}{' '}
+            O valor já vem com o desconto dado na venda. Informe a quantidade
             em "A Devolver" — uma linha por setor (Reserva e Em separação voltam
             ao estoque na aprovação; Entregue fica "aguardando recebimento" até a
             Separação Parcial confirmar que a peça chegou; Entrega futura é

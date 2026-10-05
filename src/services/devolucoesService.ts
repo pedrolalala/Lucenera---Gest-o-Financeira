@@ -101,8 +101,10 @@ export async function getVendasOrigemParaDevolucao(
   clienteId: string | null | undefined,
   projetoId: string | null | undefined,
   search = '',
+  // SPEC-181: com a venda vinculada, só itens DELA.
+  vendaOrigemId?: string | null,
 ): Promise<VendaOrigemItem[]> {
-  if (!clienteId && !projetoId) return []
+  if (!clienteId && !projetoId && !vendaOrigemId) return []
 
   const orParts: string[] = []
   if (clienteId) orParts.push(`cliente_id.eq.${clienteId}`)
@@ -113,8 +115,8 @@ export async function getVendasOrigemParaDevolucao(
     .select(
       'projeto_item_id, projeto_id, orcamento_id, produto_id, produto, produto_codigo, projeto_codigo, orcamento_numero, venda_numero, q_venda, q_reserva, q_entrega_futura, q_ag_separar, q_separado, q_entregue, q_devolvida, status_operacional',
     )
-    .or(orParts.join(','))
     .eq('status_operacional', 'ativo')
+  query = vendaOrigemId ? query.eq('orcamento_id', vendaOrigemId) : query.or(orParts.join(','))
 
   const t = search.trim()
   if (t) {
@@ -269,7 +271,15 @@ export async function validarItensDevolucao(
     quantidade: number
     descricao?: string
   }[],
+  // SPEC-181: venda vinculada à devolução — obrigatória; todo item vem dela.
+  vendaOrigemId?: string | null,
 ): Promise<ConferenciaDevolucao> {
+  if (!vendaOrigemId) {
+    return {
+      erro: 'Vincule a devolução a uma venda efetivada (botão "Vincular venda", na aba Dados do Cliente / Arquiteto) antes de salvar.',
+      aviso: null,
+    }
+  }
   const linhas = itens.filter((i) => i.projeto_item_origem_id)
   if (linhas.length === 0) return { erro: null, aviso: null }
   if (!empresaId) return { erro: 'Selecione a empresa da devolução antes de salvar.', aviso: null }
@@ -314,11 +324,21 @@ export async function validarItensDevolucao(
         aviso: null,
       }
     }
+    if (saldo.orcamento_id !== vendaOrigemId) {
+      return {
+        erro: `"${nome}" é da ${saldo.venda_numero}, que não é a venda vinculada a esta devolução. Remova o item ou troque a venda.`,
+        aviso: null,
+      }
+    }
     const orc: any = orcMap.get(saldo.orcamento_id)
+    // SPEC-181 (05/10): empresa volta a ser travada — a devolução não pode
+    // divergir da venda (substitui o aviso de 03/10).
     if (!orc || orc.empresa_id !== empresaId) {
       const empresaVenda = Array.isArray(orc?.empresa) ? orc.empresa[0]?.nome : orc?.empresa?.nome
-      const aviso = `${saldo.venda_numero} foi vendida pela ${empresaVenda || 'outra empresa'}, diferente da empresa desta devolução.`
-      if (!avisos.includes(aviso)) avisos.push(aviso)
+      return {
+        erro: `${saldo.venda_numero} foi vendida pela ${empresaVenda || 'outra empresa'}; a devolução precisa ser da mesma empresa.`,
+        aviso: null,
+      }
     }
     const setores = saldoPorSetor(saldo)
     const disponivel =
@@ -341,4 +361,83 @@ export async function validarItensDevolucao(
     }
   }
   return { erro: null, aviso: avisos.length ? avisos.join(' ') : null }
+}
+
+// SPEC-181: venda efetivada à qual uma devolução/troca é vinculada. Empresa,
+// projeto e cliente da devolução vêm dela e ficam travados.
+export interface VendaEfetivada {
+  id: string
+  numero: string | null
+  numero_venda: string
+  data_emissao: string | null
+  valor_total: number
+  empresa_id: string
+  empresa_nome: string | null
+  cliente_id: string | null
+  cliente_nome: string | null
+  projeto_id: string | null
+  projeto_codigo: string | null
+  projeto_nome: string | null
+  vendedor_id: string | null
+  arquitetos: { arquiteto_id: string; nome: string; percentual: number }[]
+}
+
+const SELECT_VENDA_EFETIVADA =
+  'id, numero, numero_venda, data_emissao, valor_total, empresa_id, cliente_id, projeto_id, vendedor_id, empresa:empresas(nome), cliente:contatos!orcamentos_cliente_id_fkey(nome, razao_social), projeto:projetos(codigo, nome), arquitetos:orcamento_arquitetos(percentual, arquiteto:arquiteto_id(id, nome))'
+
+function mapVendaEfetivada(o: any): VendaEfetivada {
+  const um = (x: any) => (Array.isArray(x) ? x[0] : x)
+  const cliente = um(o.cliente)
+  const projeto = um(o.projeto)
+  return {
+    id: o.id,
+    numero: o.numero,
+    numero_venda: o.numero_venda,
+    data_emissao: o.data_emissao,
+    valor_total: Number(o.valor_total) || 0,
+    empresa_id: o.empresa_id,
+    empresa_nome: um(o.empresa)?.nome ?? null,
+    cliente_id: o.cliente_id,
+    cliente_nome: cliente
+      ? cliente.razao_social?.trim() && cliente.razao_social !== cliente.nome
+        ? `${cliente.razao_social} - ${cliente.nome}`
+        : cliente.nome
+      : null,
+    projeto_id: o.projeto_id,
+    projeto_codigo: projeto?.codigo ?? null,
+    projeto_nome: projeto?.nome ?? null,
+    vendedor_id: o.vendedor_id,
+    arquitetos: ((o.arquitetos as any[]) || [])
+      .filter((a) => a.arquiteto)
+      .map((a) => ({
+        arquiteto_id: a.arquiteto.id,
+        nome: a.arquiteto.nome,
+        percentual: Number(a.percentual) || 0,
+      })),
+  }
+}
+
+// Vendas efetivadas (com número de venda). A busca por texto filtra no
+// navegador por venda, orçamento, cliente, projeto e empresa — hoje são
+// poucas vendas; se crescer, mover o filtro para o banco.
+export async function buscarVendasEfetivadas(): Promise<VendaEfetivada[]> {
+  const { data, error } = await supabase
+    .from('orcamentos')
+    .select(SELECT_VENDA_EFETIVADA)
+    .not('numero_venda', 'is', null)
+    .eq('natureza_operacao', 'venda')
+    .order('numero_venda', { ascending: false })
+    .limit(500)
+  if (error) throw error
+  return (data || []).map(mapVendaEfetivada)
+}
+
+export async function getVendaEfetivada(id: string): Promise<VendaEfetivada | null> {
+  const { data, error } = await supabase
+    .from('orcamentos')
+    .select(SELECT_VENDA_EFETIVADA)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return data ? mapVendaEfetivada(data) : null
 }

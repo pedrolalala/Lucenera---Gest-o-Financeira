@@ -108,7 +108,12 @@ import {
   DevolucaoItemSearchModal,
   type DevolucaoSelection,
 } from '@/components/budgets/DevolucaoItemSearchModal'
-import { validarItensDevolucao } from '@/services/devolucoesService'
+import {
+  validarItensDevolucao,
+  getVendaEfetivada,
+  type VendaEfetivada,
+} from '@/services/devolucoesService'
+import { VendaOrigemDialog } from '@/components/budgets/VendaOrigemDialog'
 import { BatchPdfImport } from '@/components/budgets/BatchPdfImport'
 import { ImportConnectXmlModal } from '@/components/budgets/ImportConnectXmlModal'
 import {
@@ -179,6 +184,7 @@ const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
 const CAMPOS_ABA_CLIENTE = new Set([
   'natureza_operacao',
   'subgrupo',
+  'venda_origem_id',
   'empresa_id',
   'perfil',
   'projeto_codigo',
@@ -280,6 +286,8 @@ const formSchema = z
       .default('venda'),
     // SPEC-074: subgrupo do campo "Tipo", ver SUBGRUPOS_POR_TIPO acima.
     subgrupo: z.string().min(1, 'Selecione o Tipo'),
+    // SPEC-181: venda efetivada à qual a devolução/troca está vinculada.
+    venda_origem_id: z.string().optional().nullable(),
     empresa_id: z
       .string({ required_error: 'Selecione uma empresa' })
       .min(1, 'Selecione uma empresa'),
@@ -453,6 +461,14 @@ const formSchema = z
         })
       }
     })
+    // SPEC-181: devolução/troca só salva vinculada a uma venda efetivada.
+    if (data.natureza_operacao === 'devolucao' && !data.venda_origem_id) {
+      ctx.addIssue({
+        path: ['venda_origem_id'],
+        code: z.ZodIssueCode.custom,
+        message: 'Vincule a devolução a uma venda efetivada antes de salvar.',
+      })
+    }
   })
 
 export default function BudgetFormPage() {
@@ -485,6 +501,9 @@ export default function BudgetFormPage() {
   // SPEC-071: modal de busca de venda de origem, usado só quando
   // natureza_operacao === 'devolucao'.
   const [isDevolucaoSearchOpen, setIsDevolucaoSearchOpen] = useState(false)
+  // SPEC-181: vínculo obrigatório da devolução/troca com UMA venda efetivada.
+  const [isVendaOrigemOpen, setIsVendaOrigemOpen] = useState(false)
+  const [vendaOrigem, setVendaOrigem] = useState<VendaEfetivada | null>(null)
   // SPEC-079: diálogo de múltiplos L's por peça — multiLProduct null =
   // modo "item não cadastrado" (descrição/preço manuais).
   const [isMultiLDialogOpen, setIsMultiLDialogOpen] = useState(false)
@@ -594,6 +613,7 @@ export default function BudgetFormPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       natureza_operacao: 'venda',
+      venda_origem_id: null,
       // Fix (achado 2026-08-13): 'venda' sempre mapeia pro único subgrupo
       // 'VENDAS' (SUBGRUPOS_POR_TIPO.venda), conhecido de antemão — não dá
       // pra confiar em useEffect pra preencher isso depois do mount, porque
@@ -811,6 +831,7 @@ export default function BudgetFormPage() {
           form.reset({
             natureza_operacao: naturezaEdit,
             subgrupo: subgrupoEdit,
+            venda_origem_id: (budget as any).venda_origem_id ?? null,
             empresa_id: budget.empresa_id,
             projeto_codigo: projetoCodigo,
             cliente_id: budget.cliente_id || '',
@@ -912,6 +933,28 @@ export default function BudgetFormPage() {
   }, [id, isEditing, budgets, form, navigate])
 
   const naturezaOperacao = form.watch('natureza_operacao') || 'venda'
+
+  // SPEC-181: dados da venda vinculada (cabeçalho do vínculo e resumo) — ao
+  // abrir uma devolução já salva busca pelo id; tipo diferente de Devolução
+  // não tem venda vinculada.
+  const vendaOrigemIdWatch = form.watch('venda_origem_id')
+  useEffect(() => {
+    if (!vendaOrigemIdWatch) {
+      setVendaOrigem(null)
+      return
+    }
+    if (vendaOrigem?.id === vendaOrigemIdWatch) return
+    getVendaEfetivada(vendaOrigemIdWatch)
+      .then(setVendaOrigem)
+      .catch(() => setVendaOrigem(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendaOrigemIdWatch])
+  useEffect(() => {
+    if (naturezaOperacao !== 'devolucao' && form.getValues('venda_origem_id')) {
+      form.setValue('venda_origem_id', null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [naturezaOperacao])
 
   // Fix (achado 2026-08-13, teste ao vivo): quando SUBGRUPOS_POR_TIPO tem
   // só 1 opção pro tipo atual, o campo "Tipo" renderiza um Input
@@ -1471,9 +1514,17 @@ export default function BudgetFormPage() {
     // usuário, 03/10: sem trava, com aviso).
     if (values.natureza_operacao === 'devolucao') {
       try {
-        const conferencia = await validarItensDevolucao(values.empresa_id, values.itens as any)
+        const conferencia = await validarItensDevolucao(
+          values.empresa_id,
+          values.itens as any,
+          values.venda_origem_id,
+        )
         if (conferencia.erro) {
-          setAbaAtiva(conferencia.erro.startsWith('Selecione a empresa') ? 'cliente' : 'produtos')
+          setAbaAtiva(
+            conferencia.erro.startsWith('Selecione a empresa') || conferencia.erro.startsWith('Vincule')
+              ? 'cliente'
+              : 'produtos',
+          )
           toast.error('Devolução bloqueada', { description: conferencia.erro })
           return
         }
@@ -1677,6 +1728,9 @@ export default function BudgetFormPage() {
         // existe (o campo fica desabilitado na UI quando isEditing).
         natureza_operacao: values.natureza_operacao,
         subgrupo: values.subgrupo,
+        // SPEC-181: venda vinculada (só em devolução/troca).
+        venda_origem_id:
+          values.natureza_operacao === 'devolucao' ? values.venda_origem_id || null : null,
         empresa_id: values.empresa_id,
         projeto_id: projeto.id,
         cliente_id: values.cliente_id,
@@ -2028,6 +2082,40 @@ export default function BudgetFormPage() {
     setIsProductSearchOpen(false)
   }
 
+  // SPEC-181: ao vincular a venda, empresa, projeto e cliente vêm dela (e
+  // ficam travados); vendedor e arquitetos também. O projeto é aplicado
+  // primeiro porque handleProjectSelect preenche empresa/cliente/arquitetos a
+  // partir do PROJETO — os dados da venda são gravados depois, por cima.
+  // Trocar a venda remove os itens já lançados (eram da venda anterior).
+  const applyVendaOrigem = async (venda: VendaEfetivada) => {
+    setIsVendaOrigemOpen(false)
+    const anterior = form.getValues('venda_origem_id')
+    if (anterior && anterior !== venda.id) {
+      const restantes = (form.getValues('itens') || []).filter(
+        (i: any) => !i.projeto_item_origem_id,
+      )
+      if (restantes.length !== (form.getValues('itens') || []).length) {
+        replace(restantes, { shouldFocus: false })
+        toast.info('Itens da venda anterior removidos — lance os itens da nova venda.')
+      }
+    }
+    setVendaOrigem(venda)
+    form.setValue('venda_origem_id', venda.id, { shouldDirty: true, shouldValidate: true })
+    if (venda.projeto_codigo) {
+      form.setValue('projeto_codigo', venda.projeto_codigo, { shouldDirty: true, shouldValidate: true })
+      await handleProjectSelect(venda.projeto_codigo)
+    }
+    form.setValue('empresa_id', venda.empresa_id, { shouldDirty: true, shouldValidate: true })
+    if (venda.cliente_id) {
+      form.setValue('cliente_id', venda.cliente_id, { shouldDirty: true, shouldValidate: true })
+    }
+    if (venda.vendedor_id) form.setValue('vendedor_id', venda.vendedor_id, { shouldDirty: true })
+    if (venda.arquitetos.length > 0) {
+      form.setValue('arquitetos', venda.arquitetos, { shouldDirty: true })
+    }
+    toast.success(`Devolução vinculada à ${venda.numero_venda}.`)
+  }
+
   // SPEC-071: mesma lógica de applyProductSelection, mas a origem é uma
   // venda já aprovada (projeto_itens) em vez do catálogo de produtos — cada
   // linha carrega projeto_item_origem_id, obrigatório pelo superRefine do
@@ -2059,25 +2147,8 @@ export default function BudgetFormPage() {
 
     const currentItems = form.getValues('itens') || []
 
-    // SPEC-178: a devolução herda da venda de origem — empresa, vendedor e
-    // arquitetos — na primeira seleção. A empresa continua editável (decisão
-    // do usuário, 03/10: sem trava, com aviso quando a venda é de outra empresa).
-    const jaTinhaItemDevolucao = currentItems.some(
-      (i: any) => i.projeto_item_origem_id,
-    )
-    const vendaBase = selecoes[0].venda
-    if (!jaTinhaItemDevolucao && vendaBase.empresa_id) {
-      form.setValue('empresa_id', vendaBase.empresa_id, {
-        shouldDirty: true,
-        shouldValidate: true,
-      })
-      if (vendaBase.vendedor_id) {
-        form.setValue('vendedor_id', vendaBase.vendedor_id, { shouldDirty: true })
-      }
-      if (vendaBase.arquitetos.length > 0) {
-        form.setValue('arquitetos', vendaBase.arquitetos, { shouldDirty: true })
-      }
-    }
+    // SPEC-181: empresa/projeto/cliente/equipe já vieram da venda vinculada
+    // (applyVendaOrigem); a busca só mostra itens dela.
 
     const maxL = currentItems.reduce((max, item) => {
       const match = (item.custom_id || '').match(/L(\d+)/i)
@@ -2556,6 +2627,9 @@ export default function BudgetFormPage() {
   const temItemDevolucao =
     naturezaOperacao === 'devolucao' &&
     (form.watch('itens') || []).some((i: any) => i.projeto_item_origem_id)
+  // SPEC-181: com a venda vinculada, empresa/projeto/cliente ficam travados.
+  const vendaOrigemId = form.watch('venda_origem_id') || null
+  const travadoPelaVenda = naturezaOperacao === 'devolucao' && !!vendaOrigemId
   const empresaResumo = empresas.find((e) => e.id === resumoEmpresaId)?.nome || null
   const previsaoAtual = form.watch('previsao_entrega')
 
@@ -2600,6 +2674,8 @@ export default function BudgetFormPage() {
               <p className="text-sm italic text-slate-400">Não informado</p>
             )}
           </div>
+          {naturezaOperacao === 'devolucao' &&
+            itemResumo('Venda de origem', vendaOrigem?.numero_venda || null)}
           {itemResumo('Vendedor', vendedorResumo)}
           {itemResumo('Empresa', empresaResumo)}
           {itemResumo(
@@ -2827,6 +2903,11 @@ export default function BudgetFormPage() {
                           opcoes.length === 1 ? opcoes[0] : '',
                           { shouldValidate: true },
                         )
+                        // SPEC-181: devolução/troca abre na hora a busca da
+                        // venda efetivada a vincular.
+                        if (!form.getValues('venda_origem_id')) {
+                          setIsVendaOrigemOpen(true)
+                        }
                       }}
                     >
                       <Undo2 className="w-3.5 h-3.5 mr-1.5" /> Devolução
@@ -2925,6 +3006,61 @@ export default function BudgetFormPage() {
                 />
               </div>
 
+              {/* SPEC-181: vínculo obrigatório com a venda efetivada. */}
+              {naturezaOperacao === 'devolucao' && (
+                <FormField
+                  control={form.control}
+                  name="venda_origem_id"
+                  render={() => (
+                    <FormItem>
+                      <div
+                        className={cn(
+                          'rounded-lg border p-4 flex flex-wrap items-center justify-between gap-3',
+                          vendaOrigemId
+                            ? 'border-primary/30 bg-primary/5'
+                            : 'border-amber-300 bg-amber-50',
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            Venda de origem <span className="text-red-500">*</span>
+                          </p>
+                          {vendaOrigemId ? (
+                            <p className="font-semibold text-slate-900">
+                              {vendaOrigem?.numero_venda || 'Carregando...'}
+                              {vendaOrigem && (
+                                <span className="font-normal text-slate-600">
+                                  {' '}· {vendaOrigem.cliente_nome || '-'} ·{' '}
+                                  {vendaOrigem.projeto_codigo || '-'} ·{' '}
+                                  {vendaOrigem.empresa_nome || '-'}
+                                </span>
+                              )}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-amber-800">
+                              Vincule uma venda efetivada para liberar os produtos.
+                              Empresa, projeto e cliente vêm da venda.
+                            </p>
+                          )}
+                        </div>
+                        {!isEditing && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={vendaOrigemId ? 'outline' : 'default'}
+                            onClick={() => setIsVendaOrigemOpen(true)}
+                          >
+                            <Undo2 className="w-4 h-4 mr-2" />
+                            {vendaOrigemId ? 'Trocar venda' : 'Vincular venda'}
+                          </Button>
+                        )}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -2938,6 +3074,7 @@ export default function BudgetFormPage() {
                         onValueChange={field.onChange}
                         defaultValue={field.value}
                         value={field.value}
+                        disabled={travadoPelaVenda}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -2952,10 +3089,9 @@ export default function BudgetFormPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      {temItemDevolucao && (
+                      {travadoPelaVenda && (
                         <p className="text-xs text-muted-foreground">
-                          Veio da venda de origem da devolução. Se trocar, o
-                          sistema avisa ao salvar.
+                          Vem da venda vinculada ({vendaOrigem?.numero_venda || 'venda de origem'}).
                         </p>
                       )}
                       <FormMessage />
@@ -3066,12 +3202,14 @@ export default function BudgetFormPage() {
                               placeholder="Selecione um projeto..."
                               searchPlaceholder="Buscar código do projeto..."
                               emptyText="Nenhum projeto encontrado."
+                              disabled={travadoPelaVenda}
                             />
                           </div>
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
+                            disabled={travadoPelaVenda}
                             onClick={() => setIsProjectModalOpen(true)}
                             title="Criar Novo Projeto"
                           >
@@ -3222,12 +3360,14 @@ export default function BudgetFormPage() {
                               placeholder="Selecione um cliente..."
                               searchPlaceholder="Buscar cliente..."
                               emptyText="Nenhum cliente encontrado."
+                              disabled={travadoPelaVenda}
                             />
                           </div>
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
+                            disabled={travadoPelaVenda}
                             onClick={() => setIsClientModalOpen(true)}
                             title="Criar Novo Cliente"
                           >
@@ -3473,9 +3613,11 @@ export default function BudgetFormPage() {
                     type="button"
                     variant="default"
                     size="sm"
+                    disabled={!vendaOrigemId}
+                    title={vendaOrigemId ? undefined : 'Vincule a venda de origem na aba 1 primeiro'}
                     onClick={() => setIsDevolucaoSearchOpen(true)}
                   >
-                    <Undo2 className="w-4 h-4 mr-2" /> Buscar Venda de Origem
+                    <Undo2 className="w-4 h-4 mr-2" /> Buscar itens da venda
                   </Button>
                 ) : (
                   <>
@@ -3529,14 +3671,27 @@ export default function BudgetFormPage() {
                   </p>
                   <div className="flex gap-2 flex-wrap">
                     {naturezaOperacao === 'devolucao' ? (
-                      <Button
-                        type="button"
-                        variant="default"
-                        onClick={() => setIsDevolucaoSearchOpen(true)}
-                      >
-                        <Undo2 className="w-4 h-4 mr-2" /> Buscar Venda de
-                        Origem
-                      </Button>
+                      vendaOrigemId ? (
+                        <Button
+                          type="button"
+                          variant="default"
+                          onClick={() => setIsDevolucaoSearchOpen(true)}
+                        >
+                          <Undo2 className="w-4 h-4 mr-2" /> Buscar itens da venda
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setAbaAtiva('cliente')
+                            setIsVendaOrigemOpen(true)
+                          }}
+                        >
+                          <Undo2 className="w-4 h-4 mr-2" /> Vincule a venda de
+                          origem primeiro
+                        </Button>
+                      )
                     ) : (
                       <>
                         <Button
@@ -4312,7 +4467,14 @@ export default function BudgetFormPage() {
             projetoId={projectDetails?.id || budgetToEdit?.projeto_id}
             empresaId={temItemDevolucao ? resumoEmpresaId : null}
             empresaNome={temItemDevolucao ? empresaResumo : null}
+            vendaOrigemId={vendaOrigemId}
             onConfirm={applyDevolucaoSelection}
+          />
+
+          <VendaOrigemDialog
+            open={isVendaOrigemOpen}
+            onOpenChange={setIsVendaOrigemOpen}
+            onSelect={applyVendaOrigem}
           />
 
           <ProductCreateModal
