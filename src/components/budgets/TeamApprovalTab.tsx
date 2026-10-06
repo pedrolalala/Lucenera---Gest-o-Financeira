@@ -54,6 +54,7 @@ import {
   markPriceUpdatePromptAsked,
   wasPriceUpdatePromptAsked,
 } from '@/lib/budget-expiration'
+import { semPrefixo } from '@/lib/numeros'
 
 const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -89,8 +90,12 @@ function matchesBudgetSearch(budget: Budget, query: string) {
 export function TeamApprovalTab() {
   const navigate = useNavigate()
   const { role, user } = useAuth()
-  const { budgets, fetchBudgets, equipeAprovarOrcamento, equipeDevolverOrcamentoCliente } =
-    useBudgetStore()
+  const {
+    budgets,
+    fetchBudgets,
+    equipeAprovarOrcamento,
+    equipeDevolverOrcamentoCliente,
+  } = useBudgetStore()
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [canManageTeamApproval, setCanManageTeamApproval] = useState(false)
@@ -102,8 +107,9 @@ export function TeamApprovalTab() {
   const [deliveryBudget, setDeliveryBudget] = useState<Budget | null>(null)
   // SPEC-174 N3: orçamento vencido aguardando a decisão "atualizar preços
   // antes de aprovar?" -- aparece antes do pop-up de Previsão de Entrega.
-  const [expiredPriceBudget, setExpiredPriceBudget] =
-    useState<Budget | null>(null)
+  const [expiredPriceBudget, setExpiredPriceBudget] = useState<Budget | null>(
+    null,
+  )
 
   const canManage = role === 'admin' || role === 'gerente'
 
@@ -365,7 +371,7 @@ export function TeamApprovalTab() {
                     </TableCell>
                     <TableCell>
                       <div className="font-mono text-sm font-bold text-gray-900">
-                        {budget.numero || budget.id.slice(0, 8)}
+                        {semPrefixo(budget.numero) || budget.id.slice(0, 8)}
                       </div>
                       <Badge
                         variant="outline"
@@ -394,7 +400,12 @@ export function TeamApprovalTab() {
                       {budget.arquiteto?.nome || '-'}
                     </TableCell>
                     <TableCell className="text-right font-bold text-gray-900">
-                      {BRL.format(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
+                      {BRL.format(
+                        getDisplayValorTotal(
+                          budget.valor_total,
+                          budget.natureza_operacao,
+                        ),
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

@@ -58,6 +58,7 @@ import {
   getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { sendInitialBudgetPdfAndEmail } from '@/lib/envio-inicial-cliente'
+import { semPrefixo } from '@/lib/numeros'
 
 interface BudgetTableRowProps {
   budgetId: string
@@ -274,7 +275,9 @@ export function BudgetTableRow({
   // SPEC-109: 2 modelos de PDF — "cliente" (padrão, sem referência) e
   // "interno" (com Código real + Referência, usado quando o item não tem
   // cadastro e o código sai "0" — a referência ajuda a identificar a peça).
-  const handleDownloadPdf = async (modelo: 'cliente' | 'interno' = 'cliente') => {
+  const handleDownloadPdf = async (
+    modelo: 'cliente' | 'interno' = 'cliente',
+  ) => {
     try {
       setIsPrinting(true)
       const [{ data: sessionData }, logoBase64] = await Promise.all([
@@ -353,7 +356,9 @@ export function BudgetTableRow({
         </TableCell>
         <TableCell className="font-mono text-sm text-gray-600">
           <div className="flex items-center gap-1.5">
-            <span>{budget.projeto?.codigo || budget.numero || '-'}</span>
+            <span>
+              {budget.projeto?.codigo || semPrefixo(budget.numero) || '-'}
+            </span>
             {hasObservacao && (
               <MessageSquare
                 className="h-3.5 w-3.5 text-orange-500 shrink-0"
@@ -365,7 +370,7 @@ export function BudgetTableRow({
               número da venda, distinto do orçamento/projeto acima. */}
           {budget.numero_venda && (
             <div className="text-xs text-gray-400 mt-0.5">
-              Venda: {budget.numero_venda}
+              Venda: {semPrefixo(budget.numero_venda)}
             </div>
           )}
         </TableCell>
@@ -379,7 +384,9 @@ export function BudgetTableRow({
             ? budget.arquitetos
                 .map((a) => a.arquiteto?.nome)
                 .filter(Boolean)
-                .join(', ') || budget.arquiteto?.nome || '-'
+                .join(', ') ||
+              budget.arquiteto?.nome ||
+              '-'
             : budget.arquiteto?.nome || '-'}
         </TableCell>
         <TableCell>
@@ -409,7 +416,9 @@ export function BudgetTableRow({
           </div>
         </TableCell>
         <TableCell className="text-right font-bold text-gray-900">
-          {fmt(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
+          {fmt(
+            getDisplayValorTotal(budget.valor_total, budget.natureza_operacao),
+          )}
         </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-1">
@@ -548,17 +557,18 @@ export function BudgetTableRow({
                 </Button>
               )}
 
-            {normalizedStatus === 'orcamento_aprovado' && canDesfazerAprovacao && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
-                title="Desfazer Aprovação Financeira"
-                onClick={() => setShowDesfazerAprovacao(true)}
-              >
-                <Undo2 className="h-4 w-4" />
-              </Button>
-            )}
+            {normalizedStatus === 'orcamento_aprovado' &&
+              canDesfazerAprovacao && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                  title="Desfazer Aprovação Financeira"
+                  onClick={() => setShowDesfazerAprovacao(true)}
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+              )}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -713,8 +723,8 @@ export function BudgetTableRow({
               projeto, parcelas e boletos gerados por essa aprovação são
               apagados, com a reserva de estoque estornada. Só é possível se
               nada disso já foi usado (boleto pago/remessado, nota fiscal,
-              separação, transferência ou devolução de estoque) — caso
-              contrário a ação será bloqueada. Descreva o motivo.
+              separação, transferência ou devolução de estoque) — caso contrário
+              a ação será bloqueada. Descreva o motivo.
             </DialogDescription>
           </DialogHeader>
 
@@ -743,7 +753,9 @@ export function BudgetTableRow({
             </Button>
             <Button
               onClick={handleConfirmDesfazerAprovacao}
-              disabled={!motivoDesfazerAprovacao.trim() || isDesfazendoAprovacao}
+              disabled={
+                !motivoDesfazerAprovacao.trim() || isDesfazendoAprovacao
+              }
               className="bg-orange-600 hover:bg-orange-700 text-white"
             >
               {isDesfazendoAprovacao ? (

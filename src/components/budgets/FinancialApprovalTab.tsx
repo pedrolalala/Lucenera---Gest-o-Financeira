@@ -53,6 +53,7 @@ import {
   getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { cn } from '@/lib/utils'
+import { semPrefixo } from '@/lib/numeros'
 
 const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -157,7 +158,9 @@ export function FinancialApprovalTab() {
         .eq('orcamento_id', budget.id)
       if (!error && data) {
         setSelectedBudget((prev) =>
-          prev && prev.id === budget.id ? { ...prev, itens: data as any } : prev,
+          prev && prev.id === budget.id
+            ? { ...prev, itens: data as any }
+            : prev,
         )
       }
     } catch {
@@ -321,7 +324,7 @@ export function FinancialApprovalTab() {
                       </TableCell>
                       <TableCell>
                         <div className="font-mono text-sm font-bold text-gray-900">
-                          {budget.numero || budget.id.slice(0, 8)}
+                          {semPrefixo(budget.numero) || budget.id.slice(0, 8)}
                         </div>
                         <Badge
                           variant="outline"
@@ -373,7 +376,12 @@ export function FinancialApprovalTab() {
                         )}
                       </TableCell>
                       <TableCell className="text-right font-bold text-gray-900">
-                        {BRL.format(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
+                        {BRL.format(
+                          getDisplayValorTotal(
+                            budget.valor_total,
+                            budget.natureza_operacao,
+                          ),
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -471,8 +479,8 @@ export function FinancialApprovalTab() {
               Devolver Orçamento para a Equipe
             </DialogTitle>
             <DialogDescription>
-              O orçamento volta para "Aprovação da Equipe". Descreva o motivo
-              da devolução.
+              O orçamento volta para "Aprovação da Equipe". Descreva o motivo da
+              devolução.
             </DialogDescription>
           </DialogHeader>
 

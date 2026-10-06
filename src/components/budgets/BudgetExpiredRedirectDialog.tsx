@@ -11,6 +11,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { semPrefixo } from '@/lib/numeros'
 
 interface BudgetExpiredRedirectDialogProps {
   open: boolean
@@ -49,7 +50,7 @@ export function BudgetExpiredRedirectDialog({
             Orçamento vencido
           </DialogTitle>
           <DialogDescription>
-            {budgetNumero ? `Orçamento ${budgetNumero}. ` : ''}
+            {budgetNumero ? `Orçamento ${semPrefixo(budgetNumero)}. ` : ''}
             Orçamento vencido em{' '}
             {vencimento
               ? format(vencimento, 'dd/MM/yyyy', { locale: ptBR })

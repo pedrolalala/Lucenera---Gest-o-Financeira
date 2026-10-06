@@ -6,7 +6,6 @@ import * as z from 'zod'
 import { format, addMonths, addDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
-  CalendarIcon,
   Loader2,
   Plus,
   ArrowLeft,
@@ -34,7 +33,6 @@ import {
 } from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Calendar } from '@/components/ui/calendar'
 import {
   Form,
   FormControl,
@@ -43,11 +41,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -110,10 +103,10 @@ import {
 } from '@/components/budgets/DevolucaoItemSearchModal'
 import {
   validarItensDevolucao,
-  getVendaEfetivada,
-  type VendaEfetivada,
+  empresasComVendaNoProjeto,
+  type EmpresaVendaProjeto,
 } from '@/services/devolucoesService'
-import { VendaOrigemDialog } from '@/components/budgets/VendaOrigemDialog'
+import { DataDigitavel } from '@/components/DataDigitavel'
 import { BatchPdfImport } from '@/components/budgets/BatchPdfImport'
 import { ImportConnectXmlModal } from '@/components/budgets/ImportConnectXmlModal'
 import {
@@ -134,6 +127,7 @@ import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
 import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
 import { FORMA_PAGAMENTO_LABELS } from '@/lib/budget-financial-summary'
 import logoImg from '@/assets/lucenera-vertical-527dd.png'
+import { semPrefixo } from '@/lib/numeros'
 
 // SPEC-152: formas de pagamento que tipicamente não fazem sentido em mais
 // de 1 parcela (pagamento à vista, instantâneo). Todas as outras (boleto,
@@ -184,7 +178,6 @@ const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
 const CAMPOS_ABA_CLIENTE = new Set([
   'natureza_operacao',
   'subgrupo',
-  'venda_origem_id',
   'empresa_id',
   'perfil',
   'projeto_codigo',
@@ -286,8 +279,6 @@ const formSchema = z
       .default('venda'),
     // SPEC-074: subgrupo do campo "Tipo", ver SUBGRUPOS_POR_TIPO acima.
     subgrupo: z.string().min(1, 'Selecione o Tipo'),
-    // SPEC-181: venda efetivada à qual a devolução/troca está vinculada.
-    venda_origem_id: z.string().optional().nullable(),
     empresa_id: z
       .string({ required_error: 'Selecione uma empresa' })
       .min(1, 'Selecione uma empresa'),
@@ -390,10 +381,9 @@ const formSchema = z
     // anterior, a partir de `data_inicio_pagamento`); a pessoa que negocia
     // com o cliente pode sobrescrever individualmente cada vencimento.
     parcelas_datas: z.array(z.date().nullable()).optional().default([]),
-    frete_tipo: z.enum(['com_frete', 'sem_frete'], {
-      required_error: 'Selecione o frete',
-      invalid_type_error: 'Selecione o frete',
-    }),
+    // SPEC-182 (D11): na devolução o frete não é obrigatório (conferido no
+    // superRefine só para os outros tipos).
+    frete_tipo: z.enum(['com_frete', 'sem_frete']).optional().nullable(),
     frete_valor: z.coerce
       .number()
       .min(0, 'O valor do frete não pode ser negativo')
@@ -432,6 +422,13 @@ const formSchema = z
       .min(1, 'Adicione pelo menos um item'),
   })
   .superRefine((data, ctx) => {
+    if (data.natureza_operacao !== 'devolucao' && !data.frete_tipo) {
+      ctx.addIssue({
+        path: ['frete_tipo'],
+        code: z.ZodIssueCode.custom,
+        message: 'Selecione o frete',
+      })
+    }
     if (data.frete_tipo === 'com_frete' && !(data.frete_valor > 0)) {
       ctx.addIssue({
         path: ['frete_valor'],
@@ -461,14 +458,6 @@ const formSchema = z
         })
       }
     })
-    // SPEC-181: devolução/troca só salva vinculada a uma venda efetivada.
-    if (data.natureza_operacao === 'devolucao' && !data.venda_origem_id) {
-      ctx.addIssue({
-        path: ['venda_origem_id'],
-        code: z.ZodIssueCode.custom,
-        message: 'Vincule a devolução a uma venda efetivada antes de salvar.',
-      })
-    }
   })
 
 export default function BudgetFormPage() {
@@ -480,7 +469,9 @@ export default function BudgetFormPage() {
   const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
   const [isBatchImportOpen, setIsBatchImportOpen] = useState(false)
   // SPEC-177: aba ativa do formulário (cliente/arquiteto, produtos, pagamento).
-  const [abaAtiva, setAbaAtiva] = useState<'cliente' | 'produtos' | 'pagamento'>('cliente')
+  const [abaAtiva, setAbaAtiva] = useState<
+    'cliente' | 'produtos' | 'pagamento'
+  >('cliente')
   const [isXmlImportOpen, setIsXmlImportOpen] = useState(false)
   const [pendingXmlImport, setPendingXmlImport] =
     useState<ResolvedXmlBudget | null>(null)
@@ -501,9 +492,11 @@ export default function BudgetFormPage() {
   // SPEC-071: modal de busca de venda de origem, usado só quando
   // natureza_operacao === 'devolucao'.
   const [isDevolucaoSearchOpen, setIsDevolucaoSearchOpen] = useState(false)
-  // SPEC-181: vínculo obrigatório da devolução/troca com UMA venda efetivada.
-  const [isVendaOrigemOpen, setIsVendaOrigemOpen] = useState(false)
-  const [vendaOrigem, setVendaOrigem] = useState<VendaEfetivada | null>(null)
+  // SPEC-182 (D2): empresas em que o projeto tem venda efetivada (null =
+  // ainda não carregado / sem projeto).
+  const [empresasDoProjeto, setEmpresasDoProjeto] = useState<
+    EmpresaVendaProjeto[] | null
+  >(null)
   // SPEC-079: diálogo de múltiplos L's por peça — multiLProduct null =
   // modo "item não cadastrado" (descrição/preço manuais).
   const [isMultiLDialogOpen, setIsMultiLDialogOpen] = useState(false)
@@ -557,9 +550,8 @@ export default function BudgetFormPage() {
   // guarda os valores já validados do form até a confirmação; o ref evita
   // reabrir o pop-up na segunda chamada de onSubmit (depois de confirmado).
   const [showTeamDeliveryDialog, setShowTeamDeliveryDialog] = useState(false)
-  const [pendingTeamDeliveryValues, setPendingTeamDeliveryValues] = useState<
-    z.infer<typeof formSchema> | null
-  >(null)
+  const [pendingTeamDeliveryValues, setPendingTeamDeliveryValues] =
+    useState<z.infer<typeof formSchema> | null>(null)
   const teamDeliveryConfirmedRef = useRef(false)
   // SPEC-174 N3: contexto do aviso de orçamento vencido -- `then` guarda a
   // ação a retomar depois da decisão (ex.: abrir o diálogo de Aprovação
@@ -602,7 +594,9 @@ export default function BudgetFormPage() {
       .then(({ data, error }) => {
         if (error) {
           console.error('Erro ao carregar contatos para permuta:', error)
-          toast.error('Não foi possível carregar a lista de fornecedores/clientes para permuta.')
+          toast.error(
+            'Não foi possível carregar a lista de fornecedores/clientes para permuta.',
+          )
           return
         }
         if (data) setContatosPermuta(data)
@@ -613,7 +607,6 @@ export default function BudgetFormPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       natureza_operacao: 'venda',
-      venda_origem_id: null,
       // Fix (achado 2026-08-13): 'venda' sempre mapeia pro único subgrupo
       // 'VENDAS' (SUBGRUPOS_POR_TIPO.venda), conhecido de antemão — não dá
       // pra confiar em useEffect pra preencher isso depois do mount, porque
@@ -831,7 +824,6 @@ export default function BudgetFormPage() {
           form.reset({
             natureza_operacao: naturezaEdit,
             subgrupo: subgrupoEdit,
-            venda_origem_id: (budget as any).venda_origem_id ?? null,
             empresa_id: budget.empresa_id,
             projeto_codigo: projetoCodigo,
             cliente_id: budget.cliente_id || '',
@@ -934,28 +926,6 @@ export default function BudgetFormPage() {
 
   const naturezaOperacao = form.watch('natureza_operacao') || 'venda'
 
-  // SPEC-181: dados da venda vinculada (cabeçalho do vínculo e resumo) — ao
-  // abrir uma devolução já salva busca pelo id; tipo diferente de Devolução
-  // não tem venda vinculada.
-  const vendaOrigemIdWatch = form.watch('venda_origem_id')
-  useEffect(() => {
-    if (!vendaOrigemIdWatch) {
-      setVendaOrigem(null)
-      return
-    }
-    if (vendaOrigem?.id === vendaOrigemIdWatch) return
-    getVendaEfetivada(vendaOrigemIdWatch)
-      .then(setVendaOrigem)
-      .catch(() => setVendaOrigem(null))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vendaOrigemIdWatch])
-  useEffect(() => {
-    if (naturezaOperacao !== 'devolucao' && form.getValues('venda_origem_id')) {
-      form.setValue('venda_origem_id', null)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naturezaOperacao])
-
   // Fix (achado 2026-08-13, teste ao vivo): quando SUBGRUPOS_POR_TIPO tem
   // só 1 opção pro tipo atual, o campo "Tipo" renderiza um Input
   // desabilitado mostrando essa opção (ex.: "VENDAS"), mas nunca chama
@@ -964,7 +934,7 @@ export default function BudgetFormPage() {
   // acontece pra "Venda", já selecionado por padrão). Resultado: criar
   // um orçamento novo falhava a validação "Selecione o Tipo" sem nenhum
   // aviso visível até rolar a tela pro topo depois de já ter clicado em
-  // "Criar Orçamento".
+  // "Salvar orçamento".
   useEffect(() => {
     if (isEditing) return
     const opcoes = SUBGRUPOS_POR_TIPO[naturezaOperacao] || []
@@ -1025,6 +995,39 @@ export default function BudgetFormPage() {
     }
   }, [clienteIdAtual, isEditing])
 
+  // SPEC-182 (D1/D2): devolução pelo código do projeto. Ao escolher o projeto,
+  // busca em quais empresas ele tem venda efetivada: uma só já preenche a
+  // empresa; mais de uma mostra o aviso e a pessoa escolhe.
+  const projetoIdAtual = projectDetails?.id || budgetToEdit?.projeto_id || null
+  useEffect(() => {
+    if (naturezaOperacao !== 'devolucao' || !projetoIdAtual) {
+      setEmpresasDoProjeto(null)
+      return
+    }
+    let ativo = true
+    setEmpresasDoProjeto(null)
+    empresasComVendaNoProjeto(projetoIdAtual)
+      .then((lista) => {
+        if (!ativo) return
+        setEmpresasDoProjeto(lista)
+        if (isEditing) return
+        const atual = form.getValues('empresa_id')
+        if (lista.length === 1 && atual !== lista[0].id) {
+          form.setValue('empresa_id', lista[0].id, {
+            shouldDirty: true,
+            shouldValidate: true,
+          })
+        } else if (lista.length > 1 && !lista.some((e) => e.id === atual)) {
+          form.setValue('empresa_id', '', { shouldDirty: true })
+        }
+      })
+      .catch(() => ativo && setEmpresasDoProjeto([]))
+    return () => {
+      ativo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [naturezaOperacao, projetoIdAtual, isEditing])
+
   const valorSubtotal = watchItens.reduce((acc, item) => {
     const q = Number(item.quantidade) || 0
     const p = Number(item.preco_unitario) || 0
@@ -1072,7 +1075,10 @@ export default function BudgetFormPage() {
   // as parcelas destravadas. Usada tanto pelo onChange do campo Valor
   // quanto pelo efeito abaixo (quando quantidade de parcelas/valorTotal/
   // forma de pagamento mudam).
-  function recalcularParcelasConfig(overrideIdx?: number, overrideValor?: string) {
+  function recalcularParcelasConfig(
+    overrideIdx?: number,
+    overrideValor?: string,
+  ) {
     const atual = form.getValues('parcelas_config') || []
     const travadas = parcelasValorTravadasRef.current
     // Índice travado que não existe mais (quantidade de parcelas diminuiu)
@@ -1104,23 +1110,38 @@ export default function BudgetFormPage() {
 
     const restante = Math.round((valorTotal - somaTravada) * 100) / 100
     const valorBase =
-      idsLivres.length > 0 ? Math.round((restante / idsLivres.length) * 100) / 100 : 0
+      idsLivres.length > 0
+        ? Math.round((restante / idsLivres.length) * 100) / 100
+        : 0
     let acumulado = 0
     const next = Array.from({ length: totalParcelasAtual }, (_, i) => {
-      const formaAtual = atual[i]?.forma_pagamento || formaPagamentoWatch || 'boleto'
+      const formaAtual =
+        atual[i]?.forma_pagamento || formaPagamentoWatch || 'boleto'
       const permutaAtual = atual[i]?.permuta_fornecedor_id || null
       if (i === overrideIdx) {
-        return { valor: overrideValor, forma_pagamento: formaAtual, permuta_fornecedor_id: permutaAtual }
+        return {
+          valor: overrideValor,
+          forma_pagamento: formaAtual,
+          permuta_fornecedor_id: permutaAtual,
+        }
       }
       if (travadas.has(i)) {
-        return { valor: atual[i]?.valor ?? 0, forma_pagamento: formaAtual, permuta_fornecedor_id: permutaAtual }
+        return {
+          valor: atual[i]?.valor ?? 0,
+          forma_pagamento: formaAtual,
+          permuta_fornecedor_id: permutaAtual,
+        }
       }
       const isUltimaLivre = i === idsLivres[idsLivres.length - 1]
       const valor = isUltimaLivre
         ? Math.round((restante - acumulado) * 100) / 100
         : valorBase
       if (!isUltimaLivre) acumulado += valor
-      return { valor, forma_pagamento: formaAtual, permuta_fornecedor_id: permutaAtual }
+      return {
+        valor,
+        forma_pagamento: formaAtual,
+        permuta_fornecedor_id: permutaAtual,
+      }
     })
     form.setValue('parcelas_config', next, { shouldDirty: true })
   }
@@ -1509,35 +1530,36 @@ export default function BudgetFormPage() {
       return
     }
 
-    // SPEC-178: devolução só de venda efetivada e sem passar do saldo —
-    // conferido de novo ao salvar. Venda de outra empresa só AVISA (decisão do
-    // usuário, 03/10: sem trava, com aviso).
+    // SPEC-182: devolução só de venda efetivada do MESMO projeto e da MESMA
+    // empresa, sem peça em separação e sem passar do saldo — conferido de novo
+    // ao salvar (vale para devolução já gravada).
     if (values.natureza_operacao === 'devolucao') {
       try {
         const conferencia = await validarItensDevolucao(
           values.empresa_id,
+          projetoIdAtual,
           values.itens as any,
-          values.venda_origem_id,
         )
         if (conferencia.erro) {
           setAbaAtiva(
-            conferencia.erro.startsWith('Selecione a empresa') || conferencia.erro.startsWith('Vincule')
-              ? 'cliente'
-              : 'produtos',
+            conferencia.erro.startsWith('Selecione') ? 'cliente' : 'produtos',
           )
           toast.error('Devolução bloqueada', { description: conferencia.erro })
           return
         }
         if (conferencia.aviso) {
-          toast.warning('Atenção: venda de outra empresa', {
+          toast.warning('Atenção', {
             description: conferencia.aviso,
             duration: 10000,
           })
         }
       } catch (error: any) {
-        toast.error('Não foi possível conferir a venda de origem da devolução.', {
-          description: error?.message,
-        })
+        toast.error(
+          'Não foi possível conferir a venda de origem da devolução.',
+          {
+            description: error?.message,
+          },
+        )
         return
       }
     }
@@ -1728,9 +1750,6 @@ export default function BudgetFormPage() {
         // existe (o campo fica desabilitado na UI quando isEditing).
         natureza_operacao: values.natureza_operacao,
         subgrupo: values.subgrupo,
-        // SPEC-181: venda vinculada (só em devolução/troca).
-        venda_origem_id:
-          values.natureza_operacao === 'devolucao' ? values.venda_origem_id || null : null,
         empresa_id: values.empresa_id,
         projeto_id: projeto.id,
         cliente_id: values.cliente_id,
@@ -1753,8 +1772,8 @@ export default function BudgetFormPage() {
               condicoes_pagamento: (prazoPagamentoDias ?? []).join('/'),
               plano_parcelas: planoParcelas ?? null,
             }),
-        frete_tipo: values.frete_tipo,
-        frete_valor: values.frete_tipo === 'sem_frete' ? 0 : values.frete_valor,
+        frete_tipo: values.frete_tipo || 'sem_frete',
+        frete_valor: values.frete_tipo === 'com_frete' ? values.frete_valor : 0,
         observacoes: values.observacoes,
         data_emissao: values.data_emissao.toISOString(),
         validade: values.validade
@@ -2082,40 +2101,6 @@ export default function BudgetFormPage() {
     setIsProductSearchOpen(false)
   }
 
-  // SPEC-181: ao vincular a venda, empresa, projeto e cliente vêm dela (e
-  // ficam travados); vendedor e arquitetos também. O projeto é aplicado
-  // primeiro porque handleProjectSelect preenche empresa/cliente/arquitetos a
-  // partir do PROJETO — os dados da venda são gravados depois, por cima.
-  // Trocar a venda remove os itens já lançados (eram da venda anterior).
-  const applyVendaOrigem = async (venda: VendaEfetivada) => {
-    setIsVendaOrigemOpen(false)
-    const anterior = form.getValues('venda_origem_id')
-    if (anterior && anterior !== venda.id) {
-      const restantes = (form.getValues('itens') || []).filter(
-        (i: any) => !i.projeto_item_origem_id,
-      )
-      if (restantes.length !== (form.getValues('itens') || []).length) {
-        replace(restantes, { shouldFocus: false })
-        toast.info('Itens da venda anterior removidos — lance os itens da nova venda.')
-      }
-    }
-    setVendaOrigem(venda)
-    form.setValue('venda_origem_id', venda.id, { shouldDirty: true, shouldValidate: true })
-    if (venda.projeto_codigo) {
-      form.setValue('projeto_codigo', venda.projeto_codigo, { shouldDirty: true, shouldValidate: true })
-      await handleProjectSelect(venda.projeto_codigo)
-    }
-    form.setValue('empresa_id', venda.empresa_id, { shouldDirty: true, shouldValidate: true })
-    if (venda.cliente_id) {
-      form.setValue('cliente_id', venda.cliente_id, { shouldDirty: true, shouldValidate: true })
-    }
-    if (venda.vendedor_id) form.setValue('vendedor_id', venda.vendedor_id, { shouldDirty: true })
-    if (venda.arquitetos.length > 0) {
-      form.setValue('arquitetos', venda.arquitetos, { shouldDirty: true })
-    }
-    toast.success(`Devolução vinculada à ${venda.numero_venda}.`)
-  }
-
   // SPEC-071: mesma lógica de applyProductSelection, mas a origem é uma
   // venda já aprovada (projeto_itens) em vez do catálogo de produtos — cada
   // linha carrega projeto_item_origem_id, obrigatório pelo superRefine do
@@ -2147,8 +2132,21 @@ export default function BudgetFormPage() {
 
     const currentItems = form.getValues('itens') || []
 
-    // SPEC-181: empresa/projeto/cliente/equipe já vieram da venda vinculada
-    // (applyVendaOrigem); a busca só mostra itens dela.
+    // SPEC-182: projeto e empresa já escolhidos na aba 1; a equipe (vendedor e
+    // arquitetos) vem da venda de origem quando a devolução ainda não tem.
+    const primeira = selecoes[0].venda
+    if (
+      primeira.vendedor_id &&
+      (form.getValues('vendedor_id') || 'none') === 'none'
+    ) {
+      form.setValue('vendedor_id', primeira.vendedor_id, { shouldDirty: true })
+    }
+    if (
+      primeira.arquitetos.length > 0 &&
+      (form.getValues('arquitetos') || []).length === 0
+    ) {
+      form.setValue('arquitetos', primeira.arquitetos, { shouldDirty: true })
+    }
 
     const maxL = currentItems.reduce((max, item) => {
       const match = (item.custom_id || '').match(/L(\d+)/i)
@@ -2493,7 +2491,8 @@ export default function BudgetFormPage() {
         shouldDirty: true,
       })
     }
-    if (priceUpdateContext) markPriceUpdatePromptAsked(priceUpdateContext.budgetId)
+    if (priceUpdateContext)
+      markPriceUpdatePromptAsked(priceUpdateContext.budgetId)
     toast.success(
       `Preços atualizados em ${precosPorChave.size} ite${precosPorChave.size === 1 ? 'm' : 'ns'}.`,
       { description: 'Revise e salve o orçamento para confirmar.' },
@@ -2507,7 +2506,8 @@ export default function BudgetFormPage() {
   // SPEC-174 N3: "Não, manter preços atuais" -- segue com os preços
   // antigos e não pergunta de novo nesta sessão para este orçamento.
   const handleSkipPriceUpdate = () => {
-    if (priceUpdateContext) markPriceUpdatePromptAsked(priceUpdateContext.budgetId)
+    if (priceUpdateContext)
+      markPriceUpdatePromptAsked(priceUpdateContext.budgetId)
     setShowPriceUpdateDialog(false)
     const then = priceUpdateContext?.then
     setPriceUpdateContext(null)
@@ -2541,7 +2541,11 @@ export default function BudgetFormPage() {
     // SPEC-174 N3: antes de abrir a Aprovação Financeira, avisa se o
     // orçamento está vencido -- "Sim"/"Não" retomam a abertura normal do
     // diálogo depois da decisão (maybeShowExpiredPriceDialog cuida disso).
-    if (maybeShowExpiredPriceDialog(budgetToEdit, () => setShowApprovalDialog(true))) {
+    if (
+      maybeShowExpiredPriceDialog(budgetToEdit, () =>
+        setShowApprovalDialog(true),
+      )
+    ) {
       return
     }
     setShowApprovalDialog(true)
@@ -2601,11 +2605,15 @@ export default function BudgetFormPage() {
   // estava vinculada numa devolução (o campo vazio "Adicionar arquiteto..."
   // chamava mais atenção que o nome vinculado).
   const brl = (v: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(v)
   const resumoClienteId = form.watch('cliente_id')
   const clienteAtual = clientes.find((c) => c.id === resumoClienteId) as any
   const clienteResumo = clienteAtual
-    ? clienteAtual.razao_social?.trim() && clienteAtual.razao_social !== clienteAtual.nome
+    ? clienteAtual.razao_social?.trim() &&
+      clienteAtual.razao_social !== clienteAtual.nome
       ? `${clienteAtual.razao_social} - ${clienteAtual.nome}`
       : clienteAtual.nome
     : null
@@ -2627,17 +2635,37 @@ export default function BudgetFormPage() {
   const temItemDevolucao =
     naturezaOperacao === 'devolucao' &&
     (form.watch('itens') || []).some((i: any) => i.projeto_item_origem_id)
-  // SPEC-181: com a venda vinculada, empresa/projeto/cliente ficam travados.
-  const vendaOrigemId = form.watch('venda_origem_id') || null
-  const travadoPelaVenda = naturezaOperacao === 'devolucao' && !!vendaOrigemId
-  const empresaResumo = empresas.find((e) => e.id === resumoEmpresaId)?.nome || null
+  // SPEC-182: com itens de devolução lançados, projeto e empresa travam
+  // (os itens são daquele projeto e daquela empresa).
+  const travadoPelaVenda = temItemDevolucao
+  const empresasSelecionaveis =
+    naturezaOperacao === 'devolucao' &&
+    empresasDoProjeto &&
+    empresasDoProjeto.length > 0
+      ? empresas.filter(
+          (e) =>
+            e.id === resumoEmpresaId ||
+            empresasDoProjeto.some((x) => x.id === e.id),
+        )
+      : empresas
+  const podeBuscarDevolucao = !!projetoIdAtual && !!resumoEmpresaId
+  const empresaResumo =
+    empresas.find((e) => e.id === resumoEmpresaId)?.nome || null
   const previsaoAtual = form.watch('previsao_entrega')
 
-  const itemResumo = (rotulo: string, valor: ReactNode | null, extra?: string) => (
+  const itemResumo = (
+    rotulo: string,
+    valor: ReactNode | null,
+    extra?: string,
+  ) => (
     <div className="min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{rotulo}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+        {rotulo}
+      </p>
       {valor ? (
-        <p className={cn('font-semibold text-slate-900 truncate', extra)}>{valor}</p>
+        <p className={cn('font-semibold text-slate-900 truncate', extra)}>
+          {valor}
+        </p>
       ) : (
         <p className="text-sm italic text-slate-400">Não informado</p>
       )}
@@ -2674,8 +2702,6 @@ export default function BudgetFormPage() {
               <p className="text-sm italic text-slate-400">Não informado</p>
             )}
           </div>
-          {naturezaOperacao === 'devolucao' &&
-            itemResumo('Venda de origem', vendaOrigem?.numero_venda || null)}
           {itemResumo('Vendedor', vendedorResumo)}
           {itemResumo('Empresa', empresaResumo)}
           {itemResumo(
@@ -2705,16 +2731,24 @@ export default function BudgetFormPage() {
               ? `${descontoGlobalPerc}%`
               : `${descontoPercentualEquivalente.toFixed(2)}%`}
             ){' '}
-            <span className="font-medium text-red-600">-{brl(descontoValorReais)}</span>
+            <span className="font-medium text-red-600">
+              -{brl(descontoValorReais)}
+            </span>
           </span>
           {valorSinal > 0 && (
             <span>
-              Sinal <span className="font-medium text-amber-700">-{brl(valorSinal)}</span>
+              Sinal{' '}
+              <span className="font-medium text-amber-700">
+                -{brl(valorSinal)}
+              </span>
             </span>
           )}
           {freteTipo === 'com_frete' && freteValor > 0 && (
             <span>
-              Frete <span className="font-medium text-blue-600">+{brl(freteValor)}</span>
+              Frete{' '}
+              <span className="font-medium text-blue-600">
+                +{brl(freteValor)}
+              </span>
             </span>
           )}
         </div>
@@ -2743,14 +2777,14 @@ export default function BudgetFormPage() {
             </h1>
             <p className="text-gray-500">
               {isEditing
-                ? `Editando orçamento #${budgetToEdit?.numero || budgetToEdit?.id.split('-')[0].toUpperCase()}`
+                ? `Editando orçamento #${semPrefixo(budgetToEdit?.numero) || budgetToEdit?.id.split('-')[0].toUpperCase()}`
                 : 'Preencha os detalhes para criar um novo orçamento'}
               {/* SPEC-136 (pendência fechada 2026-09-14, a pedido do
                   usuário): número da venda, quando já aprovado. */}
               {isEditing && budgetToEdit?.numero_venda && (
                 <span className="text-gray-400">
                   {' '}
-                  — Venda: {budgetToEdit.numero_venda}
+                  — Venda: {semPrefixo(budgetToEdit.numero_venda)}
                 </span>
               )}
             </p>
@@ -2802,7 +2836,7 @@ export default function BudgetFormPage() {
             ) : (
               <Save className="w-4 h-4 mr-2" />
             )}
-            {isEditing ? 'Salvar Alterações' : 'Criar Orçamento'}
+            {isEditing ? 'Salvar Alterações' : 'Salvar orçamento'}
           </Button>
         </div>
       </div>
@@ -2842,756 +2876,681 @@ export default function BudgetFormPage() {
               forceMount
               className="mt-0 data-[state=inactive]:hidden destaque-preenchido"
             >
-          <Card>
-            <CardHeader>
-              <CardTitle>Dados do Cliente / Arquiteto</CardTitle>
-              <CardDescription>
-                Operação, empresa, projeto, cliente, arquiteto, vendedor e
-                datas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* SPEC-071: só editável na criação — trava depois que o
+              <Card>
+                <CardHeader>
+                  <CardTitle>Dados do Cliente / Arquiteto</CardTitle>
+                  <CardDescription>
+                    Operação, empresa, projeto, cliente, arquiteto, vendedor e
+                    datas.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* SPEC-071: só editável na criação — trava depois que o
                   orçamento existe, para não mudar de natureza no meio do
                   pipeline de aprovação. SPEC-074: adicionados "Outros" e
                   "SAC" (mesmo comportamento de "Venda" na aprovação
                   financeira, ver payload/RPC) + campo "Tipo" com subgrupos
                   dependentes do tipo selecionado. */}
-              <div className="flex flex-col gap-3 pb-4 border-b">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Tipo de Operação
-                  </span>
-                  <div className="inline-flex rounded-md border p-0.5 bg-muted/40">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={
-                        naturezaOperacao === 'venda' ? 'default' : 'ghost'
-                      }
-                      disabled={isEditing}
-                      className="rounded-sm"
-                      onClick={() => {
-                        form.setValue('natureza_operacao', 'venda', {
-                          shouldDirty: true,
-                        })
-                        const opcoes = SUBGRUPOS_POR_TIPO.venda
-                        form.setValue(
-                          'subgrupo',
-                          opcoes.length === 1 ? opcoes[0] : '',
-                          { shouldValidate: true },
-                        )
-                      }}
-                    >
-                      Venda
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={
-                        naturezaOperacao === 'devolucao' ? 'default' : 'ghost'
-                      }
-                      disabled={isEditing}
-                      className="rounded-sm"
-                      onClick={() => {
-                        form.setValue('natureza_operacao', 'devolucao', {
-                          shouldDirty: true,
-                        })
-                        const opcoes = SUBGRUPOS_POR_TIPO.devolucao
-                        form.setValue(
-                          'subgrupo',
-                          opcoes.length === 1 ? opcoes[0] : '',
-                          { shouldValidate: true },
-                        )
-                        // SPEC-181: devolução/troca abre na hora a busca da
-                        // venda efetivada a vincular.
-                        if (!form.getValues('venda_origem_id')) {
-                          setIsVendaOrigemOpen(true)
-                        }
-                      }}
-                    >
-                      <Undo2 className="w-3.5 h-3.5 mr-1.5" /> Devolução
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={
-                        naturezaOperacao === 'outros' ? 'default' : 'ghost'
-                      }
-                      disabled={isEditing}
-                      className="rounded-sm"
-                      onClick={() => {
-                        form.setValue('natureza_operacao', 'outros', {
-                          shouldDirty: true,
-                        })
-                        const opcoes = SUBGRUPOS_POR_TIPO.outros
-                        form.setValue(
-                          'subgrupo',
-                          opcoes.length === 1 ? opcoes[0] : '',
-                          { shouldValidate: true },
-                        )
-                      }}
-                    >
-                      <Package className="w-3.5 h-3.5 mr-1.5" /> Outros
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={naturezaOperacao === 'sac' ? 'default' : 'ghost'}
-                      disabled={isEditing}
-                      className="rounded-sm"
-                      onClick={() => {
-                        form.setValue('natureza_operacao', 'sac', {
-                          shouldDirty: true,
-                        })
-                        const opcoes = SUBGRUPOS_POR_TIPO.sac
-                        form.setValue(
-                          'subgrupo',
-                          opcoes.length === 1 ? opcoes[0] : '',
-                          { shouldValidate: true },
-                        )
-                      }}
-                    >
-                      <Headset className="w-3.5 h-3.5 mr-1.5" /> SAC
-                    </Button>
-                  </div>
-                  {isEditing ? (
-                    <span className="text-xs text-muted-foreground">
-                      Não pode ser alterado após a criação do orçamento.
-                    </span>
-                  ) : naturezaOperacao === 'devolucao' ? (
-                    <span className="text-xs text-muted-foreground">
-                      Itens desta devolução precisam ser lançados a partir da
-                      busca de venda de origem, não do catálogo de produtos.
-                    </span>
-                  ) : null}
-                </div>
+                  <div className="flex flex-col gap-3 pb-4 border-b">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Tipo de Operação
+                      </span>
+                      <div className="inline-flex rounded-md border p-0.5 bg-muted/40">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            naturezaOperacao === 'venda' ? 'default' : 'ghost'
+                          }
+                          disabled={isEditing}
+                          className="rounded-sm"
+                          onClick={() => {
+                            form.setValue('natureza_operacao', 'venda', {
+                              shouldDirty: true,
+                            })
+                            const opcoes = SUBGRUPOS_POR_TIPO.venda
+                            form.setValue(
+                              'subgrupo',
+                              opcoes.length === 1 ? opcoes[0] : '',
+                              { shouldValidate: true },
+                            )
+                          }}
+                        >
+                          Venda
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            naturezaOperacao === 'devolucao'
+                              ? 'default'
+                              : 'ghost'
+                          }
+                          disabled={isEditing}
+                          className="rounded-sm"
+                          onClick={() => {
+                            form.setValue('natureza_operacao', 'devolucao', {
+                              shouldDirty: true,
+                            })
+                            const opcoes = SUBGRUPOS_POR_TIPO.devolucao
+                            form.setValue(
+                              'subgrupo',
+                              opcoes.length === 1 ? opcoes[0] : '',
+                              { shouldValidate: true },
+                            )
+                            // SPEC-182 (D11): devolução já vem em Carteira.
+                            if (!form.getValues('forma_pagamento')) {
+                              form.setValue('forma_pagamento', 'carteira', {
+                                shouldDirty: true,
+                              })
+                            }
+                          }}
+                        >
+                          <Undo2 className="w-3.5 h-3.5 mr-1.5" /> Devolução
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            naturezaOperacao === 'outros' ? 'default' : 'ghost'
+                          }
+                          disabled={isEditing}
+                          className="rounded-sm"
+                          onClick={() => {
+                            form.setValue('natureza_operacao', 'outros', {
+                              shouldDirty: true,
+                            })
+                            const opcoes = SUBGRUPOS_POR_TIPO.outros
+                            form.setValue(
+                              'subgrupo',
+                              opcoes.length === 1 ? opcoes[0] : '',
+                              { shouldValidate: true },
+                            )
+                          }}
+                        >
+                          <Package className="w-3.5 h-3.5 mr-1.5" /> Outros
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            naturezaOperacao === 'sac' ? 'default' : 'ghost'
+                          }
+                          disabled={isEditing}
+                          className="rounded-sm"
+                          onClick={() => {
+                            form.setValue('natureza_operacao', 'sac', {
+                              shouldDirty: true,
+                            })
+                            const opcoes = SUBGRUPOS_POR_TIPO.sac
+                            form.setValue(
+                              'subgrupo',
+                              opcoes.length === 1 ? opcoes[0] : '',
+                              { shouldValidate: true },
+                            )
+                          }}
+                        >
+                          <Headset className="w-3.5 h-3.5 mr-1.5" /> SAC
+                        </Button>
+                      </div>
+                      {isEditing ? (
+                        <span className="text-xs text-muted-foreground">
+                          Não pode ser alterado após a criação do orçamento.
+                        </span>
+                      ) : naturezaOperacao === 'devolucao' ? (
+                        <span className="text-xs text-muted-foreground">
+                          Itens desta devolução precisam ser lançados a partir
+                          da busca de venda de origem, não do catálogo de
+                          produtos.
+                        </span>
+                      ) : null}
+                    </div>
 
-                <FormField
-                  control={form.control}
-                  name="subgrupo"
-                  render={({ field }) => {
-                    const opcoes = SUBGRUPOS_POR_TIPO[naturezaOperacao] || []
-                    return (
-                      <FormItem className="max-w-sm">
-                        <FormLabel>Tipo</FormLabel>
-                        {opcoes.length === 1 ? (
-                          <FormControl>
-                            <Input value={opcoes[0]} disabled readOnly />
-                          </FormControl>
-                        ) : (
+                    <FormField
+                      control={form.control}
+                      name="subgrupo"
+                      render={({ field }) => {
+                        const opcoes =
+                          SUBGRUPOS_POR_TIPO[naturezaOperacao] || []
+                        return (
+                          <FormItem className="max-w-sm">
+                            <FormLabel>Tipo</FormLabel>
+                            {opcoes.length === 1 ? (
+                              <FormControl>
+                                <Input value={opcoes[0]} disabled readOnly />
+                              </FormControl>
+                            ) : (
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || undefined}
+                                disabled={isEditing}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione..." />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {opcoes.map((o) => (
+                                    <SelectItem key={o} value={o}>
+                                      {o}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <FormMessage />
+                          </FormItem>
+                        )
+                      }}
+                    />
+                  </div>
+
+                  {/* SPEC-182 (D1/D2): a devolução se liga ao código do
+                  projeto; a empresa vem das vendas dele. */}
+                  {naturezaOperacao === 'devolucao' && (
+                    <div
+                      className={cn(
+                        'rounded-lg border p-4 text-sm',
+                        !projetoIdAtual ||
+                          !empresasDoProjeto ||
+                          empresasDoProjeto.length !== 1
+                          ? 'border-amber-300 bg-amber-50 text-amber-900'
+                          : 'border-primary/30 bg-primary/5 text-slate-800',
+                      )}
+                    >
+                      <p className="flex items-center gap-2 font-semibold">
+                        <Undo2 className="w-4 h-4" /> Devolução pelo código do
+                        projeto
+                      </p>
+                      <p className="mt-1">
+                        {!projetoIdAtual
+                          ? 'Escolha o código do projeto: a busca de itens olha todas as vendas efetivadas dele.'
+                          : empresasDoProjeto === null
+                            ? 'Carregando as vendas do projeto...'
+                            : empresasDoProjeto.length === 0
+                              ? 'Este projeto não tem venda efetivada — não há o que devolver.'
+                              : empresasDoProjeto.length === 1
+                                ? `As vendas deste projeto são da ${empresasDoProjeto[0].nome}; a empresa da devolução já vem preenchida.`
+                                : `Este projeto tem vendas em mais de uma empresa (${empresasDoProjeto
+                                    .map(
+                                      (e) =>
+                                        `${e.nome}: ${e.vendas.join(', ')}`,
+                                    )
+                                    .join(
+                                      ' · ',
+                                    )}) — escolha em qual empresa foi a venda que você quer devolver.`}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="empresa_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Empresa <span className="text-red-500">*</span>
+                          </FormLabel>
                           <Select
                             onValueChange={field.onChange}
-                            value={field.value || undefined}
-                            disabled={isEditing}
+                            defaultValue={field.value}
+                            value={field.value}
+                            disabled={travadoPelaVenda}
                           >
+                            {' '}
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Selecione..." />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {opcoes.map((o) => (
-                                <SelectItem key={o} value={o}>
-                                  {o}
+                              {empresasSelecionaveis.map((e) => (
+                                <SelectItem key={e.id} value={e.id}>
+                                  {e.nome}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )
-                  }}
-                />
-              </div>
-
-              {/* SPEC-181: vínculo obrigatório com a venda efetivada. */}
-              {naturezaOperacao === 'devolucao' && (
-                <FormField
-                  control={form.control}
-                  name="venda_origem_id"
-                  render={() => (
-                    <FormItem>
-                      <div
-                        className={cn(
-                          'rounded-lg border p-4 flex flex-wrap items-center justify-between gap-3',
-                          vendaOrigemId
-                            ? 'border-primary/30 bg-primary/5'
-                            : 'border-amber-300 bg-amber-50',
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                            Venda de origem <span className="text-red-500">*</span>
-                          </p>
-                          {vendaOrigemId ? (
-                            <p className="font-semibold text-slate-900">
-                              {vendaOrigem?.numero_venda || 'Carregando...'}
-                              {vendaOrigem && (
-                                <span className="font-normal text-slate-600">
-                                  {' '}· {vendaOrigem.cliente_nome || '-'} ·{' '}
-                                  {vendaOrigem.projeto_codigo || '-'} ·{' '}
-                                  {vendaOrigem.empresa_nome || '-'}
-                                </span>
-                              )}
+                          {travadoPelaVenda && (
+                            <p className="text-xs text-muted-foreground">
+                              Os itens lançados são desta empresa e deste
+                              projeto — remova-os para trocar.
                             </p>
-                          ) : (
-                            <p className="text-sm text-amber-800">
-                              Vincule uma venda efetivada para liberar os produtos.
-                              Empresa, projeto e cliente vêm da venda.
-                            </p>
-                          )}
-                        </div>
-                        {!isEditing && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={vendaOrigemId ? 'outline' : 'default'}
-                            onClick={() => setIsVendaOrigemOpen(true)}
-                          >
-                            <Undo2 className="w-4 h-4 mr-2" />
-                            {vendaOrigemId ? 'Trocar venda' : 'Vincular venda'}
-                          </Button>
-                        )}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="empresa_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Empresa <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        value={field.value}
-                        disabled={travadoPelaVenda}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {empresas.map((e) => (
-                            <SelectItem key={e.id} value={e.id}>
-                              {e.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {travadoPelaVenda && (
-                        <p className="text-xs text-muted-foreground">
-                          Vem da venda vinculada ({vendaOrigem?.numero_venda || 'venda de origem'}).
-                        </p>
+                          )}{' '}
+                          <FormMessage />{' '}
+                        </FormItem>
                       )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    />
 
-                {/* SPEC-146: Perfil (Ribeirão/São Paulo) movido de "Pagamento
+                    {/* SPEC-146: Perfil (Ribeirão/São Paulo) movido de "Pagamento
                     e Totais" pra cá, ao lado de Empresa — pedido do usuário
                     pra ficar visível logo no topo do orçamento. */}
-                <FormField
-                  control={form.control}
-                  name="perfil"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Perfil</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value || undefined}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Não informado" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="ribeirao">Ribeirão</SelectItem>
-                          <SelectItem value="sao_paulo">São Paulo</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                    <FormField
+                      control={form.control}
+                      name="perfil"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Perfil</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || undefined}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Não informado" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="ribeirao">Ribeirão</SelectItem>
+                              <SelectItem value="sao_paulo">
+                                São Paulo
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-              {/* SPEC-078 (Bug 3): perfil da empresa selecionada, sempre
+                  {/* SPEC-078 (Bug 3): perfil da empresa selecionada, sempre
                   visível assim que uma empresa é escolhida — não depende de
                   haver itens no orçamento. */}
-              {empresaSelecionadaPerfil && (
-                <div className="flex items-center gap-4 rounded-lg border bg-muted/30 p-4">
-                  <img
-                    src={logoImg}
-                    alt={empresaSelecionadaPerfil.nome}
-                    className="h-12 w-auto object-contain shrink-0"
-                  />
-                  <div className="text-sm">
-                    <p className="font-semibold text-gray-900">
-                      {empresaSelecionadaPerfil.nome}
-                    </p>
-                    {empresaSelecionadaPerfil.razao_social && (
-                      <p className="text-muted-foreground">
-                        {empresaSelecionadaPerfil.razao_social}
-                      </p>
-                    )}
-                    <p className="text-muted-foreground">
-                      {[
-                        empresaSelecionadaPerfil.logradouro,
-                        empresaSelecionadaPerfil.numero,
-                      ]
-                        .filter(Boolean)
-                        .join(', ')}
-                      {empresaSelecionadaPerfil.bairro
-                        ? ` - ${empresaSelecionadaPerfil.bairro}`
-                        : ''}
-                      {empresaSelecionadaPerfil.cidade
-                        ? `, ${empresaSelecionadaPerfil.cidade}/${empresaSelecionadaPerfil.estado || ''}`
-                        : ''}
-                    </p>
-                    <p className="text-muted-foreground">(16) 3442 - 3545</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="projeto_codigo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-1">
-                        Código do Projeto{' '}
-                        <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <div className="flex gap-2 items-center">
-                          <div className="flex-1">
-                            <SearchableSelect
-                              options={projetos
-                                .filter(
-                                  (p) =>
-                                    !p.arquivado ||
-                                    (isEditing &&
-                                      budgetToEdit?.projeto_id === p.id),
-                                )
-                                .map((p) => ({
-                                  value: p.codigo,
-                                  label: `${p.codigo} - ${p.nome || 'Sem nome'}`,
-                                  searchTerms: [p.codigo, p.nome].filter(
-                                    Boolean,
-                                  ) as string[],
-                                }))}
-                              value={field.value}
-                              onChange={(val) => {
-                                field.onChange(val)
-                                handleProjectSelect(val)
-                              }}
-                              placeholder="Selecione um projeto..."
-                              searchPlaceholder="Buscar código do projeto..."
-                              emptyText="Nenhum projeto encontrado."
-                              disabled={travadoPelaVenda}
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            disabled={travadoPelaVenda}
-                            onClick={() => setIsProjectModalOpen(true)}
-                            title="Criar Novo Projeto"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                  {empresaSelecionadaPerfil && (
+                    <div className="flex items-center gap-4 rounded-lg border bg-muted/30 p-4">
+                      <img
+                        src={logoImg}
+                        alt={empresaSelecionadaPerfil.nome}
+                        className="h-12 w-auto object-contain shrink-0"
+                      />
+                      <div className="text-sm">
+                        <p className="font-semibold text-gray-900">
+                          {empresaSelecionadaPerfil.nome}
+                        </p>
+                        {empresaSelecionadaPerfil.razao_social && (
+                          <p className="text-muted-foreground">
+                            {empresaSelecionadaPerfil.razao_social}
+                          </p>
+                        )}
+                        <p className="text-muted-foreground">
+                          {[
+                            empresaSelecionadaPerfil.logradouro,
+                            empresaSelecionadaPerfil.numero,
+                          ]
+                            .filter(Boolean)
+                            .join(', ')}
+                          {empresaSelecionadaPerfil.bairro
+                            ? ` - ${empresaSelecionadaPerfil.bairro}`
+                            : ''}
+                          {empresaSelecionadaPerfil.cidade
+                            ? `, ${empresaSelecionadaPerfil.cidade}/${empresaSelecionadaPerfil.estado || ''}`
+                            : ''}
+                        </p>
+                        <p className="text-muted-foreground">
+                          (16) 3442 - 3545
+                        </p>
+                      </div>
+                    </div>
                   )}
-                />
 
-                {projectDetails && (
-                  <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-100 text-sm space-y-2 mb-4 animate-in fade-in zoom-in-95">
-                    {projectDetails.isLoading ? (
-                      <div className="flex items-center gap-2 text-slate-500 py-2">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Carregando
-                        detalhes do projeto...
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
-                        <div>
-                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
-                            Nome do Projeto
-                          </p>
-                          <p className="font-medium text-slate-900">
-                            {projectDetails.nome || '-'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
-                            Empresa
-                          </p>
-                          <p
-                            className={
-                              projectDetails.empresaMissing
-                                ? 'font-medium text-amber-700'
-                                : 'font-medium text-slate-900'
-                            }
-                          >
-                            {projectDetails.empresa_nome}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
-                            Cliente
-                          </p>
-                          <p
-                            className={
-                              projectDetails.clienteMissing
-                                ? 'font-medium text-amber-700'
-                                : 'font-medium text-slate-900'
-                            }
-                          >
-                            {projectDetails.cliente_nome}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
-                            Arquiteto
-                          </p>
-                          <p className="font-medium text-slate-900">
-                            {projectDetails.arquiteto_nome}
-                          </p>
-                          {projectDetails.arquitetoAutoLinked && (
-                            <p className="text-[10px] text-emerald-700 mt-0.5">
-                              Vinculado automaticamente pelo nome do projeto —
-                              confira antes de salvar.
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
-                            Responsável do Projeto
-                          </p>
-                          <p className="font-medium text-slate-900">
-                            {projectDetails.responsavel_nome}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
-                            Responsável (Sistema)
-                          </p>
-                          <p className="font-medium text-slate-900">
-                            {projectDetails.responsavel_sistema_nome}
-                          </p>
-                        </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="projeto_codigo"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-1">
+                            Código do Projeto{' '}
+                            <span className="text-red-500">*</span>
+                          </FormLabel>
+                          <FormControl>
+                            <div className="flex gap-2 items-center">
+                              <div className="flex-1">
+                                <SearchableSelect
+                                  options={projetos
+                                    .filter(
+                                      (p) =>
+                                        !p.arquivado ||
+                                        (isEditing &&
+                                          budgetToEdit?.projeto_id === p.id),
+                                    )
+                                    .map((p) => ({
+                                      value: p.codigo,
+                                      label: `${p.codigo} - ${p.nome || 'Sem nome'}`,
+                                      searchTerms: [p.codigo, p.nome].filter(
+                                        Boolean,
+                                      ) as string[],
+                                    }))}
+                                  value={field.value}
+                                  onChange={(val) => {
+                                    field.onChange(val)
+                                    handleProjectSelect(val)
+                                  }}
+                                  placeholder="Selecione um projeto..."
+                                  searchPlaceholder="Buscar código do projeto..."
+                                  emptyText="Nenhum projeto encontrado."
+                                  disabled={travadoPelaVenda}
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                disabled={travadoPelaVenda}
+                                onClick={() => setIsProjectModalOpen(true)}
+                                title="Criar Novo Projeto"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {projectDetails && (
+                      <div className="md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-100 text-sm space-y-2 mb-4 animate-in fade-in zoom-in-95">
+                        {projectDetails.isLoading ? (
+                          <div className="flex items-center gap-2 text-slate-500 py-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />{' '}
+                            Carregando detalhes do projeto...
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
+                            <div>
+                              <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                                Nome do Projeto
+                              </p>
+                              <p className="font-medium text-slate-900">
+                                {projectDetails.nome || '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                                Empresa
+                              </p>
+                              <p
+                                className={
+                                  projectDetails.empresaMissing
+                                    ? 'font-medium text-amber-700'
+                                    : 'font-medium text-slate-900'
+                                }
+                              >
+                                {projectDetails.empresa_nome}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                                Cliente
+                              </p>
+                              <p
+                                className={
+                                  projectDetails.clienteMissing
+                                    ? 'font-medium text-amber-700'
+                                    : 'font-medium text-slate-900'
+                                }
+                              >
+                                {projectDetails.cliente_nome}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                                Arquiteto
+                              </p>
+                              <p className="font-medium text-slate-900">
+                                {projectDetails.arquiteto_nome}
+                              </p>
+                              {projectDetails.arquitetoAutoLinked && (
+                                <p className="text-[10px] text-emerald-700 mt-0.5">
+                                  Vinculado automaticamente pelo nome do projeto
+                                  — confira antes de salvar.
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                                Responsável do Projeto
+                              </p>
+                              <p className="font-medium text-slate-900">
+                                {projectDetails.responsavel_nome}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 text-[10px] font-bold uppercase mb-0.5">
+                                Responsável (Sistema)
+                              </p>
+                              <p className="font-medium text-slate-900">
+                                {projectDetails.responsavel_sistema_nome}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
 
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <div>
-                    <span
-                      className={`inline-flex items-center h-7 px-3 rounded-full border text-xs font-medium ${getStatusBadgeClass(
-                        isEditing ? form.watch('status') : 'rascunho',
-                      )}`}
-                    >
-                      {isEditing
-                        ? getStatusLabel(form.watch('status'))
-                        : 'Rascunho'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    O status é definido automaticamente pelas ações do fluxo
-                    (enviar, aprovar, recusar) e não pode ser editado
-                    diretamente.
-                  </p>
-                </FormItem>
+                    <FormItem>
+                      <FormLabel>Status</FormLabel>
+                      <div>
+                        <span
+                          className={`inline-flex items-center h-7 px-3 rounded-full border text-xs font-medium ${getStatusBadgeClass(
+                            isEditing ? form.watch('status') : 'rascunho',
+                          )}`}
+                        >
+                          {isEditing
+                            ? getStatusLabel(form.watch('status'))
+                            : 'Rascunho'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        O status é definido automaticamente pelas ações do fluxo
+                        (enviar, aprovar, recusar) e não pode ser editado
+                        diretamente.
+                      </p>
+                    </FormItem>
 
-                <FormField
-                  control={form.control}
-                  name="cliente_id"
-                  render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>
-                        Cliente <span className="text-red-500">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <div className="flex gap-2 items-center">
-                          <div className="flex-1">
-                            <SearchableSelect
-                              options={clientes.map((c) => {
-                                // SPEC-068: combina Razão Social + Nome
-                                // Completo/Fantasia; nunca mostra código de
-                                // projeto ou outro identificador interno.
-                                const razaoSocial = (
-                                  c as any
-                                ).razao_social?.trim()
-                                const label =
-                                  razaoSocial && razaoSocial !== c.nome
-                                    ? `${razaoSocial} - ${c.nome}`
-                                    : c.nome
-                                return {
-                                  value: c.id,
-                                  label,
-                                  searchTerms: [
-                                    (c as any).razao_social,
-                                    c.nome,
-                                    c.nome_empresa,
-                                  ].filter(Boolean) as string[],
-                                }
-                              })}
+                    <FormField
+                      control={form.control}
+                      name="cliente_id"
+                      render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                          <FormLabel>
+                            Cliente <span className="text-red-500">*</span>
+                          </FormLabel>
+                          <FormControl>
+                            <div className="flex gap-2 items-center">
+                              <div className="flex-1">
+                                <SearchableSelect
+                                  options={clientes.map((c) => {
+                                    // SPEC-068: combina Razão Social + Nome
+                                    // Completo/Fantasia; nunca mostra código de
+                                    // projeto ou outro identificador interno.
+                                    const razaoSocial = (
+                                      c as any
+                                    ).razao_social?.trim()
+                                    const label =
+                                      razaoSocial && razaoSocial !== c.nome
+                                        ? `${razaoSocial} - ${c.nome}`
+                                        : c.nome
+                                    return {
+                                      value: c.id,
+                                      label,
+                                      searchTerms: [
+                                        (c as any).razao_social,
+                                        c.nome,
+                                        c.nome_empresa,
+                                      ].filter(Boolean) as string[],
+                                    }
+                                  })}
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  placeholder="Selecione um cliente..."
+                                  searchPlaceholder="Buscar cliente..."
+                                  emptyText="Nenhum cliente encontrado."
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setIsClientModalOpen(true)}
+                                title="Criar Novo Cliente"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="arquitetos"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Arquiteto / Profissional</FormLabel>
+                          <FormControl>
+                            <ArchitectSplitPicker
                               value={field.value}
                               onChange={field.onChange}
-                              placeholder="Selecione um cliente..."
-                              searchPlaceholder="Buscar cliente..."
-                              emptyText="Nenhum cliente encontrado."
-                              disabled={travadoPelaVenda}
+                              options={arquitetos}
                             />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            disabled={travadoPelaVenda}
-                            onClick={() => setIsClientModalOpen(true)}
-                            title="Criar Novo Cliente"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="arquitetos"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Arquiteto / Profissional</FormLabel>
-                      <FormControl>
-                        <ArchitectSplitPicker
-                          value={field.value}
-                          onChange={field.onChange}
-                          options={arquitetos}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="vendedor_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Vendedor</FormLabel>
-                      <FormControl>
-                        <SearchableSelect
-                          options={[
-                            { value: 'none', label: 'Nenhum' },
-                            ...sortedVendedores.map((v) => ({
-                              value: v.id,
-                              label: v.nome,
-                            })),
-                            ...(field.value &&
-                            field.value !== 'none' &&
-                            !sortedVendedores.some(
-                              (v) => v.id === field.value,
-                            ) &&
-                            assignedVendedorNome
-                              ? [
-                                  {
-                                    value: field.value,
-                                    label: assignedVendedorNome,
-                                  },
-                                ]
-                              : []),
-                          ]}
-                          value={field.value || 'none'}
-                          onChange={field.onChange}
-                          placeholder="Nenhum"
-                          searchPlaceholder="Buscar vendedor..."
-                          emptyText="Nenhum vendedor encontrado."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="data_emissao"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Data de Emissão</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={'outline'}
-                              className={cn(
-                                'w-full pl-3 text-left font-normal',
-                                !field.value && 'text-muted-foreground',
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, 'PPP', { locale: ptBR })
-                              ) : (
-                                <span>Selecione</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
                           </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            initialFocus
-                            locale={ptBR}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="validade"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel className="flex items-center justify-between gap-2">
-                        <span>Validade</span>
-                        {/* SPEC-095: padrão é emissão + 10 dias; permanece
+                    <FormField
+                      control={form.control}
+                      name="vendedor_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Vendedor</FormLabel>
+                          <FormControl>
+                            <SearchableSelect
+                              options={[
+                                { value: 'none', label: 'Nenhum' },
+                                ...sortedVendedores.map((v) => ({
+                                  value: v.id,
+                                  label: v.nome,
+                                })),
+                                ...(field.value &&
+                                field.value !== 'none' &&
+                                !sortedVendedores.some(
+                                  (v) => v.id === field.value,
+                                ) &&
+                                assignedVendedorNome
+                                  ? [
+                                      {
+                                        value: field.value,
+                                        label: assignedVendedorNome,
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                              value={field.value || 'none'}
+                              onChange={field.onChange}
+                              placeholder="Nenhum"
+                              searchPlaceholder="Buscar vendedor..."
+                              emptyText="Nenhum vendedor encontrado."
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="data_emissao"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel>Data de Emissão</FormLabel>
+                          <FormControl>
+                            <DataDigitavel
+                              value={field.value}
+                              onChange={field.onChange}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="validade"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel className="flex items-center justify-between gap-2">
+                            <span>Validade</span>
+                            {/* SPEC-095: padrão é emissão + 10 dias; permanece
                             editável manualmente por cima do valor calculado. */}
-                        <button
-                          type="button"
-                          className="text-xs font-normal text-primary hover:underline"
-                          onClick={() => {
-                            validadeEditadaManualmenteRef.current = false
-                            const emissao = form.getValues('data_emissao')
-                            if (emissao) field.onChange(addDays(emissao, 10))
-                          }}
-                        >
-                          Usar padrão (10 dias)
-                        </button>
-                      </FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={'outline'}
-                              className={cn(
-                                'w-full pl-3 text-left font-normal',
-                                !field.value && 'text-muted-foreground',
-                              )}
+                            <button
+                              type="button"
+                              className="text-xs font-normal text-primary hover:underline"
+                              onClick={() => {
+                                validadeEditadaManualmenteRef.current = false
+                                const emissao = form.getValues('data_emissao')
+                                if (emissao)
+                                  field.onChange(addDays(emissao, 10))
+                              }}
                             >
-                              {field.value ? (
-                                format(field.value, 'PPP', { locale: ptBR })
-                              ) : (
-                                <span>Selecione</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
+                              Usar padrão (10 dias)
+                            </button>
+                          </FormLabel>
+                          <FormControl>
+                            <DataDigitavel
+                              value={field.value}
+                              onChange={(d) => {
+                                validadeEditadaManualmenteRef.current = true
+                                field.onChange(d)
+                              }}
+                            />
                           </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value || undefined}
-                            onSelect={(d) => {
-                              validadeEditadaManualmenteRef.current = true
-                              field.onChange(d)
-                            }}
-                            initialFocus
-                            locale={ptBR}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                {/* SPEC-167: previsão de entrega -- data única por
+                    {/* SPEC-167: previsão de entrega -- data única por
                     orçamento, opcional, informada manualmente. */}
-                <FormField
-                  control={form.control}
-                  name="previsao_entrega"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel className="flex items-center justify-between gap-2">
-                        <span>Previsão de Entrega</span>
-                        {field.value && (
-                          <button
-                            type="button"
-                            className="text-xs font-normal text-primary hover:underline"
-                            onClick={() => field.onChange(null)}
-                          >
-                            Limpar
-                          </button>
-                        )}
-                      </FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
+                    <FormField
+                      control={form.control}
+                      name="previsao_entrega"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel className="flex items-center justify-between gap-2">
+                            <span>Previsão de Entrega</span>
+                            {field.value && (
+                              <button
+                                type="button"
+                                className="text-xs font-normal text-primary hover:underline"
+                                onClick={() => field.onChange(null)}
+                              >
+                                Limpar
+                              </button>
+                            )}
+                          </FormLabel>
                           <FormControl>
-                            <Button
-                              variant={'outline'}
-                              className={cn(
-                                'w-full pl-3 text-left font-normal',
-                                !field.value && 'text-muted-foreground',
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, 'PPP', { locale: ptBR })
-                              ) : (
-                                <span>Selecione</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
+                            <DataDigitavel
+                              value={field.value}
+                              onChange={field.onChange}
+                            />
                           </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value || undefined}
-                            onSelect={field.onChange}
-                            initialFocus
-                            locale={ptBR}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent
@@ -3599,104 +3558,37 @@ export default function BudgetFormPage() {
               forceMount
               className="mt-0 data-[state=inactive]:hidden"
             >
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Itens do Orçamento</CardTitle>
-                <CardDescription>
-                  Produtos e quantidades que compõem o orçamento.
-                </CardDescription>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {naturezaOperacao === 'devolucao' ? (
-                  <Button
-                    type="button"
-                    variant="default"
-                    size="sm"
-                    disabled={!vendaOrigemId}
-                    title={vendaOrigemId ? undefined : 'Vincule a venda de origem na aba 1 primeiro'}
-                    onClick={() => setIsDevolucaoSearchOpen(true)}
-                  >
-                    <Undo2 className="w-4 h-4 mr-2" /> Buscar itens da venda
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="sm"
-                      disabled={!canEditValorProduto}
-                      title={
-                        canEditValorProduto
-                          ? undefined
-                          : 'Só administrador pode adicionar produto a um orçamento já existente'
-                      }
-                      onClick={() => {
-                        setProductSearchRowIndex(null)
-                        setIsProductSearchOpen(true)
-                      }}
-                    >
-                      <PackageSearch className="w-4 h-4 mr-2" /> Buscar Produtos
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={!canEditValorProduto}
-                      title={
-                        canEditValorProduto
-                          ? undefined
-                          : 'Só administrador pode adicionar produto a um orçamento já existente'
-                      }
-                      onClick={() => {
-                        setMultiLProduct(null)
-                        setIsMultiLDialogOpen(true)
-                      }}
-                    >
-                      <Plus className="w-4 h-4 mr-2" /> Adicionar Item não
-                      Cadastrado
-                    </Button>
-                  </>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {fields.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed rounded-lg bg-gray-50/50">
-                  <p className="text-gray-500 mb-2 font-medium">
-                    Nenhum item adicionado
-                  </p>
-                  <p className="text-sm text-gray-400 mb-4">
-                    Adicione produtos para compor este orçamento.
-                  </p>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Itens do Orçamento</CardTitle>
+                    <CardDescription>
+                      Produtos e quantidades que compõem o orçamento.
+                    </CardDescription>
+                  </div>
                   <div className="flex gap-2 flex-wrap">
                     {naturezaOperacao === 'devolucao' ? (
-                      vendaOrigemId ? (
-                        <Button
-                          type="button"
-                          variant="default"
-                          onClick={() => setIsDevolucaoSearchOpen(true)}
-                        >
-                          <Undo2 className="w-4 h-4 mr-2" /> Buscar itens da venda
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setAbaAtiva('cliente')
-                            setIsVendaOrigemOpen(true)
-                          }}
-                        >
-                          <Undo2 className="w-4 h-4 mr-2" /> Vincule a venda de
-                          origem primeiro
-                        </Button>
-                      )
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        disabled={!podeBuscarDevolucao}
+                        title={
+                          podeBuscarDevolucao
+                            ? undefined
+                            : 'Escolha o projeto e a empresa na aba 1 primeiro'
+                        }
+                        onClick={() => setIsDevolucaoSearchOpen(true)}
+                      >
+                        <Undo2 className="w-4 h-4 mr-2" /> Buscar itens do
+                        projeto
+                      </Button>
                     ) : (
                       <>
                         <Button
                           type="button"
                           variant="default"
+                          size="sm"
                           disabled={!canEditValorProduto}
                           title={
                             canEditValorProduto
@@ -3713,7 +3605,8 @@ export default function BudgetFormPage() {
                         </Button>
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="secondary"
+                          size="sm"
                           disabled={!canEditValorProduto}
                           title={
                             canEditValorProduto
@@ -3731,36 +3624,105 @@ export default function BudgetFormPage() {
                       </>
                     )}
                   </div>
-                </div>
-              )}
+                </CardHeader>
+                <CardContent>
+                  {fields.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed rounded-lg bg-gray-50/50">
+                      <p className="text-gray-500 mb-2 font-medium">
+                        Nenhum item adicionado
+                      </p>
+                      <p className="text-sm text-gray-400 mb-4">
+                        Adicione produtos para compor este orçamento.
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        {naturezaOperacao === 'devolucao' ? (
+                          podeBuscarDevolucao ? (
+                            <Button
+                              type="button"
+                              variant="default"
+                              onClick={() => setIsDevolucaoSearchOpen(true)}
+                            >
+                              <Undo2 className="w-4 h-4 mr-2" /> Buscar itens do
+                              projeto
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setAbaAtiva('cliente')}
+                            >
+                              <Undo2 className="w-4 h-4 mr-2" /> Escolha o
+                              projeto e a empresa primeiro
+                            </Button>
+                          )
+                        ) : (
+                          <>
+                            <Button
+                              type="button"
+                              variant="default"
+                              disabled={!canEditValorProduto}
+                              title={
+                                canEditValorProduto
+                                  ? undefined
+                                  : 'Só administrador pode adicionar produto a um orçamento já existente'
+                              }
+                              onClick={() => {
+                                setProductSearchRowIndex(null)
+                                setIsProductSearchOpen(true)
+                              }}
+                            >
+                              <PackageSearch className="w-4 h-4 mr-2" /> Buscar
+                              Produtos
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={!canEditValorProduto}
+                              title={
+                                canEditValorProduto
+                                  ? undefined
+                                  : 'Só administrador pode adicionar produto a um orçamento já existente'
+                              }
+                              onClick={() => {
+                                setMultiLProduct(null)
+                                setIsMultiLDialogOpen(true)
+                              }}
+                            >
+                              <Plus className="w-4 h-4 mr-2" /> Adicionar Item
+                              não Cadastrado
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-              {fields.length > 0 && <BudgetItemsHeader />}
+                  {fields.length > 0 && <BudgetItemsHeader />}
 
-              <div className="space-y-4">
-                {fields.map((field, index) => {
-                  return (
-                    <BudgetItemCard
-                      key={field.uid || field.id || `item-${index}`}
-                      index={index}
-                      fieldId={field.uid || field.id || `item-${index}`}
-                      onRemove={remove}
-                      onSearchProduct={(idx) => {
-                        setProductSearchRowIndex(idx)
-                        setIsProductSearchOpen(true)
-                      }}
-                      onCreateProduct={(idx) => {
-                        setProductCreateTarget({ index: idx })
-                        setIsProductCreateOpen(true)
-                      }}
-                      getProductInfo={getProductInfo}
-                      canEditValorProduto={canEditValorProduto}
-                    />
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
+                  <div className="space-y-4">
+                    {fields.map((field, index) => {
+                      return (
+                        <BudgetItemCard
+                          key={field.uid || field.id || `item-${index}`}
+                          index={index}
+                          fieldId={field.uid || field.id || `item-${index}`}
+                          onRemove={remove}
+                          onSearchProduct={(idx) => {
+                            setProductSearchRowIndex(idx)
+                            setIsProductSearchOpen(true)
+                          }}
+                          onCreateProduct={(idx) => {
+                            setProductCreateTarget({ index: idx })
+                            setIsProductCreateOpen(true)
+                          }}
+                          getProductInfo={getProductInfo}
+                          canEditValorProduto={canEditValorProduto}
+                        />
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent
@@ -3768,200 +3730,167 @@ export default function BudgetFormPage() {
               forceMount
               className="mt-0 data-[state=inactive]:hidden destaque-preenchido"
             >
-          <Card>
-            <CardHeader>
-              <CardTitle>Condição de Pagamento</CardTitle>
-              <CardDescription>
-                Forma de pagamento, parcelas, frete, desconto, sinal e
-                observações. Os totais ficam na barra fixa abaixo.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="max-w-3xl">
-                <div className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="forma_pagamento"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Forma de Pagamento</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value || undefined}
-                          value={field.value || undefined}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione a forma de pagamento" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                            <SelectItem value="pix">Pix</SelectItem>
-                            <SelectItem value="cartao">Cartão</SelectItem>
-                            <SelectItem value="boleto">Boleto</SelectItem>
-                            {/* SPEC-107: cheque/transferência já existiam no
+              <Card>
+                <CardHeader>
+                  <CardTitle>Condição de Pagamento</CardTitle>
+                  <CardDescription>
+                    Forma de pagamento, parcelas, frete, desconto, sinal e
+                    observações. Os totais ficam na barra fixa abaixo.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-w-3xl">
+                    <div className="space-y-6">
+                      <FormField
+                        control={form.control}
+                        name="forma_pagamento"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Forma de Pagamento</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value || undefined}
+                              value={field.value || undefined}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione a forma de pagamento" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="dinheiro">
+                                  Dinheiro
+                                </SelectItem>
+                                <SelectItem value="pix">Pix</SelectItem>
+                                <SelectItem value="cartao">Cartão</SelectItem>
+                                <SelectItem value="boleto">Boleto</SelectItem>
+                                {/* SPEC-107: cheque/transferência já existiam no
                                 banco, nunca tinham sido liberados aqui;
                                 permuta é novo. */}
-                            <SelectItem value="cheque">Cheque</SelectItem>
-                            <SelectItem value="transferencia">
-                              Transferência
-                            </SelectItem>
-                            <SelectItem value="permuta">Permuta</SelectItem>
-                            {/* SPEC-152: parcela recebida sem gerar boleto
+                                <SelectItem value="cheque">Cheque</SelectItem>
+                                <SelectItem value="transferencia">
+                                  Transferência
+                                </SelectItem>
+                                <SelectItem value="permuta">Permuta</SelectItem>
+                                {/* SPEC-152: parcela recebida sem gerar boleto
                                 (aparece em relatórios de saldo em aberto). */}
-                            <SelectItem value="carteira">Carteira</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                                <SelectItem value="carteira">
+                                  Carteira
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                  {FORMAS_PAGAMENTO_PARCELAVEIS(
-                    form.watch('forma_pagamento'),
-                  ) && (
-                    <FormField
-                      control={form.control}
-                      name="parcelas"
-                      render={({ field }) => (
-                        <FormItem className="animate-in fade-in slide-in-from-top-2">
-                          <FormLabel>Quantidade de Parcelas</FormLabel>
-                          <FormControl>
-                            {/* SPEC-152 (Bug 1): não normaliza pra número a
+                      {FORMAS_PAGAMENTO_PARCELAVEIS(
+                        form.watch('forma_pagamento'),
+                      ) && (
+                        <FormField
+                          control={form.control}
+                          name="parcelas"
+                          render={({ field }) => (
+                            <FormItem className="animate-in fade-in slide-in-from-top-2">
+                              <FormLabel>Quantidade de Parcelas</FormLabel>
+                              <FormControl>
+                                {/* SPEC-152 (Bug 1): não normaliza pra número a
                                 cada tecla -- deixa o valor "em edição" (que
                                 pode ser '' momentaneamente) passar direto
                                 pro form; o zod (z.preprocess) normaliza no
                                 submit/revalidação, e onBlur também corrige
                                 pra sempre deixar um inteiro >=1 visível. */}
-                            <Input
-                              type="number"
-                              min="1"
-                              max="120"
-                              step="1"
-                              value={field.value ?? ''}
-                              onChange={(e) => field.onChange(e.target.value)}
-                              onBlur={() => {
-                                field.onChange(
-                                  normalizarQtdParcelas(field.value),
-                                )
-                                field.onBlur()
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  max="120"
+                                  step="1"
+                                  value={field.value ?? ''}
+                                  onChange={(e) =>
+                                    field.onChange(e.target.value)
+                                  }
+                                  onBlur={() => {
+                                    field.onChange(
+                                      normalizarQtdParcelas(field.value),
+                                    )
+                                    field.onBlur()
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       )}
-                    />
-                  )}
 
-                  <FormField
-                    control={form.control}
-                    name="data_inicio_pagamento"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>
-                          Data de Início do Pagamento{' '}
-                          <span className="text-red-500">*</span>
-                        </FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
+                      <FormField
+                        control={form.control}
+                        name="data_inicio_pagamento"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>
+                              Data de Início do Pagamento{' '}
+                              <span className="text-red-500">*</span>
+                            </FormLabel>
                             <FormControl>
-                              <Button
-                                variant={'outline'}
-                                className={cn(
-                                  'w-full pl-3 text-left font-normal',
-                                  !field.value && 'text-muted-foreground',
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, 'PPP', { locale: ptBR })
-                                ) : (
-                                  <span>Selecione a data</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
+                              <DataDigitavel
+                                value={field.value}
+                                onChange={field.onChange}
+                                desabilitarDia={(date) =>
+                                  date <
+                                  new Date(new Date().setHours(0, 0, 0, 0))
+                                }
+                              />
                             </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value || undefined}
-                              onSelect={field.onChange}
-                              disabled={(date) =>
-                                date < new Date(new Date().setHours(0, 0, 0, 0))
-                              }
-                              initialFocus
-                              locale={ptBR}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <p className="text-xs text-muted-foreground">
-                          Vencimento da 1ª parcela. Confirme com o
-                          e-mail/negociação do cliente, como no fluxo do
-                          Connect.
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                            <p className="text-xs text-muted-foreground">
+                              Vencimento da 1ª parcela. Confirme com o
+                              e-mail/negociação do cliente, como no fluxo do
+                              Connect.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                  {(() => {
-                    const totalParcelas = totalParcelasAtual
-                    const dataInicio = form.watch('data_inicio_pagamento') as
-                      | Date
-                      | undefined
-                    if (!dataInicio || totalParcelas < 2) return null
-                    const overrides = form.watch('parcelas_datas') || []
-                    return (
-                      <div className="md:col-span-2 space-y-3 rounded-lg border p-4 animate-in fade-in slide-in-from-top-2">
-                        <p className="text-sm font-medium">
-                          Vencimentos das demais parcelas
-                        </p>
-                        <p className="text-xs text-muted-foreground -mt-2">
-                          Por padrão, cada parcela vence 1 mês após a anterior.
-                          Edite individualmente se a negociação com o cliente
-                          definiu datas diferentes.
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {Array.from(
-                            { length: totalParcelas - 1 },
-                            (_, idx) => idx,
-                          ).map((idx) => {
-                            const override = overrides[idx]
-                            const valor = override
-                              ? new Date(override)
-                              : addMonths(dataInicio, idx + 1)
-                            const isOverride = !!override
-                            return (
-                              <div key={idx} className="space-y-1">
-                                <label className="text-xs text-muted-foreground">
-                                  Parcela {idx + 2}
-                                </label>
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
+                      {(() => {
+                        const totalParcelas = totalParcelasAtual
+                        const dataInicio = form.watch(
+                          'data_inicio_pagamento',
+                        ) as Date | undefined
+                        if (!dataInicio || totalParcelas < 2) return null
+                        const overrides = form.watch('parcelas_datas') || []
+                        return (
+                          <div className="md:col-span-2 space-y-3 rounded-lg border p-4 animate-in fade-in slide-in-from-top-2">
+                            <p className="text-sm font-medium">
+                              Vencimentos das demais parcelas
+                            </p>
+                            <p className="text-xs text-muted-foreground -mt-2">
+                              Por padrão, cada parcela vence 1 mês após a
+                              anterior. Edite individualmente se a negociação
+                              com o cliente definiu datas diferentes.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {Array.from(
+                                { length: totalParcelas - 1 },
+                                (_, idx) => idx,
+                              ).map((idx) => {
+                                const override = overrides[idx]
+                                const valor = override
+                                  ? new Date(override)
+                                  : addMonths(dataInicio, idx + 1)
+                                const isOverride = !!override
+                                return (
+                                  <div key={idx} className="space-y-1">
+                                    <label className="text-xs text-muted-foreground">
+                                      Parcela {idx + 2}
+                                    </label>
+                                    <DataDigitavel
+                                      value={valor}
                                       className={cn(
-                                        'w-full pl-3 text-left font-normal',
-                                        !isOverride && 'text-muted-foreground',
+                                        !isOverride &&
+                                          '[&_input]:text-muted-foreground',
                                       )}
-                                    >
-                                      {format(valor, 'dd/MM/yyyy', {
-                                        locale: ptBR,
-                                      })}
-                                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent
-                                    className="w-auto p-0"
-                                    align="start"
-                                  >
-                                    <Calendar
-                                      mode="single"
-                                      selected={valor}
-                                      onSelect={(date) => {
+                                      onChange={(date) => {
                                         const next = [...overrides]
                                         next[idx] = date ?? null
                                         form.setValue('parcelas_datas', next, {
@@ -3969,157 +3898,174 @@ export default function BudgetFormPage() {
                                           shouldDirty: true,
                                         })
                                       }}
-                                      disabled={(date) => date < dataInicio}
-                                      initialFocus
-                                      locale={ptBR}
+                                      desabilitarDia={(date) =>
+                                        date < dataInicio
+                                      }
                                     />
-                                  </PopoverContent>
-                                </Popover>
-                                {isOverride && (
-                                  <button
-                                    type="button"
-                                    className="text-xs text-primary underline"
-                                    onClick={() => {
-                                      const next = [...overrides]
-                                      next[idx] = null
-                                      form.setValue('parcelas_datas', next, {
-                                        shouldValidate: true,
-                                        shouldDirty: true,
-                                      })
-                                    }}
-                                  >
-                                    Usar padrão (1 mês)
-                                  </button>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })()}
+                                    {isOverride && (
+                                      <button
+                                        type="button"
+                                        className="text-xs text-primary underline"
+                                        onClick={() => {
+                                          const next = [...overrides]
+                                          next[idx] = null
+                                          form.setValue(
+                                            'parcelas_datas',
+                                            next,
+                                            {
+                                              shouldValidate: true,
+                                              shouldDirty: true,
+                                            },
+                                          )
+                                        }}
+                                      >
+                                        Usar padrão (1 mês)
+                                      </button>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })()}
 
-                  {/* SPEC-152 (item 7): valor/forma de pagamento/fornecedor
+                      {/* SPEC-152 (item 7): valor/forma de pagamento/fornecedor
                       de permuta por parcela -- alimenta orcamentos.plano_parcelas.
                       Soma precisa bater exatamente com o valor a pagar (regra
                       dura, decisão do usuário 2026-09-17). */}
-                  {(() => {
-                    const dataInicio = form.watch('data_inicio_pagamento') as
-                      | Date
-                      | undefined
-                    if (!dataInicio) return null
-                    const overrides = form.watch('parcelas_datas') || []
-                    const datas = Array.from(
-                      { length: totalParcelasAtual },
-                      (_, i) => {
-                        if (i === 0) return dataInicio
-                        const override = overrides[i - 1]
-                        return override
-                          ? new Date(override)
-                          : addMonths(dataInicio, i)
-                      },
-                    )
-                    const somaParcelas =
-                      Math.round(
-                        parcelasConfigWatch.reduce((acc: number, p: any) => {
-                          const raw = p?.valor
-                          const n =
-                            raw === '' || raw === undefined ? NaN : Number(raw)
-                          return acc + (Number.isFinite(n) ? n : 0)
-                        }, 0) * 100,
-                      ) / 100
-                    const valorTotalArred = Math.round(valorTotal * 100) / 100
-                    const bateSoma =
-                      Math.abs(somaParcelas - valorTotalArred) < 0.01
-                    // SPEC-155 (Bug 2): mesma checagem do onSubmit (linha
-                    // ~1467), só pra decidir se mostra o aviso consolidado
-                    // abaixo -- a validação que de fato bloqueia salvar
-                    // continua sendo a do onSubmit.
-                    const faltaFornecedorPermuta = datas.some((_, i) => {
-                      const linha = parcelasConfigWatch[i] || {}
-                      const forma =
-                        linha.forma_pagamento ||
-                        form.watch('forma_pagamento') ||
-                        'boleto'
-                      return forma === 'permuta' && !linha.permuta_fornecedor_id
-                    })
-                    const formatCurrency = (v: number) =>
-                      new Intl.NumberFormat('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      }).format(v)
-                    return (
-                      <div className="md:col-span-2 space-y-3 rounded-lg border p-4 animate-in fade-in slide-in-from-top-2">
-                        <p className="text-sm font-medium">Plano de Parcelas</p>
-                        <p className="text-xs text-muted-foreground -mt-2">
-                          Valor, forma de pagamento e (se for permuta)
-                          fornecedor ou cliente de cada parcela. Editar o
-                          valor de uma parcela redistribui automaticamente o
-                          restante entre as demais — a soma sempre bate com
-                          o valor a pagar.
-                        </p>
-                        <div className="space-y-2">
-                          {datas.map((data, idx) => {
-                            const linha = parcelasConfigWatch[idx] || {}
-                            const formaLinha =
-                              linha.forma_pagamento ||
-                              form.watch('forma_pagamento') ||
-                              'boleto'
-                            return (
-                              <div
-                                key={idx}
-                                className="grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr_1fr] gap-2 items-center rounded-md border p-2"
-                              >
-                                <div className="text-xs text-muted-foreground min-w-[110px]">
-                                  <span className="font-medium text-foreground">
-                                    Parcela {idx + 1}
-                                  </span>
-                                  <br />
-                                  {format(data, 'dd/MM/yyyy', { locale: ptBR })}
-                                </div>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  placeholder="Valor"
-                                  value={linha.valor ?? ''}
-                                  onChange={(e) =>
-                                    recalcularParcelasConfig(idx, e.target.value)
-                                  }
-                                />
-                                <Select
-                                  value={formaLinha}
-                                  onValueChange={(v) => {
-                                    const next = [...parcelasConfigWatch]
-                                    next[idx] = {
-                                      ...(next[idx] || {}),
-                                      forma_pagamento: v,
-                                      permuta_fornecedor_id:
-                                        v === 'permuta'
-                                          ? next[idx]?.permuta_fornecedor_id
-                                          : null,
-                                    }
-                                    form.setValue('parcelas_config', next, {
-                                      shouldDirty: true,
-                                    })
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Forma de pagamento" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {Object.entries(FORMA_PAGAMENTO_LABELS).map(
-                                      ([value, label]) => (
-                                        <SelectItem key={value} value={value}>
-                                          {label}
-                                        </SelectItem>
-                                      ),
-                                    )}
-                                  </SelectContent>
-                                </Select>
-                                {formaLinha === 'permuta' ? (
-                                  <div className="space-y-1">
-                                    {/* SPEC-155 (Bug 2): a validação de
+                      {(() => {
+                        const dataInicio = form.watch(
+                          'data_inicio_pagamento',
+                        ) as Date | undefined
+                        if (!dataInicio) return null
+                        const overrides = form.watch('parcelas_datas') || []
+                        const datas = Array.from(
+                          { length: totalParcelasAtual },
+                          (_, i) => {
+                            if (i === 0) return dataInicio
+                            const override = overrides[i - 1]
+                            return override
+                              ? new Date(override)
+                              : addMonths(dataInicio, i)
+                          },
+                        )
+                        const somaParcelas =
+                          Math.round(
+                            parcelasConfigWatch.reduce(
+                              (acc: number, p: any) => {
+                                const raw = p?.valor
+                                const n =
+                                  raw === '' || raw === undefined
+                                    ? NaN
+                                    : Number(raw)
+                                return acc + (Number.isFinite(n) ? n : 0)
+                              },
+                              0,
+                            ) * 100,
+                          ) / 100
+                        const valorTotalArred =
+                          Math.round(valorTotal * 100) / 100
+                        const bateSoma =
+                          Math.abs(somaParcelas - valorTotalArred) < 0.01
+                        // SPEC-155 (Bug 2): mesma checagem do onSubmit (linha
+                        // ~1467), só pra decidir se mostra o aviso consolidado
+                        // abaixo -- a validação que de fato bloqueia salvar
+                        // continua sendo a do onSubmit.
+                        const faltaFornecedorPermuta = datas.some((_, i) => {
+                          const linha = parcelasConfigWatch[i] || {}
+                          const forma =
+                            linha.forma_pagamento ||
+                            form.watch('forma_pagamento') ||
+                            'boleto'
+                          return (
+                            forma === 'permuta' && !linha.permuta_fornecedor_id
+                          )
+                        })
+                        const formatCurrency = (v: number) =>
+                          new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(v)
+                        return (
+                          <div className="md:col-span-2 space-y-3 rounded-lg border p-4 animate-in fade-in slide-in-from-top-2">
+                            <p className="text-sm font-medium">
+                              Plano de Parcelas
+                            </p>
+                            <p className="text-xs text-muted-foreground -mt-2">
+                              Valor, forma de pagamento e (se for permuta)
+                              fornecedor ou cliente de cada parcela. Editar o
+                              valor de uma parcela redistribui automaticamente o
+                              restante entre as demais — a soma sempre bate com
+                              o valor a pagar.
+                            </p>
+                            <div className="space-y-2">
+                              {datas.map((data, idx) => {
+                                const linha = parcelasConfigWatch[idx] || {}
+                                const formaLinha =
+                                  linha.forma_pagamento ||
+                                  form.watch('forma_pagamento') ||
+                                  'boleto'
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr_1fr] gap-2 items-center rounded-md border p-2"
+                                  >
+                                    <div className="text-xs text-muted-foreground min-w-[110px]">
+                                      <span className="font-medium text-foreground">
+                                        Parcela {idx + 1}
+                                      </span>
+                                      <br />
+                                      {format(data, 'dd/MM/yyyy', {
+                                        locale: ptBR,
+                                      })}
+                                    </div>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      placeholder="Valor"
+                                      value={linha.valor ?? ''}
+                                      onChange={(e) =>
+                                        recalcularParcelasConfig(
+                                          idx,
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
+                                    <Select
+                                      value={formaLinha}
+                                      onValueChange={(v) => {
+                                        const next = [...parcelasConfigWatch]
+                                        next[idx] = {
+                                          ...(next[idx] || {}),
+                                          forma_pagamento: v,
+                                          permuta_fornecedor_id:
+                                            v === 'permuta'
+                                              ? next[idx]?.permuta_fornecedor_id
+                                              : null,
+                                        }
+                                        form.setValue('parcelas_config', next, {
+                                          shouldDirty: true,
+                                        })
+                                      }}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Forma de pagamento" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Object.entries(
+                                          FORMA_PAGAMENTO_LABELS,
+                                        ).map(([value, label]) => (
+                                          <SelectItem key={value} value={value}>
+                                            {label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {formaLinha === 'permuta' ? (
+                                      <div className="space-y-1">
+                                        {/* SPEC-155 (Bug 2): a validação de
                                         contraparte obrigatória pra permuta já
                                         existia no submit e no backend, mas o
                                         campo não indicava isso visualmente —
@@ -4133,167 +4079,225 @@ export default function BudgetFormPage() {
                                         fornecedor+cliente combinados passam
                                         de ~3000 contatos, uma lista fixa
                                         ficava impraticável de rolar/achar. */}
-                                    <SearchableSelect
-                                      options={contatosPermuta.map((c) => ({
-                                        value: c.id,
-                                        label: `${c.nome} (${c.tipo === 'fornecedor' ? 'Fornecedor' : 'Cliente'})`,
-                                        searchTerms: [c.nome],
-                                      }))}
-                                      value={linha.permuta_fornecedor_id || ''}
-                                      onChange={(v) => {
-                                        const next = [...parcelasConfigWatch]
-                                        next[idx] = {
-                                          ...(next[idx] || {}),
-                                          permuta_fornecedor_id: v,
-                                        }
-                                        form.setValue('parcelas_config', next, {
-                                          shouldDirty: true,
-                                        })
-                                      }}
-                                      placeholder="Fornecedor ou cliente da permuta *"
-                                      searchPlaceholder="Buscar por nome..."
-                                      emptyText="Nenhum contato encontrado."
-                                      className={cn(
-                                        !linha.permuta_fornecedor_id &&
-                                          'border-red-500 focus:ring-red-500',
-                                      )}
-                                    />
-                                    {!linha.permuta_fornecedor_id && (
-                                      <p className="text-xs text-red-600">
-                                        Obrigatório para permuta — sem isso o
-                                        orçamento não pode ser aprovado.
-                                      </p>
+                                        <SearchableSelect
+                                          options={contatosPermuta.map((c) => ({
+                                            value: c.id,
+                                            label: `${c.nome} (${c.tipo === 'fornecedor' ? 'Fornecedor' : 'Cliente'})`,
+                                            searchTerms: [c.nome],
+                                          }))}
+                                          value={
+                                            linha.permuta_fornecedor_id || ''
+                                          }
+                                          onChange={(v) => {
+                                            const next = [
+                                              ...parcelasConfigWatch,
+                                            ]
+                                            next[idx] = {
+                                              ...(next[idx] || {}),
+                                              permuta_fornecedor_id: v,
+                                            }
+                                            form.setValue(
+                                              'parcelas_config',
+                                              next,
+                                              {
+                                                shouldDirty: true,
+                                              },
+                                            )
+                                          }}
+                                          placeholder="Fornecedor ou cliente da permuta *"
+                                          searchPlaceholder="Buscar por nome..."
+                                          emptyText="Nenhum contato encontrado."
+                                          className={cn(
+                                            !linha.permuta_fornecedor_id &&
+                                              'border-red-500 focus:ring-red-500',
+                                          )}
+                                        />
+                                        {!linha.permuta_fornecedor_id && (
+                                          <p className="text-xs text-red-600">
+                                            Obrigatório para permuta — sem isso
+                                            o orçamento não pode ser aprovado.
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div />
                                     )}
                                   </div>
-                                ) : (
-                                  <div />
-                                )}
+                                )
+                              })}
+                            </div>
+                            <div
+                              className={cn(
+                                'text-sm font-medium rounded-md px-3 py-2',
+                                bateSoma
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-red-50 text-red-700',
+                              )}
+                            >
+                              Soma das parcelas: {formatCurrency(somaParcelas)}{' '}
+                              / {formatCurrency(valorTotalArred)}
+                              {!bateSoma &&
+                                ' — precisa bater exatamente para salvar.'}
+                            </div>
+                            {faltaFornecedorPermuta && (
+                              <div className="text-sm font-medium rounded-md px-3 py-2 bg-red-50 text-red-700">
+                                Selecione o fornecedor ou cliente em toda
+                                parcela marcada como Permuta — precisa disso
+                                para salvar e para aprovar financeiramente.
                               </div>
-                            )
-                          })}
-                        </div>
-                        <div
-                          className={cn(
-                            'text-sm font-medium rounded-md px-3 py-2',
-                            bateSoma
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : 'bg-red-50 text-red-700',
-                          )}
-                        >
-                          Soma das parcelas: {formatCurrency(somaParcelas)} /{' '}
-                          {formatCurrency(valorTotalArred)}
-                          {!bateSoma &&
-                            ' — precisa bater exatamente para salvar.'}
-                        </div>
-                        {faltaFornecedorPermuta && (
-                          <div className="text-sm font-medium rounded-md px-3 py-2 bg-red-50 text-red-700">
-                            Selecione o fornecedor ou cliente em toda parcela
-                            marcada como Permuta — precisa disso para salvar
-                            e para aprovar financeiramente.
+                            )}
                           </div>
-                        )}
-                      </div>
-                    )
-                  })()}
+                        )
+                      })()}
 
-                  <FormField
-                    control={form.control}
-                    name="frete_tipo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Frete</FormLabel>
-                        <Select
-                          onValueChange={(val) => {
-                            field.onChange(val)
-                            if (val === 'sem_frete') {
-                              form.setValue('frete_valor', 0)
-                            }
-                          }}
-                          value={field.value || undefined}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o frete" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="sem_frete">Sem Frete</SelectItem>
-                            <SelectItem value="com_frete">Com Frete</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Confirme se a condição negociada é "Com Frete" ou "Sem
-                          Frete", como no fluxo do Connect, para evitar
-                          divergência na nota fiscal.
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {form.watch('frete_tipo') === 'com_frete' && (
-                    <FormField
-                      control={form.control}
-                      name="frete_valor"
-                      render={({ field }) => (
-                        <FormItem className="animate-in fade-in slide-in-from-top-2">
-                          <FormLabel>Valor do Frete</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(parseFloat(e.target.value) || 0)
-                              }
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-
-                  <FormItem>
-                    <FormLabel>Desconto Global</FormLabel>
-                    <div className="flex gap-2">
                       <FormField
                         control={form.control}
-                        name="desconto_tipo"
+                        name="frete_tipo"
                         render={({ field }) => (
-                          <Select
-                            onValueChange={field.onChange}
-                            value={field.value || 'percentual'}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="w-28 shrink-0">
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="percentual">%</SelectItem>
-                              <SelectItem value="valor">R$</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <FormItem>
+                            <FormLabel>Frete</FormLabel>
+                            <Select
+                              onValueChange={(val) => {
+                                field.onChange(val)
+                                if (val === 'sem_frete') {
+                                  form.setValue('frete_valor', 0)
+                                }
+                              }}
+                              value={field.value || undefined}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione o frete" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="sem_frete">
+                                  Sem Frete
+                                </SelectItem>
+                                <SelectItem value="com_frete">
+                                  Com Frete
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Confirme se a condição negociada é "Com Frete" ou
+                              "Sem Frete", como no fluxo do Connect, para evitar
+                              divergência na nota fiscal.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
                         )}
                       />
+
+                      {form.watch('frete_tipo') === 'com_frete' && (
+                        <FormField
+                          control={form.control}
+                          name="frete_valor"
+                          render={({ field }) => (
+                            <FormItem className="animate-in fade-in slide-in-from-top-2">
+                              <FormLabel>Valor do Frete</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  {...field}
+                                  onChange={(e) =>
+                                    field.onChange(
+                                      parseFloat(e.target.value) || 0,
+                                    )
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+
+                      <FormItem>
+                        <FormLabel>Desconto Global</FormLabel>
+                        <div className="flex gap-2">
+                          <FormField
+                            control={form.control}
+                            name="desconto_tipo"
+                            render={({ field }) => (
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || 'percentual'}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="w-28 shrink-0">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="percentual">%</SelectItem>
+                                  <SelectItem value="valor">R$</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="desconto_global"
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormControl>
+                                  <div className="relative">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max={
+                                        descontoTipo === 'percentual'
+                                          ? 100
+                                          : undefined
+                                      }
+                                      placeholder="0"
+                                      className="pr-8"
+                                      {...field}
+                                      value={
+                                        field.value === 0 ? '' : field.value
+                                      }
+                                      onChange={(e) =>
+                                        field.onChange(
+                                          Number(e.target.value) || 0,
+                                        )
+                                      }
+                                    />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+                                      {descontoTipo === 'percentual'
+                                        ? '%'
+                                        : 'R$'}
+                                    </span>
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {descontoTipo === 'percentual'
+                            ? `Equivale a ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(descontoValorReais)}.`
+                            : `Equivale a ${descontoPercentualEquivalente.toFixed(2)}%.`}{' '}
+                          Aplicado sobre o subtotal já descontado o sinal.
+                        </p>
+                      </FormItem>
+
                       <FormField
                         control={form.control}
-                        name="desconto_global"
+                        name="valor_sinal"
                         render={({ field }) => (
-                          <FormItem className="flex-1">
+                          <FormItem>
+                            <FormLabel>Sinal (R$)</FormLabel>
                             <FormControl>
                               <div className="relative">
                                 <Input
                                   type="number"
                                   step="0.01"
                                   min="0"
-                                  max={
-                                    descontoTipo === 'percentual'
-                                      ? 100
-                                      : undefined
-                                  }
                                   placeholder="0"
                                   className="pr-8"
                                   {...field}
@@ -4303,80 +4307,41 @@ export default function BudgetFormPage() {
                                   }
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
-                                  {descontoTipo === 'percentual' ? '%' : 'R$'}
+                                  R$
                                 </span>
                               </div>
+                            </FormControl>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Valor fixo. Deduzido do subtotal antes do desconto
+                              — reduz o Valor Total e, consequentemente, as
+                              parcelas geradas na aprovação financeira.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="observacoes"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Observações</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Notas ou observações adicionais..."
+                                {...field}
+                                value={field.value || ''}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {descontoTipo === 'percentual'
-                        ? `Equivale a ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(descontoValorReais)}.`
-                        : `Equivale a ${descontoPercentualEquivalente.toFixed(2)}%.`}{' '}
-                      Aplicado sobre o subtotal já descontado o sinal.
-                    </p>
-                  </FormItem>
-
-                  <FormField
-                    control={form.control}
-                    name="valor_sinal"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sinal (R$)</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder="0"
-                              className="pr-8"
-                              {...field}
-                              value={field.value === 0 ? '' : field.value}
-                              onChange={(e) =>
-                                field.onChange(Number(e.target.value) || 0)
-                              }
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
-                              R$
-                            </span>
-                          </div>
-                        </FormControl>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Valor fixo. Deduzido do subtotal antes do desconto —
-                          reduz o Valor Total e, consequentemente, as parcelas
-                          geradas na aprovação financeira.
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="observacoes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Observações</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Notas ou observações adicionais..."
-                            {...field}
-                            value={field.value || ''}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-              </div>
-            </CardContent>
-          </Card>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
 
@@ -4459,22 +4424,10 @@ export default function BudgetFormPage() {
           <DevolucaoItemSearchModal
             open={isDevolucaoSearchOpen}
             onOpenChange={setIsDevolucaoSearchOpen}
-            clienteId={clienteIdAtual}
-            // SPEC-105: em criação vem de handleProjectSelect
-            // (projectDetails.id); em edição, o projeto já veio carregado
-            // com o orçamento (budgetToEdit.projeto_id) e handleProjectSelect
-            // nunca dispara sozinho.
-            projetoId={projectDetails?.id || budgetToEdit?.projeto_id}
-            empresaId={temItemDevolucao ? resumoEmpresaId : null}
-            empresaNome={temItemDevolucao ? empresaResumo : null}
-            vendaOrigemId={vendaOrigemId}
+            projetoId={projetoIdAtual}
+            empresaId={resumoEmpresaId || null}
+            empresaNome={empresaResumo}
             onConfirm={applyDevolucaoSelection}
-          />
-
-          <VendaOrigemDialog
-            open={isVendaOrigemOpen}
-            onOpenChange={setIsVendaOrigemOpen}
-            onSelect={applyVendaOrigem}
           />
 
           <ProductCreateModal
@@ -4547,7 +4500,7 @@ export default function BudgetFormPage() {
               ) : (
                 <Save className="w-4 h-4 mr-2" />
               )}
-              {isEditing ? 'Salvar Alterações' : 'Criar Orçamento'}
+              {isEditing ? 'Salvar Alterações' : 'Salvar orçamento'}
             </Button>
           </div>
         </form>

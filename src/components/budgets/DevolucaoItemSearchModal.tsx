@@ -16,9 +16,9 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui/table'
-import { Loader2, Search, Check, Undo2, AlertTriangle } from 'lucide-react'
+import { Loader2, Search, Check, Undo2, Lock } from 'lucide-react'
 import { useDebounce } from '@/hooks/use-debounce'
-import { toast } from 'sonner'
+import { semPrefixo } from '@/lib/numeros'
 import {
   getVendasOrigemParaDevolucao,
   SETOR_DEVOLUCAO_LABEL,
@@ -26,8 +26,9 @@ import {
   type VendaOrigemItem,
 } from '@/services/devolucoesService'
 
-// SPEC-178: cor do setor — físico (reserva/em separação/entregue) volta ao
-// estoque; entrega futura é devolução virtual (só reduz a necessidade de compra).
+// SPEC-178: cor do setor — físico (reserva/entregue) volta ao estoque;
+// entrega futura é devolução virtual (só reduz a necessidade de compra);
+// em separação aparece, mas bloqueada (SPEC-182).
 const SETOR_CLASSE: Record<SetorDevolucao, string> = {
   reserva: 'border-emerald-300 bg-emerald-50 text-emerald-800',
   em_separacao: 'border-sky-300 bg-sky-50 text-sky-800',
@@ -46,32 +47,22 @@ export interface DevolucaoSelection {
 }
 
 // SPEC-071: modal de busca de "venda de origem" para orçamentos com
-// natureza_operacao = 'devolucao'. Substitui o ProductSearchModal comum
-// quando o usuário está lançando itens de devolução — a origem de cada
-// linha precisa ser um projeto_itens já aprovado, nunca um produto solto.
+// natureza_operacao = 'devolucao'. SPEC-182: busca dentro de todas as vendas
+// efetivadas do PROJETO feitas pela EMPRESA da devolução; "Em separação"
+// aparece bloqueada (cancelar a separação antes).
 export function DevolucaoItemSearchModal({
   open,
   onOpenChange,
-  clienteId,
   projetoId,
   empresaId,
   empresaNome,
-  vendaOrigemId,
   onConfirm,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  clienteId: string | null | undefined
-  // SPEC-105: casa por projeto atual também, não só por cliente — ver
-  // comentário em devolucoesService.ts.
   projetoId: string | null | undefined
-  // SPEC-178: empresa já fixada pela venda de origem (quando a devolução já
-  // tem itens). Sem itens ainda, a empresa é a da primeira venda escolhida
-  // aqui — a devolução herda empresa/equipe da venda, nunca o contrário.
   empresaId: string | null | undefined
   empresaNome: string | null | undefined
-  // SPEC-181: venda vinculada à devolução — a busca mostra só os itens dela.
-  vendaOrigemId?: string | null
   onConfirm: (itens: DevolucaoSelection[]) => void
 }) {
   const [search, setSearch] = useState('')
@@ -81,6 +72,7 @@ export function DevolucaoItemSearchModal({
   const [selected, setSelected] = useState<Map<string, DevolucaoSelection>>(
     new Map(),
   )
+  const pronto = !!projetoId && !!empresaId
 
   useEffect(() => {
     if (!open) {
@@ -89,44 +81,28 @@ export function DevolucaoItemSearchModal({
       setSelected(new Map())
       return
     }
-    if (!clienteId && !projetoId && !vendaOrigemId) {
+    if (!pronto) {
       setVendas([])
       return
     }
     setLoading(true)
-    getVendasOrigemParaDevolucao(clienteId, projetoId, debounced, vendaOrigemId)
+    getVendasOrigemParaDevolucao(projetoId, empresaId, debounced)
       .then(setVendas)
       .catch(() => setVendas([]))
       .finally(() => setLoading(false))
-  }, [open, clienteId, projetoId, debounced, vendaOrigemId])
-
-  // Empresa de referência para o aviso: a da devolução (se já tem itens) ou a
-  // da primeira linha escolhida aqui.
-  const primeiraSelecionada = selected.values().next().value as DevolucaoSelection | undefined
-  const empresaTravaId = empresaId || primeiraSelecionada?.venda.empresa_id || null
-  const empresaTravaNome = empresaId ? empresaNome : primeiraSelecionada?.venda.empresa_nome
-  const empresaDiferente = (v: VendaOrigemItem) =>
-    !!empresaTravaId && v.empresa_id !== empresaTravaId
+  }, [open, pronto, projetoId, empresaId, debounced])
 
   // SPEC-178: a seleção é a própria quantidade "A Devolver" (última coluna):
   // maior que zero seleciona a linha, zero/vazio tira. Nunca passa do saldo
   // disponível para devolução.
   const setQuantidade = (venda: VendaOrigemItem, quantidade: number) => {
-    // Decisão do usuário (03/10): venda de outra empresa NÃO bloqueia — só
-    // avisa, uma vez, quando a linha é escolhida.
-    if (
-      quantidade > 0 &&
-      !selected.has(venda.chave) &&
-      empresaDiferente(venda)
-    ) {
-      toast.warning('Atenção: venda de outra empresa', {
-        description: `${venda.venda_numero} foi vendida pela ${venda.empresa_nome || 'outra empresa'}, diferente de ${empresaTravaNome || 'a empresa desta devolução'}.`,
-        duration: 8000,
-      })
-    }
+    if (!venda.devolvivel) return
     setSelected((s) => {
       const n = new Map(s)
-      const q = Math.min(venda.quantidade_disponivel, Math.max(0, quantidade || 0))
+      const q = Math.min(
+        venda.quantidade_disponivel,
+        Math.max(0, quantidade || 0),
+      )
       if (q > 0) n.set(venda.chave, { venda, quantidade: q })
       else n.delete(venda.chave)
       return n
@@ -144,7 +120,7 @@ export function DevolucaoItemSearchModal({
         <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle className="flex items-center gap-2">
             <Undo2 className="w-5 h-5" />
-            Buscar Venda de Origem para Devolução
+            Buscar Itens do Projeto para Devolução
           </DialogTitle>
         </DialogHeader>
 
@@ -152,31 +128,28 @@ export function DevolucaoItemSearchModal({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome ou código do produto..."
+              placeholder="Buscar pelo código da peça ou nome do produto..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
-              disabled={!clienteId && !projetoId}
+              disabled={!pronto}
             />
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            {vendaOrigemId
-              ? 'Mostra os itens da venda vinculada com saldo disponível para devolução.'
-              : 'Mostra as vendas efetivadas deste cliente e deste projeto com saldo disponível para devolução.'}{' '}
-            O valor já vem com o desconto dado na venda. Informe a quantidade
-            em "A Devolver" — uma linha por setor (Reserva e Em separação voltam
-            ao estoque na aprovação; Entregue fica "aguardando recebimento" até a
-            Separação Parcial confirmar que a peça chegou; Entrega futura é
-            devolução virtual, só reduz a necessidade de compra). O saldo é do que
-            foi vendido, não do estoque do produto.
+            Mostra as peças de todas as vendas efetivadas deste projeto feitas
+            pela {empresaNome || 'empresa da devolução'}. O valor já vem com o
+            desconto dado na venda. Informe a quantidade em "A Devolver" — uma
+            linha por setor (Reserva e Entregue voltam ao estoque na aprovação;
+            Entrega futura só reduz a necessidade de compra). Peça "Em
+            separação" não pode ser devolvida: cancele a separação antes.
           </p>
         </div>
 
         <div className="flex-1 overflow-auto">
-          {!clienteId && !projetoId ? (
+          {!pronto ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-              Selecione um projeto no orçamento antes de buscar a venda de
-              origem.
+              Escolha o projeto e a empresa da devolução (aba 1) antes de buscar
+              os itens.
             </div>
           ) : loading ? (
             <div className="flex items-center justify-center h-full">
@@ -194,7 +167,9 @@ export function DevolucaoItemSearchModal({
                   <TableHead className="w-40">Referência</TableHead>
                   <TableHead>Descrição</TableHead>
                   <TableHead className="w-32">Nº da Venda</TableHead>
-                  <TableHead className="w-44 text-center">Qtd. da Venda</TableHead>
+                  <TableHead className="w-44 text-center">
+                    Qtd. da Venda
+                  </TableHead>
                   {/* SPEC-178 (R3): uma linha por setor da venda. */}
                   <TableHead className="w-36 text-center">Setor</TableHead>
                   <TableHead className="w-32 text-center">A Devolver</TableHead>
@@ -207,19 +182,24 @@ export function DevolucaoItemSearchModal({
                       colSpan={8}
                       className="text-center text-muted-foreground py-8"
                     >
-                      Nenhuma venda efetivada com saldo disponível para
-                      devolução encontrada para este cliente/projeto.
+                      Nenhuma peça com saldo para devolução nas vendas
+                      efetivadas deste projeto nesta empresa.
                     </TableCell>
                   </TableRow>
                 ) : (
                   vendas.map((v) => {
                     const isSelected = selected.has(v.chave)
-                    const outraEmpresa = empresaDiferente(v)
                     return (
                       <TableRow
                         key={v.chave}
                         data-state={isSelected ? 'selected' : undefined}
-                        className={isSelected ? 'bg-primary/10' : undefined}
+                        className={
+                          isSelected
+                            ? 'bg-primary/10'
+                            : !v.devolvivel
+                              ? 'bg-muted/40 text-muted-foreground'
+                              : undefined
+                        }
                       >
                         <TableCell className="font-mono text-sm">
                           {v.l_fixo || '-'}
@@ -233,33 +213,11 @@ export function DevolucaoItemSearchModal({
                         <TableCell className="text-sm">
                           <div className="font-medium">{v.produto || '-'}</div>
                           <div className="text-xs text-muted-foreground">
-                            {v.desconto_venda_percentual > 0 ? (
-                              <>
-                                {FMT.format(v.preco_unitario)} − desconto da
-                                venda{' '}
-                                {v.desconto_venda_percentual.toLocaleString('pt-BR', {
-                                  maximumFractionDigits: 2,
-                                })}
-                                % ={' '}
-                                <span className="font-semibold text-foreground">
-                                  {FMT.format(v.preco_liquido)} un.
-                                </span>
-                              </>
-                            ) : (
-                              <>{FMT.format(v.preco_liquido)} un.</>
-                            )}
+                            {FMT.format(v.preco_liquido)} un.
                           </div>
-                          {outraEmpresa && (
-                            <div className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700">
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              Venda de outra empresa ({v.empresa_nome || '?'}) —
-                              a devolução está na{' '}
-                              {empresaTravaNome || 'outra empresa'}.
-                            </div>
-                          )}
                         </TableCell>
                         <TableCell className="text-sm font-semibold">
-                          {v.venda_numero}
+                          {semPrefixo(v.venda_numero)}
                           {v.empresa_nome && (
                             <div className="text-xs font-normal text-muted-foreground">
                               {v.empresa_nome}
@@ -269,7 +227,9 @@ export function DevolucaoItemSearchModal({
                         {/* R1/R2: o saldo é do que foi VENDIDO (vendido −
                             já devolvido), não do estoque do produto. */}
                         <TableCell className="text-sm text-center">
-                          <span className="font-semibold">{v.quantidade_venda}</span>
+                          <span className="font-semibold">
+                            {v.quantidade_venda}
+                          </span>
                           <div className="text-xs text-muted-foreground">
                             já devolvido: {v.quantidade_devolvida} · saldo do
                             item: {v.saldo_item}
@@ -286,19 +246,32 @@ export function DevolucaoItemSearchModal({
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Input
-                            type="number"
-                            min="0"
-                            max={v.quantidade_disponivel}
-                            step="1"
-                            placeholder="0"
-                            value={selected.get(v.chave)?.quantidade ?? ''}
-                            onChange={(e) =>
-                              setQuantidade(v, parseFloat(e.target.value) || 0)
-                            }
-                            className="w-24 h-8 mx-auto text-center"
-                            title={`Até ${v.quantidade_disponivel} (saldo de ${SETOR_DEVOLUCAO_LABEL[v.setor]} nesta venda)`}
-                          />
+                          {!v.devolvivel ? (
+                            <div
+                              className="mx-auto flex max-w-[11rem] items-center justify-center gap-1 text-xs font-medium text-sky-800"
+                              title="Cancele a separação antes de devolver"
+                            >
+                              <Lock className="w-3.5 h-3.5 shrink-0" />
+                              Cancele a separação antes
+                            </div>
+                          ) : (
+                            <Input
+                              type="number"
+                              min="0"
+                              max={v.quantidade_disponivel}
+                              step="1"
+                              placeholder="0"
+                              value={selected.get(v.chave)?.quantidade ?? ''}
+                              onChange={(e) =>
+                                setQuantidade(
+                                  v,
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="w-24 h-8 mx-auto text-center"
+                              title={`Até ${v.quantidade_disponivel} (saldo de ${SETOR_DEVOLUCAO_LABEL[v.setor]} nesta venda)`}
+                            />
+                          )}
                         </TableCell>
                       </TableRow>
                     )

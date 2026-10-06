@@ -50,6 +50,7 @@ import {
   getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { cn } from '@/lib/utils'
+import { semPrefixo } from '@/lib/numeros'
 
 const APPROVAL_ROLES = ['admin', 'gerente', 'operador']
 
@@ -278,7 +279,9 @@ export function ClientApprovalTab() {
                       {budget.empresa?.nome || '-'}
                     </TableCell>
                     <TableCell className="font-mono text-sm text-gray-600">
-                      {budget.projeto?.codigo || budget.numero || '-'}
+                      {budget.projeto?.codigo ||
+                        semPrefixo(budget.numero) ||
+                        '-'}
                     </TableCell>
                     <TableCell className="font-medium text-gray-900">
                       {budget.cliente?.razao_social ||
@@ -309,7 +312,12 @@ export function ClientApprovalTab() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-bold text-gray-900">
-                      {fmt(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
+                      {fmt(
+                        getDisplayValorTotal(
+                          budget.valor_total,
+                          budget.natureza_operacao,
+                        ),
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

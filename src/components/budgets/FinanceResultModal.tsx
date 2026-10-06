@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { redirectWithCode } from '@/lib/cross-system-auth'
+import { semPrefixo } from '@/lib/numeros'
 
 // SPEC-153: nota fiscal e boletos pós-aprovação saem da aprovação do
 // orçamento e do Financeiro (Admin Bancária) — agora só a tela de Vendas
@@ -52,11 +53,12 @@ export function FinanceResultModal({
         <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-700 space-y-1">
           <p>
             <span className="font-medium">Orçamento:</span>{' '}
-            {budget.numero || budget.id.split('-')[0].toUpperCase()}
+            {semPrefixo(budget.numero) || budget.id.split('-')[0].toUpperCase()}
           </p>
           {result?.numero_venda && (
             <p>
-              <span className="font-medium">Venda:</span> {result.numero_venda}
+              <span className="font-medium">Venda:</span>{' '}
+              {semPrefixo(result.numero_venda)}
             </p>
           )}
           <p>

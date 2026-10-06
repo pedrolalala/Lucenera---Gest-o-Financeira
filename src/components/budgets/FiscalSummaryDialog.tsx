@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { FileText } from 'lucide-react'
 import { Budget } from '@/stores/useBudgetStore'
 import { cn } from '@/lib/utils'
+import { semPrefixo } from '@/lib/numeros'
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', {
@@ -62,7 +63,7 @@ export function FiscalSummaryDialog({ budget }: { budget: Budget }) {
         <DialogHeader>
           <DialogTitle>
             Resumo Fiscal
-            {budget.numero ? ` (${budget.numero})` : ''}
+            {budget.numero ? ` (${semPrefixo(budget.numero)})` : ''}
             {clienteNome ? ` - ${clienteNome}` : ''}
           </DialogTitle>
           <DialogDescription>

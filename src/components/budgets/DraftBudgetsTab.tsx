@@ -25,6 +25,7 @@ import {
 } from '@/lib/budget-status'
 import { sendInitialBudgetPdfAndEmail } from '@/lib/envio-inicial-cliente'
 import { cn } from '@/lib/utils'
+import { semPrefixo } from '@/lib/numeros'
 
 // SPEC-051 (P-2): qualquer usuário autenticado pode enviar um rascunho ao
 // cliente — sem restrição extra de papel, diferente das demais ações de
@@ -189,7 +190,9 @@ export function DraftBudgetsTab() {
                       {budget.empresa?.nome || '-'}
                     </TableCell>
                     <TableCell className="font-mono text-sm text-gray-600">
-                      {budget.projeto?.codigo || budget.numero || '-'}
+                      {budget.projeto?.codigo ||
+                        semPrefixo(budget.numero) ||
+                        '-'}
                     </TableCell>
                     <TableCell className="font-medium text-gray-900">
                       {budget.cliente?.razao_social ||
@@ -208,7 +211,12 @@ export function DraftBudgetsTab() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-bold text-gray-900">
-                      {fmt(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
+                      {fmt(
+                        getDisplayValorTotal(
+                          budget.valor_total,
+                          budget.natureza_operacao,
+                        ),
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

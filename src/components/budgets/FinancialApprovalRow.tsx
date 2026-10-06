@@ -23,6 +23,7 @@ import {
   getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { cn } from '@/lib/utils'
+import { semPrefixo } from '@/lib/numeros'
 
 interface FinancialApprovalRowProps {
   budget: Budget
@@ -63,7 +64,7 @@ export function FinancialApprovalRow({
         {budget.empresa?.nome || '-'}
       </TableCell>
       <TableCell className="font-mono text-sm text-gray-600">
-        {budget.numero || budget.projeto?.codigo || '-'}
+        {semPrefixo(budget.numero) || budget.projeto?.codigo || '-'}
       </TableCell>
       <TableCell className="font-medium text-gray-900">
         {budget.cliente?.razao_social || budget.cliente?.nome || '-'}
@@ -109,7 +110,9 @@ export function FinancialApprovalRow({
         )}
       </TableCell>
       <TableCell className="text-right font-bold text-gray-900">
-        {fmt(getDisplayValorTotal(budget.valor_total, budget.natureza_operacao))}
+        {fmt(
+          getDisplayValorTotal(budget.valor_total, budget.natureza_operacao),
+        )}
       </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1">

@@ -13,8 +13,13 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { semPrefixo } from '@/lib/numeros'
 
 interface TeamApprovalDeliveryDialogProps {
   open: boolean
@@ -90,7 +95,7 @@ export function TeamApprovalDeliveryDialog({
             Confirmar Previsão de Entrega
           </DialogTitle>
           <DialogDescription>
-            {budgetNumero ? `Orçamento ${budgetNumero}. ` : ''}
+            {budgetNumero ? `Orçamento ${semPrefixo(budgetNumero)}. ` : ''}
             Confirme (ou atualize) a data prevista de entrega ao cliente antes
             de seguir. Ela costuma ficar desatualizada quando o cliente fecha
             meses depois da criação do orçamento.

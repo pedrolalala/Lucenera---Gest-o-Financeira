@@ -20,6 +20,7 @@ import { isValidUUID } from '@/lib/uuid'
 import { sortItemsByCircuitId } from '@/lib/utils'
 import type { ProductCatalogItem } from '@/services/productCatalogService'
 import { toast } from 'sonner'
+import { semPrefixo } from '@/lib/numeros'
 
 interface EditableBudgetItemsTableProps {
   orcamentos: EditableOrcamentoData[]
@@ -245,7 +246,7 @@ export function EditableBudgetItemsTable({
         <div key={orc.id} className="w-full rounded-lg border p-3 space-y-3">
           <div className="flex flex-col sm:flex-row justify-between gap-2">
             <span className="font-medium text-sm text-gray-900">
-              Orçamento {orc.numero || orc.id.slice(0, 8)}
+              Orçamento {semPrefixo(orc.numero) || orc.id.slice(0, 8)}
             </span>
             <div className="flex items-center gap-2">
               <Label className="text-xs text-gray-500 whitespace-nowrap">

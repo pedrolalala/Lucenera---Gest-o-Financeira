@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { supabase } from '@/lib/supabase/client'
+import { semPrefixo } from '@/lib/numeros'
 
 export interface BudgetPriceUpdateItemInput {
   /** Chave estável para aplicar o preço de volta no item certo (ex.: índice
@@ -175,7 +176,7 @@ export function BudgetPriceUpdateDialog({
             Orçamento vencido
           </DialogTitle>
           <DialogDescription>
-            {budgetNumero ? `Orçamento ${budgetNumero}. ` : ''}
+            {budgetNumero ? `Orçamento ${semPrefixo(budgetNumero)}. ` : ''}
             Orçamento vencido em{' '}
             {vencimento
               ? format(vencimento, 'dd/MM/yyyy', { locale: ptBR })
@@ -195,8 +196,8 @@ export function BudgetPriceUpdateDialog({
             <p className="text-gray-700">
               {resumo.comCadastro} de {itens.length} ite
               {itens.length === 1 ? 'm' : 'ns'} com cadastro de produto;{' '}
-              {resumo.alterados} com preço diferente do atual. Os descontos
-              por item são mantidos; itens sem cadastro não mudam.
+              {resumo.alterados} com preço diferente do atual. Os descontos por
+              item são mantidos; itens sem cadastro não mudam.
             </p>
             <div className="rounded-lg border bg-gray-50 p-3 flex items-center justify-between">
               <span className="text-gray-500">Total atual</span>
