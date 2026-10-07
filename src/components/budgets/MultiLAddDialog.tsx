@@ -87,8 +87,8 @@ export function MultiLAddDialog({
             {isManual ? 'Adicionar Item não Cadastrado' : produtoNome}
           </DialogTitle>
           <DialogDescription>
-            Adicione um ou mais L&apos;s para esta peça, cada um com sua
-            própria quantidade.
+            Adicione um ou mais L&apos;s para esta peça, cada um com sua própria
+            quantidade.
           </DialogDescription>
         </DialogHeader>
 

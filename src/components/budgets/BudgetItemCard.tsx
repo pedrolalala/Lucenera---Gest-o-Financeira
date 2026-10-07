@@ -13,7 +13,10 @@ import { Trash2, PackageSearch, PackagePlus } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 import { getDisplayValorTotal } from '@/lib/budget-status'
-import { SETOR_DEVOLUCAO_LABEL, type SetorDevolucao } from '@/services/devolucoesService'
+import {
+  SETOR_DEVOLUCAO_LABEL,
+  type SetorDevolucao,
+} from '@/services/devolucoesService'
 
 // SPEC-032: rótulos por campo só aparecem em telas < lg — em lg: e acima o
 // cabeçalho único (BudgetItemsHeader.tsx) já mostra o nome da coluna uma
@@ -116,9 +119,7 @@ export function BudgetItemCard({
               name={`itens.${index}.custom_id`}
               render={({ field: f }) => (
                 <FormItem>
-                  <FormLabel className={fieldLabelClass}>
-                    Luminária
-                  </FormLabel>
+                  <FormLabel className={fieldLabelClass}>Luminária</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="L01"
@@ -147,9 +148,7 @@ export function BudgetItemCard({
           {/* Código Produto - Read-only, from codigo_produto column */}
           <div className="shrink-0 lg:w-[110px]">
             <FormItem>
-              <FormLabel className={fieldLabelClass}>
-                Código Produto
-              </FormLabel>
+              <FormLabel className={fieldLabelClass}>Código Produto</FormLabel>
               <Input
                 readOnly
                 value={
@@ -194,9 +193,7 @@ export function BudgetItemCard({
                 name={`itens.${index}.produto_id`}
                 render={({ field: f }) => (
                   <FormItem>
-                    <FormLabel className={fieldLabelClass}>
-                      Produto
-                    </FormLabel>
+                    <FormLabel className={fieldLabelClass}>Produto</FormLabel>
                     <FormControl>
                       <ProductSelectButton
                         value={f.value}
@@ -277,9 +274,7 @@ export function BudgetItemCard({
               name={`itens.${index}.quantidade`}
               render={({ field: f }) => (
                 <FormItem>
-                  <FormLabel className={fieldLabelClass}>
-                    Qtd
-                  </FormLabel>
+                  <FormLabel className={fieldLabelClass}>Qtd</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -310,9 +305,7 @@ export function BudgetItemCard({
               name={`itens.${index}.preco_unitario`}
               render={({ field: f }) => (
                 <FormItem>
-                  <FormLabel className={fieldLabelClass}>
-                    Preço Unit.
-                  </FormLabel>
+                  <FormLabel className={fieldLabelClass}>Preço Unit.</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -345,9 +338,7 @@ export function BudgetItemCard({
               name={`itens.${index}.desconto`}
               render={({ field: f }) => (
                 <FormItem>
-                  <FormLabel className={fieldLabelClass}>
-                    Desc %
-                  </FormLabel>
+                  <FormLabel className={fieldLabelClass}>Desc %</FormLabel>
                   <FormControl>
                     <Input
                       type="number"

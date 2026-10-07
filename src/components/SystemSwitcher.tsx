@@ -22,7 +22,10 @@ interface SystemSwitcherProps {
 // useSistemasPermitidos.ts. Componente autocontido: resolve o próprio
 // usuário internamente, então não depende do formato de useAuth de cada
 // sistema (que varia bastante entre os ~10 repositórios hoje).
-export function SystemSwitcher({ currentSlug, showHubLink = true }: SystemSwitcherProps) {
+export function SystemSwitcher({
+  currentSlug,
+  showHubLink = true,
+}: SystemSwitcherProps) {
   const [expanded, setExpanded] = useState(false)
   const { sistemas, userId } = useSistemasPermitidos(currentSlug)
 

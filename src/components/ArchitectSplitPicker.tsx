@@ -19,13 +19,16 @@ interface ArchitectSplitPickerProps {
 }
 
 /** Redistribui os percentuais igualmente entre todas as linhas (soma=100%). */
-export function redistribuirPercentuais(lista: ArquitetoSplit[]): ArquitetoSplit[] {
+export function redistribuirPercentuais(
+  lista: ArquitetoSplit[],
+): ArquitetoSplit[] {
   if (lista.length === 0) return lista
   const base = Math.floor((100 / lista.length) * 100) / 100
   const resto = Math.round((100 - base * lista.length) * 100) / 100
   return lista.map((item, idx) => ({
     ...item,
-    percentual: idx === lista.length - 1 ? Math.round((base + resto) * 100) / 100 : base,
+    percentual:
+      idx === lista.length - 1 ? Math.round((base + resto) * 100) / 100 : base,
   }))
 }
 
@@ -67,12 +70,23 @@ export function ArchitectSplitPicker({
   }
 
   const handleRemove = (arquitetoId: string) => {
-    onChange(redistribuirPercentuais(value.filter((v) => v.arquiteto_id !== arquitetoId)))
+    onChange(
+      redistribuirPercentuais(
+        value.filter((v) => v.arquiteto_id !== arquitetoId),
+      ),
+    )
   }
 
-  const handlePercentualChange = (arquitetoId: string, novoPercentual: number) => {
+  const handlePercentualChange = (
+    arquitetoId: string,
+    novoPercentual: number,
+  ) => {
     onChange(
-      value.map((v) => (v.arquiteto_id === arquitetoId ? { ...v, percentual: novoPercentual } : v)),
+      value.map((v) =>
+        v.arquiteto_id === arquitetoId
+          ? { ...v, percentual: novoPercentual }
+          : v,
+      ),
     )
   }
 
@@ -104,7 +118,10 @@ export function ArchitectSplitPicker({
                     value={item.percentual}
                     disabled={disabled}
                     onChange={(e) =>
-                      handlePercentualChange(item.arquiteto_id, parseFloat(e.target.value) || 0)
+                      handlePercentualChange(
+                        item.arquiteto_id,
+                        parseFloat(e.target.value) || 0,
+                      )
                     }
                     className="h-8 w-24 text-right bg-white"
                   />
@@ -125,8 +142,14 @@ export function ArchitectSplitPicker({
             </div>
           ))}
           {value.length > 1 && (
-            <p className={cn('text-xs font-medium', somaOk ? 'text-emerald-600' : 'text-destructive')}>
-              Soma dos percentuais: {soma.toFixed(2)}%{!somaOk && ' — precisa ser exatamente 100%'}
+            <p
+              className={cn(
+                'text-xs font-medium',
+                somaOk ? 'text-emerald-600' : 'text-destructive',
+              )}
+            >
+              Soma dos percentuais: {soma.toFixed(2)}%
+              {!somaOk && ' — precisa ser exatamente 100%'}
             </p>
           )}
         </div>
@@ -136,7 +159,11 @@ export function ArchitectSplitPicker({
         options={availableOptions}
         value={pendingSelection}
         onChange={handleAdd}
-        placeholder={value.length > 0 ? 'Adicionar outro arquiteto...' : 'Adicionar arquiteto...'}
+        placeholder={
+          value.length > 0
+            ? 'Adicionar outro arquiteto...'
+            : 'Adicionar arquiteto...'
+        }
         searchPlaceholder="Buscar arquiteto..."
         emptyText="Nenhum arquiteto encontrado."
         disabled={disabled}

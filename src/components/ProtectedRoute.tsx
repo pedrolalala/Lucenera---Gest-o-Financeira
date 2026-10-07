@@ -4,7 +4,7 @@ import AccessDenied from '@/pages/AccessDenied'
 import { Loader2 } from 'lucide-react'
 
 export const ProtectedRoute = () => {
-  const { session, loading, role } = useAuth()
+  const { session, loading, role, hasAccess } = useAuth()
 
   if (loading) {
     return (
@@ -21,7 +21,10 @@ export const ProtectedRoute = () => {
     return <Navigate to="/login" replace />
   }
 
-  if (role === 'visitante' || role === 'viewer') {
+  // SPEC-069: hasAccess === false cobre a matriz de papéis nova (ex.:
+  // compras_e_entregas fica SEM ACESSO em orçamentos); role legado
+  // visitante/viewer continua bloqueado como já era.
+  if (role === 'visitante' || role === 'viewer' || hasAccess === false) {
     return <AccessDenied />
   }
 

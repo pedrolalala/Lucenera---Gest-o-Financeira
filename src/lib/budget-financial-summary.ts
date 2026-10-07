@@ -39,7 +39,9 @@ export interface PlanoParcelaItem {
 }
 
 interface BudgetParaResumo {
-  itens?: { quantidade: number; preco_unitario: number; desconto: number }[] | null
+  itens?:
+    | { quantidade: number; preco_unitario: number; desconto: number }[]
+    | null
   desconto_global: number | null
   desconto_tipo?: string | null
   valor_sinal?: number | null
@@ -52,7 +54,9 @@ interface BudgetParaResumo {
   plano_parcelas?: PlanoParcelaItem[] | null
 }
 
-export function calcularResumoFinanceiro(budget: BudgetParaResumo): ResumoFinanceiro {
+export function calcularResumoFinanceiro(
+  budget: BudgetParaResumo,
+): ResumoFinanceiro {
   const valorBruto = (budget.itens || []).reduce((acc, item) => {
     const q = Number(item.quantidade) || 0
     const p = Number(item.preco_unitario) || 0
@@ -71,7 +75,8 @@ export function calcularResumoFinanceiro(budget: BudgetParaResumo): ResumoFinanc
       : valorAposSinal * (Math.min(descontoGlobalPerc, 100) / 100)
 
   const valorLiquido = valorAposSinal - descontoValor
-  const freteValor = budget.frete_tipo === 'com_frete' ? Number(budget.frete_valor) || 0 : 0
+  const freteValor =
+    budget.frete_tipo === 'com_frete' ? Number(budget.frete_valor) || 0 : 0
 
   // Não usa valorLiquido + freteValor pra bater exatamente com o que a RPC
   // de aprovação de fato divide entre as parcelas (orcamentos.valor_total,
@@ -103,7 +108,9 @@ export function calcularResumoFinanceiro(budget: BudgetParaResumo): ResumoFinanc
       }
     })
   } else {
-    const prazos = Array.isArray(budget.prazo_pagamento_dias) ? budget.prazo_pagamento_dias : []
+    const prazos = Array.isArray(budget.prazo_pagamento_dias)
+      ? budget.prazo_pagamento_dias
+      : []
     const qtdParcelas = Math.max(1, prazos.length)
     const valorBase = Math.round((valorTotal / qtdParcelas) * 100) / 100
 

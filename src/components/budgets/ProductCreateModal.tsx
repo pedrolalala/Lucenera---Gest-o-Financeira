@@ -366,9 +366,9 @@ export function ProductCreateModal({
             Adicionar item sem cadastro
           </DialogTitle>
           <DialogDescription>
-            Cadastro rápido, só o essencial para entrar no orçamento. O
-            cadastro completo (fiscal, custo, estoque) é feito depois no
-            Cadastro de Produtos.
+            Cadastro rápido, só o essencial para entrar no orçamento. O cadastro
+            completo (fiscal, custo, estoque) é feito depois no Cadastro de
+            Produtos.
           </DialogDescription>
         </DialogHeader>
 

@@ -412,8 +412,7 @@ export function ProductSearchModal({
 
         const setorMap = new Map<string, string[]>()
         ;(localData || []).forEach((l: any) => {
-          const disponivel =
-            (l.quantidade ?? 0) - (l.quantidade_reservada ?? 0)
+          const disponivel = (l.quantidade ?? 0) - (l.quantidade_reservada ?? 0)
           if (disponivel <= 0) return
           const atual = setorMap.get(l.produto_id) || []
           atual.push(l.local)

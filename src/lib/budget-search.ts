@@ -43,9 +43,7 @@ export function searchBudgetsByContactsAndProjects<T extends BudgetSearchable>(
   // (cliente, projeto, arquiteto ou número), não necessariamente no mesmo
   // campo. Antes era 1 termo contra cada campo isoladamente, sensível a
   // acento, e nunca checava o arquiteto apesar de já estar na interface.
-  const terms = normalize(query.trim())
-    .split(/\s+/)
-    .filter(Boolean)
+  const terms = normalize(query.trim()).split(/\s+/).filter(Boolean)
   if (terms.length === 0) return budgets
 
   return budgets.filter((budget) => {

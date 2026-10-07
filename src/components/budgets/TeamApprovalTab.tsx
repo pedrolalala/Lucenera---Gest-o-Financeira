@@ -358,11 +358,7 @@ export function TeamApprovalTab() {
               </TableHeader>
               <TableBody>
                 {filteredBudgets.map((budget) => (
-                  <TableRow
-                    key={budget.id}
-                    onDoubleClick={() => handleOpenBudget(budget)}
-                    className="cursor-pointer"
-                  >
+                  <TableRow key={budget.id}>
                     <TableCell className="text-sm text-gray-600">
                       {formatDate(budget.data_emissao)}
                     </TableCell>

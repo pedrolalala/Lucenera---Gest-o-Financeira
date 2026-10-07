@@ -199,12 +199,6 @@ export default function ClientApproval() {
               </p>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-500">Valor Total</p>
-              <p className="font-bold text-blue-600 text-lg">
-                {fmt(budget?.valor_total || 0)}
-              </p>
-            </div>
-            <div>
               <p className="text-sm font-medium text-gray-500">
                 Cond. Pagamento
               </p>
@@ -220,6 +214,50 @@ export default function ClientApproval() {
                 {budget?.forma_pagamento || '-'}
               </p>
             </div>
+          </div>
+
+          {/* SPEC-068: valor total, desconto, sinal e saldo restante
+              explícitos no documento enviado ao cliente. */}
+          <div className="rounded-lg bg-gray-50 border p-4 space-y-2">
+            {(budget?.desconto_valor || 0) > 0 && (
+              <div className="flex justify-between items-center text-sm text-gray-600">
+                <span>
+                  Desconto
+                  {budget?.desconto_tipo === 'percentual'
+                    ? ` (${budget?.desconto_global}%)`
+                    : ''}
+                </span>
+                <span className="font-medium text-red-600">
+                  -{fmt(budget?.desconto_valor || 0)}
+                </span>
+              </div>
+            )}
+            {(budget?.valor_sinal || 0) > 0 && (
+              <div className="flex justify-between items-center text-sm text-gray-600">
+                <span>Sinal</span>
+                <span className="font-medium text-amber-700">
+                  -{fmt(budget?.valor_sinal || 0)}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between items-center pt-2 border-t">
+              <span className="text-sm font-medium text-gray-700">
+                Valor Total
+              </span>
+              <span className="font-bold text-blue-600 text-lg">
+                {fmt(budget?.valor_total || 0)}
+              </span>
+            </div>
+            {(budget?.valor_sinal || 0) > 0 && (
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-600">
+                  Saldo restante após o sinal
+                </span>
+                <span className="font-semibold text-gray-900">
+                  {fmt(budget?.saldo_restante_apos_sinal || 0)}
+                </span>
+              </div>
+            )}
           </div>
 
           {showRejectForm && (

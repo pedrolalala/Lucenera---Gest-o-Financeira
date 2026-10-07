@@ -31,7 +31,11 @@ const formatCurrency = (value: number) =>
   }).format(value || 0)
 
 const formatDate = (date: Date) =>
-  date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 
 // Instrução do usuário (2026-09-14): este card é a etapa de aprovação
 // financeira — deve ser SOMENTE LEITURA. Nenhum campo (valor de parcela,
@@ -224,11 +228,11 @@ export function FinancialApprovalDialog({
             <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-300 p-3">
               <ShieldAlert className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-800">
-                <strong>Não é possível aprovar:</strong> {itensSemCadastro.length}{' '}
-                item(ns) deste orçamento não têm produto cadastrado (peça sem
-                código interno). Cadastre o produto e vincule o item antes de
-                aprovar financeiramente — sem isso, viraria uma venda sem
-                controle de estoque.
+                <strong>Não é possível aprovar:</strong>{' '}
+                {itensSemCadastro.length} item(ns) deste orçamento não têm
+                produto cadastrado (peça sem código interno). Cadastre o produto
+                e vincule o item antes de aprovar financeiramente — sem isso,
+                viraria uma venda sem controle de estoque.
               </p>
             </div>
           )}

@@ -61,7 +61,11 @@ const schema = z.object({
   estado: z.string().max(2).optional().nullable().or(z.literal('')),
   cliente_id: z.string().optional().nullable().or(z.literal('')),
   arquiteto_id: z.string().optional().nullable().or(z.literal('')),
-  responsavel_funcionario_id: z.string().optional().nullable().or(z.literal('')),
+  responsavel_funcionario_id: z
+    .string()
+    .optional()
+    .nullable()
+    .or(z.literal('')),
   responsavel_obra_id: z.string().optional().nullable().or(z.literal('')),
   tipo_projeto: z
     .enum(['Residencial', 'Corporativo', 'Exposição Comercial', 'Paisagismo'])
@@ -123,7 +127,9 @@ export function ProjectCreateModal({
           const lista = (data as any[])
             .map((r) => r.contatos)
             .filter(Boolean)
-            .sort((a: any, b: any) => (a.nome || '').localeCompare(b.nome || ''))
+            .sort((a: any, b: any) =>
+              (a.nome || '').localeCompare(b.nome || ''),
+            )
           setEngenheiros(lista)
         })
     }
@@ -186,7 +192,8 @@ export function ProjectCreateModal({
         )
         if (arqError) {
           toast.error(
-            'Projeto criado, mas houve erro ao salvar o arquiteto: ' + arqError.message,
+            'Projeto criado, mas houve erro ao salvar o arquiteto: ' +
+              arqError.message,
           )
         }
       }
@@ -203,294 +210,288 @@ export function ProjectCreateModal({
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Criar Novo Projeto</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            onSubmit={(e) => {
-              e.stopPropagation()
-              form.handleSubmit(onSubmit)(e)
-            }}
-            className="space-y-4"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="codigo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Código *</FormLabel>
-                    <FormControl>
-                      <Input {...field} value={field.value || ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="nome"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome *</FormLabel>
-                    <FormControl>
-                      <Input {...field} value={field.value || ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="tipo_projeto"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Projeto</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || ''}
-                    >
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Criar Novo Projeto</DialogTitle>
+          </DialogHeader>
+          <Form {...form}>
+            <form
+              onSubmit={(e) => {
+                e.stopPropagation()
+                form.handleSubmit(onSubmit)(e)
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="codigo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Código *</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
+                        <Input {...field} value={field.value || ''} />
                       </FormControl>
-                      <SelectContent>
-                        {[
-                          'Residencial',
-                          'Corporativo',
-                          'Exposição Comercial',
-                          'Paisagismo',
-                        ].map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="nivel_estrategico"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nível Estratégico</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || ''}
-                    >
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="nome"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome *</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
+                        <Input {...field} value={field.value || ''} />
                       </FormControl>
-                      <SelectContent>
-                        {['1', '2', '3', '4'].map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status *</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || ''}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {STATUS_OPTS.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="responsavel_funcionario_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Responsável</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        options={funcionarios.map((f) => ({
-                          value: f.id,
-                          label: f.nome,
-                        }))}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="tipo_projeto"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tipo de Projeto</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
                         value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder="Buscar..."
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="cliente_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cliente</FormLabel>
-                    <FormControl>
-                      <div className="flex gap-2 items-center">
-                        <div className="flex-1">
-                          <SearchableSelect
-                            options={localClientes.map((c: any) => ({
-                              value: c.id,
-                              label: c.nome,
-                            }))}
-                            value={field.value || ''}
-                            onChange={field.onChange}
-                            placeholder="Buscar..."
-                          />
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {[
+                            'Residencial',
+                            'Corporativo',
+                            'Exposição Comercial',
+                            'Paisagismo',
+                          ].map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="nivel_estrategico"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nível Estratégico</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {['1', '2', '3', '4'].map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status *</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {STATUS_OPTS.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="responsavel_funcionario_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Responsável</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          options={funcionarios.map((f) => ({
+                            value: f.id,
+                            label: f.nome,
+                          }))}
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          placeholder="Buscar..."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="cliente_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cliente</FormLabel>
+                      <FormControl>
+                        <div className="flex gap-2 items-center">
+                          <div className="flex-1">
+                            <SearchableSelect
+                              options={localClientes.map((c: any) => ({
+                                value: c.id,
+                                label: c.nome,
+                              }))}
+                              value={field.value || ''}
+                              onChange={field.onChange}
+                              placeholder="Buscar..."
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setIsClientModalOpen(true)}
+                            title="Criar Novo Cliente"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          onClick={() => setIsClientModalOpen(true)}
-                          title="Criar Novo Cliente"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="arquiteto_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Arquiteto</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        options={arquitetos.map((a: any) => ({
-                          value: a.id,
-                          label: a.nome,
-                        }))}
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder="Buscar..."
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="cidade"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cidade</FormLabel>
-                    <FormControl>
-                      <Input {...field} value={field.value || ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="estado"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Estado (UF)</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        value={field.value || ''}
-                        maxLength={2}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="responsavel_obra_id"
-                render={({ field }) => (
-                  <FormItem>
-                    {/* SPEC-158 (P2.1): rótulo passa a ser "Engenheiro". A
-                        SPEC-152 já fazia o campo listar só engenheiros e o
-                        placeholder já dizia isso -- faltava o rótulo, que
-                        continuava "Responsável Obra" e confundia com o campo
-                        "Responsável" logo acima. A coluna do banco
-                        (responsavel_obra_id) não muda. */}
-                    <FormLabel>Engenheiro</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        options={engenheiros.map((c) => ({
-                          value: c.id,
-                          label: c.nome,
-                        }))}
-                        value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder="Buscar engenheiro..."
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="flex justify-end pt-4">
-              <Button type="submit" disabled={loading}>
-                {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : null}
-                Criar Projeto
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="arquiteto_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Arquiteto</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          options={arquitetos.map((a: any) => ({
+                            value: a.id,
+                            label: a.nome,
+                          }))}
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          placeholder="Buscar..."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="cidade"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cidade</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="estado"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Estado (UF)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value || ''}
+                          maxLength={2}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="responsavel_obra_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Engenheiro</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          options={engenheiros.map((c) => ({
+                            value: c.id,
+                            label: c.nome,
+                          }))}
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          placeholder="Buscar engenheiro..."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="flex justify-end pt-4">
+                <Button type="submit" disabled={loading}>
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  Criar Projeto
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
-    {/* SPEC-152: "Novo Cliente" empilhado -- mesmo padrão já usado no
+      {/* SPEC-152: "Novo Cliente" empilhado -- mesmo padrão já usado no
         campo Cliente do orçamento (BudgetFormPage.tsx) e no CRM
         (ProjectNew.tsx): abre sem fechar o formulário de "Criar Projeto". */}
-    <ClientCreateModal
-      open={isClientModalOpen}
-      onOpenChange={setIsClientModalOpen}
-      onSuccess={(newClient: any) => {
-        setLocalClientes((prev: any[]) => [
-          newClient,
-          ...prev.filter((c) => c.id !== newClient.id),
-        ])
-        form.setValue('cliente_id', newClient.id, { shouldValidate: true })
-        if (onClienteCriado) onClienteCriado(newClient)
-      }}
-    />
+      <ClientCreateModal
+        open={isClientModalOpen}
+        onOpenChange={setIsClientModalOpen}
+        onSuccess={(newClient: any) => {
+          setLocalClientes((prev: any[]) => [
+            newClient,
+            ...prev.filter((c) => c.id !== newClient.id),
+          ])
+          form.setValue('cliente_id', newClient.id, { shouldValidate: true })
+          if (onClienteCriado) onClienteCriado(newClient)
+        }}
+      />
     </>
   )
 }

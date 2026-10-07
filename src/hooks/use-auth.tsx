@@ -43,10 +43,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<Role | null>(null)
   const [hasAccess, setHasAccess] = useState<boolean | null>(null)
   const [canApproveQuotes, setCanApproveQuotes] = useState(false)
-  const [loading, setLoading] = useState(true)
+  // "loading" é derivado (ver abaixo), não mais um estado ligado/desligado
+  // em vários pontos. Antes, entrando pela Central (?sso_code), o evento de
+  // login chegava antes da inicialização terminar: o papel era buscado,
+  // mas como a inicialização ainda não tinha terminado ninguém desligava o
+  // loading, e depois o mesmo usuário não disparava nova busca — a tela
+  // ficava em "Carregando..." até dar F5.
+  const [initialized, setInitialized] = useState(false)
+  const [roleLoadedFor, setRoleLoadedFor] = useState<string | null>(null)
   const userIdRef = useRef<string | null>(null)
-  // Fica true só depois que a resolução inicial (consumeCodeFromUrl +
-  // getSession) terminou — ver comentário no efeito de auth state abaixo.
   const initializedRef = useRef(false)
 
   // SPEC-069: além do role legado (visitante/viewer já bloqueados no
@@ -108,19 +113,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (error) {
         console.error('Error in getRole:', error)
       } finally {
-        // Só resolve "loading" se a inicialização (troca do sso_code, se
-        // houver) já terminou — ver efeito abaixo.
-        if (mounted && initializedRef.current) {
-          setLoading(false)
-        }
+        if (mounted) setRoleLoadedFor(user.id)
       }
     }
 
     if (user?.id) {
       getRole()
-    } else if (initializedRef.current) {
-      // If no user, ensure loading is false
-      setLoading(false)
     }
 
     return () => {
@@ -148,15 +146,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(nextSession)
       const newUser = nextSession?.user ?? null
 
-      // If we have a new user (different ID), we should show loading until role is fetched
       if (newUser && newUser.id !== userIdRef.current) {
-        if (initializedRef.current) setLoading(true)
         userIdRef.current = newUser.id
       } else if (!newUser) {
         // If logged out, clear everything
         setRole(null)
         setCanApproveQuotes(false)
-        if (initializedRef.current) setLoading(false)
+        setRoleLoadedFor(null)
         userIdRef.current = null
       }
 
@@ -164,25 +160,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     })
 
     // Initial session check
-    consumeCodeFromUrl('orcamentos').finally(() =>
-      supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-        if (!mounted) return
+    consumeCodeFromUrl('orcamentos')
+      .catch(() => false)
+      .finally(() =>
+        supabase.auth
+          .getSession()
+          .then(({ data: { session: initialSession } }) => {
+            if (!mounted) return
 
-        setSession(initialSession)
-        const newUser = initialSession?.user ?? null
-
-        if (newUser) {
-          // Loading is true by default, so we just set the ref
-          userIdRef.current = newUser.id
-        }
-        setUser(newUser)
-        initializedRef.current = true
-        // Sem usuário: nada mais vai resolver loading (o efeito de role só
-        // roda com user?.id truthy), resolve aqui. Com usuário: o efeito de
-        // role acima cuida de resolver loading depois de buscar o papel.
-        if (!newUser) setLoading(false)
-      }),
-    )
+            setSession(initialSession)
+            const newUser = initialSession?.user ?? null
+            if (newUser) userIdRef.current = newUser.id
+            setUser(newUser)
+          })
+          .finally(() => {
+            if (!mounted) return
+            initializedRef.current = true
+            setInitialized(true)
+          }),
+      )
 
     return () => {
       mounted = false
@@ -220,10 +216,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setCanApproveQuotes(false)
       setSession(null)
       setUser(null)
+      setRoleLoadedFor(null)
       userIdRef.current = null
     }
     return { error }
   }
+
+  // Carregando enquanto a resolução inicial (troca do sso_code + sessão)
+  // não terminou, ou enquanto o papel do usuário atual ainda não chegou.
+  const loading = !initialized || (!!user && roleLoadedFor !== user.id)
 
   const value = {
     user,

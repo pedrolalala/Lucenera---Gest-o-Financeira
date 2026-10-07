@@ -11,11 +11,7 @@ import { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { redirectWithCode } from '@/lib/cross-system-auth'
 import { semPrefixo } from '@/lib/numeros'
 
-// SPEC-153: nota fiscal e boletos pós-aprovação saem da aprovação do
-// orçamento e do Financeiro (Admin Bancária) — agora só a tela de Vendas
-// orquestra isso. URL confirmada com o usuário (projectId 59346, "Página de
-// Vendas") e usada na migration 20260917_153.../002_registro_vendas_no_hub.sql.
-const VENDAS_URL = 'https://pagina-de-vendas-9549c.goskip.app'
+const FINANCEIRO_URL = 'https://retorno-bancario-bradesco-5392a.goskip.app'
 
 interface FinanceResultModalProps {
   budget: Budget
@@ -30,13 +26,13 @@ export function FinanceResultModal({
   open,
   onOpenChange,
 }: FinanceResultModalProps) {
-  const openVendasRoute = async (route: string) => {
+  const openFinanceRoute = async (route: string) => {
     try {
-      await redirectWithCode(VENDAS_URL, route, 'vendas', {
+      await redirectWithCode(FINANCEIRO_URL, route, 'financeiro', {
         newTab: true,
       })
     } catch {
-      window.open(`${VENDAS_URL}${route}`, '_blank', 'noopener,noreferrer')
+      window.open(`${FINANCEIRO_URL}${route}`, '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -44,10 +40,10 @@ export function FinanceResultModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Venda registrada</DialogTitle>
+          <DialogTitle>Enviar para Administração Bancária</DialogTitle>
           <DialogDescription>
-            O orçamento foi aprovado e virou venda. Nota fiscal e boletos agora
-            são orquestrados a partir da tela de Vendas.
+            O orçamento foi aprovado com vínculo por orçamento. Abra os boletos
+            pendentes ou a nota fiscal para validação financeira.
           </DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-700 space-y-1">
@@ -55,12 +51,6 @@ export function FinanceResultModal({
             <span className="font-medium">Orçamento:</span>{' '}
             {semPrefixo(budget.numero) || budget.id.split('-')[0].toUpperCase()}
           </p>
-          {result?.numero_venda && (
-            <p>
-              <span className="font-medium">Venda:</span>{' '}
-              {semPrefixo(result.numero_venda)}
-            </p>
-          )}
           <p>
             <span className="font-medium">Itens criados:</span>{' '}
             {result?.projeto_itens_criados ?? 0}
@@ -80,8 +70,18 @@ export function FinanceResultModal({
           )}
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button type="button" onClick={() => void openVendasRoute('/vendas')}>
-            Ver na tela de Vendas
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void openFinanceRoute('/notas-fiscais')}
+          >
+            Abrir Nota Fiscal
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void openFinanceRoute('/boletos')}
+          >
+            Abrir Boletos
           </Button>
         </DialogFooter>
       </DialogContent>

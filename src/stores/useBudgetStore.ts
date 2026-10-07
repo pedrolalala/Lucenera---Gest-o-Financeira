@@ -82,7 +82,9 @@ export interface Budget {
   /** SPEC-152: valor/forma de pagamento/fornecedor de permuta customizados
    * por parcela -- substitui gradualmente prazo_pagamento_dias como fonte
    * de valor (aprovar_orcamento_financeiro usa isto quando presente). */
-  plano_parcelas?: import('@/lib/budget-financial-summary').PlanoParcelaItem[] | null
+  plano_parcelas?:
+    | import('@/lib/budget-financial-summary').PlanoParcelaItem[]
+    | null
   frete_tipo: string | null
   frete_valor: number | null
   desconto_global: number | null
@@ -120,7 +122,10 @@ export interface Budget {
   itens?: BudgetItem[]
   /** SPEC-077: divisão de lucro entre múltiplos arquitetos — mantém
    * arquiteto_id sincronizado (maior percentual) só por compatibilidade. */
-  arquitetos?: { percentual: number; arquiteto: { id: string; nome: string } | null }[]
+  arquitetos?: {
+    percentual: number
+    arquiteto: { id: string; nome: string } | null
+  }[]
 }
 
 export interface ApprovalResult {
@@ -414,14 +419,19 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   },
 
   replaceOrcamentoArquitetos: async (orcamentoId, arquitetos) => {
-    const { error } = await (supabase as any).rpc('replace_orcamento_arquitetos', {
-      p_orcamento_id: orcamentoId,
-      p_arquitetos: arquitetos,
-    })
+    const { error } = await (supabase as any).rpc(
+      'replace_orcamento_arquitetos',
+      {
+        p_orcamento_id: orcamentoId,
+        p_arquitetos: arquitetos,
+      },
+    )
 
     if (error) {
       console.error('Error replacing budget architects:', error)
-      throw new Error(error.message || 'Erro ao salvar arquitetos do orçamento.')
+      throw new Error(
+        error.message || 'Erro ao salvar arquitetos do orçamento.',
+      )
     }
   },
 
@@ -540,7 +550,9 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
 
     if (error) {
       console.error('Error returning budget to draft:', error)
-      throw new Error(error.message || 'Erro ao voltar orçamento para rascunho.')
+      throw new Error(
+        error.message || 'Erro ao voltar orçamento para rascunho.',
+      )
     }
 
     await get().fetchBudgets()
@@ -588,7 +600,9 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
 
     if (error) {
       console.error('Error returning budget to team:', error)
-      throw new Error(error.message || 'Erro ao devolver orçamento para a equipe.')
+      throw new Error(
+        error.message || 'Erro ao devolver orçamento para a equipe.',
+      )
     }
 
     await get().fetchBudgets()

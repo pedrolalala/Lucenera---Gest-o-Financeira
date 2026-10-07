@@ -26,12 +26,6 @@ export interface GerenciamentoItem {
   descricao?: string
   quantidade: number
   preco_unitario: number
-  // SPEC-158 (P1.2): desconto percentual DO ITEM. Já vinha no objeto (o form
-  // de orçamento sempre teve esse campo), mas não era declarado aqui nem
-  // usado no cálculo -- resultado: venda/lucro/lucro% de qualquer item com
-  // desconto próprio apareciam inflados neste painel. Achado pelo Vinícius
-  // na reunião de 22/09/2026 ("o desconto no item não tá sendo considerado
-  // nessa margem, no gerenciamento de orçamento").
   desconto?: number
 }
 
@@ -61,32 +55,27 @@ const fmt = (v: number) =>
     v || 0,
   )
 
-// SPEC-158 (P1.2): preço unitário já com o desconto DO ITEM aplicado --
-// mesma fórmula usada no resto do orçamento
-// (`quantidade * preco_unitario * (1 - desconto/100)`, ver `valorSubtotal`
-// em BudgetFormPage.tsx). O desconto global (simulado) é aplicado DEPOIS,
-// por cima deste valor, na mesma ordem do formulário.
-function precoUnitComDescontoItem(item: GerenciamentoItem): number {
-  const desc = Number(item.desconto) || 0
-  return item.preco_unitario * (1 - desc / 100)
-}
-
 // O painel so entende desconto em %: quando o orcamento tem desconto do
 // tipo "valor" (R$ fixo, ex.: SPEC-068), converte pro percentual
 // equivalente sobre o subtotal bruto antes de simular - sem isso o painel
 // tratava um "R$ 1.000" como "1000%" (ou, na pratica, ignorava o desconto
 // e mostrava lucro inflado, porque o form so aplica esse numero como
 // percentual em algum outro lugar). Achado em producao, 2026-08-18.
+// SPEC-158 (P1.2): o painel só entrava com o desconto GLOBAL simulado,
+// ignorando o desconto POR ITEM (item.desconto) que o resto do sistema já
+// aplica (ver BudgetItemCard.tsx/EditableItemCard.tsx) — inflava a margem
+// exibida pra itens com desconto próprio.
+function precoUnitComDescontoItem(item: GerenciamentoItem): number {
+  const desc = Number(item.desconto) || 0
+  return item.preco_unitario * (1 - desc / 100)
+}
+
 function calcDescontoInicialPct(
   itens: GerenciamentoItem[],
   descontoAtual: number,
   descontoTipo: 'percentual' | 'valor',
 ): number {
   if (descontoTipo === 'percentual') return descontoAtual || 0
-  // SPEC-158 (P1.2): a base tem que ser o subtotal JÁ com o desconto por
-  // item aplicado -- é sobre ele que o desconto global em R$ incide no
-  // formulário (`valorSubtotal` em BudgetFormPage.tsx). Sem isso, converter
-  // "R$ X" em percentual dava um percentual menor que o real.
   const subtotalBruto = itens.reduce(
     (s, i) => s + precoUnitComDescontoItem(i) * i.quantidade,
     0,
@@ -113,9 +102,7 @@ export function GerenciamentoDialog({
   const [custosProdutos, setCustosProdutos] = useState<Record<string, number>>(
     {},
   )
-  const [custosManuais, setCustosManuais] = useState<Record<string, number>>(
-    {},
-  )
+  const [custosManuais, setCustosManuais] = useState<Record<string, number>>({})
   const [descontoSimulado, setDescontoSimulado] = useState(
     calcDescontoInicialPct(itens, descontoAtual, descontoTipo),
   )
@@ -123,7 +110,9 @@ export function GerenciamentoDialog({
 
   useEffect(() => {
     if (!open) return
-    setDescontoSimulado(calcDescontoInicialPct(itens, descontoAtual, descontoTipo))
+    setDescontoSimulado(
+      calcDescontoInicialPct(itens, descontoAtual, descontoTipo),
+    )
     const ids = Array.from(
       new Set(
         itens.map((i) => i.produto_id).filter((id): id is string => !!id),
@@ -152,16 +141,14 @@ export function GerenciamentoDialog({
   const linhas = itens.map((item, idx) => {
     const key = item.uid || String(idx)
     const isAvulso = !item.produto_id
-    // SPEC-158 (P1.2): desconto do ITEM primeiro, desconto global simulado
-    // por cima -- mesma ordem do formulário. Antes só o global entrava aqui.
     const vendaUnitComDesconto =
       precoUnitComDescontoItem(item) * (1 - descontoSimulado / 100)
     // SPEC-106: item avulso sem custo digitado ainda começa em 50% da venda
     // (não 0) — custo 0 fazia lucroPct nascer em 100%, mascarando a leitura
     // do orçamento antes de alguém preencher o custo real.
     const custoUnitario = isAvulso
-      ? custosManuais[key] ?? vendaUnitComDesconto * 0.5
-      : custosProdutos[item.produto_id as string] ?? 0
+      ? (custosManuais[key] ?? vendaUnitComDesconto * 0.5)
+      : (custosProdutos[item.produto_id as string] ?? 0)
     const vendaTotal = vendaUnitComDesconto * item.quantidade
     const custoTotal = custoUnitario * item.quantidade
     const lucroTotal = vendaTotal - custoTotal
@@ -197,8 +184,8 @@ export function GerenciamentoDialog({
           <DialogDescription>
             Custo e lucro por peça — visível só para administradores/gerentes.
             Peças sem produto cadastrado não têm custo salvo; informe
-            manualmente na tabela se quiser incluí-las no cálculo (não é
-            salvo em lugar nenhum, vale só pra essa simulação).
+            manualmente na tabela se quiser incluí-las no cálculo (não é salvo
+            em lugar nenhum, vale só pra essa simulação).
           </DialogDescription>
         </DialogHeader>
 
@@ -264,7 +251,13 @@ export function GerenciamentoDialog({
                       onChange={(e) =>
                         onDescontoItemChange(
                           l.idx,
-                          Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))),
+                          Math.min(
+                            100,
+                            Math.max(
+                              0,
+                              Math.round(Number(e.target.value) || 0),
+                            ),
+                          ),
                         )
                       }
                     />
@@ -272,9 +265,7 @@ export function GerenciamentoDialog({
                     `${l.desconto}%`
                   )}
                 </TableCell>
-                <TableCell className="text-right">
-                  {fmt(l.vendaUnit)}
-                </TableCell>
+                <TableCell className="text-right">{fmt(l.vendaUnit)}</TableCell>
                 <TableCell className="text-right">
                   {l.isAvulso ? (
                     <Input

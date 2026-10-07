@@ -75,56 +75,63 @@ export function useOptions() {
   useEffect(() => {
     async function load() {
       try {
-        const [empRes, cliData, arqRes, funcRes, prodData, revendaRes, projData] =
-          await Promise.all([
-            supabase
-              .from('empresas')
-              .select(
-                'id, nome, codigo, cnpj, razao_social, logradouro, numero, bairro, cidade, estado, cep',
-              )
-              .order('nome'),
-            fetchAllPages<any>((from, to) =>
-              supabase
-                .from('contatos')
-                .select('id, nome, nome_empresa, codigo_legado, razao_social')
-                .eq('tipo', 'cliente')
-                .order('codigo_legado', { ascending: false, nullsFirst: false })
-                .order('nome')
-                .range(from, to),
-            ),
+        const [
+          empRes,
+          cliData,
+          arqRes,
+          funcRes,
+          prodData,
+          revendaRes,
+          projData,
+        ] = await Promise.all([
+          supabase
+            .from('empresas')
+            .select(
+              'id, nome, codigo, cnpj, razao_social, logradouro, numero, bairro, cidade, estado, cep',
+            )
+            .order('nome'),
+          fetchAllPages<any>((from, to) =>
             supabase
               .from('contatos')
-              .select('id, nome')
-              .eq('tipo', 'arquiteto')
-              .limit(10000)
-              .order('nome'),
+              .select('id, nome, nome_empresa, codigo_legado, razao_social')
+              .eq('tipo', 'cliente')
+              .order('codigo_legado', { ascending: false, nullsFirst: false })
+              .order('nome')
+              .range(from, to),
+          ),
+          supabase
+            .from('contatos')
+            .select('id, nome')
+            .eq('tipo', 'arquiteto')
+            .limit(10000)
+            .order('nome'),
+          supabase
+            .from('funcionarios')
+            .select('id, nome')
+            .eq('status', 'Ativo')
+            .limit(10000),
+          fetchAllPages<any>((from, to) =>
             supabase
-              .from('funcionarios')
-              .select('id, nome')
-              .eq('status', 'Ativo')
-              .limit(10000),
-            fetchAllPages<any>((from, to) =>
-              supabase
-                .from('produtos')
-                .select(
-                  'id, nome, preco_venda, sku, referencia, codigo_legado, codigo_produto',
-                )
-                .order('nome')
-                .range(from, to),
-            ),
+              .from('produtos')
+              .select(
+                'id, nome, preco_venda, sku, referencia, codigo_legado, codigo_produto',
+              )
+              .order('nome')
+              .range(from, to),
+          ),
+          supabase
+            .from('revenda_ubiqua')
+            .select('id, referencia, descricao, valor_revenda')
+            .limit(50000)
+            .order('descricao'),
+          fetchAllPages<any>((from, to) =>
             supabase
-              .from('revenda_ubiqua')
-              .select('id, referencia, descricao, valor_revenda')
-              .limit(50000)
-              .order('descricao'),
-            fetchAllPages<any>((from, to) =>
-              supabase
-                .from('projetos')
-                .select('id, codigo, nome, arquivado')
-                .order('codigo', { ascending: false, nullsFirst: false })
-                .range(from, to),
-            ),
-          ])
+              .from('projetos')
+              .select('id, codigo, nome, arquivado')
+              .order('codigo', { ascending: false, nullsFirst: false })
+              .range(from, to),
+          ),
+        ])
 
         if (empRes.data) setEmpresas(empRes.data)
         setClientes(cliData)
