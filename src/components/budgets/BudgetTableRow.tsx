@@ -42,6 +42,7 @@ import {
   Send,
   Undo2,
   MessageSquare,
+  Link2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
@@ -80,6 +81,8 @@ export function BudgetTableRow({
     aprovarManualmenteCliente,
     voltarOrcamentoRascunho,
     desfazerAprovacaoFinanceira,
+    vincularVendaConnect,
+    desvincularVendaConnect,
   } = useBudgetStore()
   const { canApproveQuotes, role } = useAuth()
   const [isApproving, setIsApproving] = useState(false)
@@ -95,6 +98,8 @@ export function BudgetTableRow({
   const [showDesfazerAprovacao, setShowDesfazerAprovacao] = useState(false)
   const [motivoDesfazerAprovacao, setMotivoDesfazerAprovacao] = useState('')
   const [isDesfazendoAprovacao, setIsDesfazendoAprovacao] = useState(false)
+  const [showVincularConnect, setShowVincularConnect] = useState(false)
+  const [isVinculando, setIsVinculando] = useState(false)
 
   const normalizedStatus = normalizeStatus(status)
   const canManageClient =
@@ -102,6 +107,16 @@ export function BudgetTableRow({
   const canApproveFinancial =
     canApproveQuotes || role === 'admin' || role === 'gerente'
   const canDesfazerAprovacao = role === 'admin' || role === 'gerente'
+  // SPEC-195: venda já aprovada na Connect (veio do XML) — vincula sem estoque/financeiro.
+  const isVinculoConnect = !!budget.vinculo_connect
+  const podeVincularConnect =
+    canApproveFinancial &&
+    budget.origem_connect_cod_orcamento != null &&
+    !isVinculoConnect &&
+    (budget as any).natureza_operacao !== 'devolucao' &&
+    !['orcamento_aprovado', 'aprovacao_financeira', 'cancelado'].includes(
+      normalizedStatus,
+    )
 
   const hasSpecialItemsWithoutPrice = budget.itens?.some(
     (i) => Number(i.preco_unitario) === 0,
@@ -203,21 +218,52 @@ export function BudgetTableRow({
     }
   }
 
+  const handleConfirmVincularConnect = async () => {
+    try {
+      setIsVinculando(true)
+      const r = await vincularVendaConnect(budget)
+      toast.success('Venda da Connect vinculada', {
+        description: `Venda ${semPrefixo(r?.numero_venda) || ''}: ${r?.projeto_itens_criados ?? 0} peças ligadas ao projeto, sem reserva de estoque e sem financeiro.`,
+      })
+      setShowVincularConnect(false)
+    } catch (error: any) {
+      toast.error('Falha ao vincular venda da Connect', {
+        description: error?.message,
+      })
+    } finally {
+      setIsVinculando(false)
+    }
+  }
+
   const handleConfirmDesfazerAprovacao = async () => {
     if (!motivoDesfazerAprovacao.trim()) return
     try {
       setIsDesfazendoAprovacao(true)
-      await desfazerAprovacaoFinanceira(budget, motivoDesfazerAprovacao.trim())
-      toast.success('Aprovação financeira desfeita', {
-        description:
-          'Itens de projeto, parcelas e boletos gerados foram removidos.',
-      })
+      if (isVinculoConnect) {
+        await desvincularVendaConnect(budget, motivoDesfazerAprovacao.trim())
+        toast.success('Vínculo com a Connect desfeito', {
+          description:
+            'As peças ligadas ao projeto por esse vínculo foram removidas.',
+        })
+      } else {
+        await desfazerAprovacaoFinanceira(
+          budget,
+          motivoDesfazerAprovacao.trim(),
+        )
+        toast.success('Aprovação financeira desfeita', {
+          description:
+            'Itens de projeto, parcelas e boletos gerados foram removidos.',
+        })
+      }
       setShowDesfazerAprovacao(false)
       setMotivoDesfazerAprovacao('')
     } catch (error: any) {
-      toast.error('Falha ao desfazer aprovação financeira', {
-        description: error?.message,
-      })
+      toast.error(
+        isVinculoConnect
+          ? 'Falha ao desfazer vínculo'
+          : 'Falha ao desfazer aprovação financeira',
+        { description: error?.message },
+      )
     } finally {
       setIsDesfazendoAprovacao(false)
     }
@@ -399,6 +445,17 @@ export function BudgetTableRow({
                 <Undo2 className="h-3 w-3 mr-1" /> Devolução
               </Badge>
             )}
+            {isVinculoConnect && (
+              <Badge
+                variant="outline"
+                className="border-violet-300 bg-violet-50 text-violet-700 w-fit"
+                title="Venda aprovada na Connect, só vinculada aqui: sem reserva de estoque, sem financeiro e sem nota."
+              >
+                <Link2 className="h-3 w-3 mr-1" /> Vínculo Connect
+                {budget.origem_connect_cod_orcamento != null &&
+                  ` nº ${budget.origem_connect_cod_orcamento}`}
+              </Badge>
+            )}
             <Badge
               variant="outline"
               className={cn(getStatusBadgeClass(status))}
@@ -557,13 +614,31 @@ export function BudgetTableRow({
                 </Button>
               )}
 
+            {podeVincularConnect && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                title="Vincular venda da Connect (já aprovada lá)"
+                onClick={() => setShowVincularConnect(true)}
+              >
+                <Link2 className="h-4 w-4" />
+              </Button>
+            )}
+
             {normalizedStatus === 'orcamento_aprovado' &&
-              canDesfazerAprovacao && (
+              (isVinculoConnect
+                ? canApproveFinancial
+                : canDesfazerAprovacao) && (
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
-                  title="Desfazer Aprovação Financeira"
+                  title={
+                    isVinculoConnect
+                      ? 'Desfazer vínculo com a Connect'
+                      : 'Desfazer Aprovação Financeira'
+                  }
                   onClick={() => setShowDesfazerAprovacao(true)}
                 >
                   <Undo2 className="h-4 w-4" />
@@ -716,15 +791,27 @@ export function BudgetTableRow({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-orange-700">
               <Undo2 className="h-5 w-5" />
-              Desfazer Aprovação Financeira
+              {isVinculoConnect
+                ? 'Desfazer vínculo com a Connect'
+                : 'Desfazer Aprovação Financeira'}
             </DialogTitle>
             <DialogDescription>
-              O orçamento volta para "Aprovação Financeira" e os itens de
-              projeto, parcelas e boletos gerados por essa aprovação são
-              apagados, com a reserva de estoque estornada. Só é possível se
-              nada disso já foi usado (boleto pago/remessado, nota fiscal,
-              separação, transferência ou devolução de estoque) — caso contrário
-              a ação será bloqueada. Descreva o motivo.
+              {isVinculoConnect ? (
+                <>
+                  As peças que este vínculo ligou ao projeto são removidas e o
+                  orçamento volta para edição. Nada de estoque nem financeiro é
+                  mexido (o vínculo não gerou nada disso). Descreva o motivo.
+                </>
+              ) : (
+                <>
+                  O orçamento volta para "Aprovação Financeira" e os itens de
+                  projeto, parcelas e boletos gerados por essa aprovação são
+                  apagados, com a reserva de estoque estornada. Só é possível se
+                  nada disso já foi usado (boleto pago/remessado, nota fiscal,
+                  separação, transferência ou devolução de estoque) — caso
+                  contrário a ação será bloqueada. Descreva o motivo.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -765,6 +852,50 @@ export function BudgetTableRow({
                 </>
               ) : (
                 'Confirmar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* SPEC-195: confirmação do vínculo de venda já aprovada na Connect. */}
+      <Dialog open={showVincularConnect} onOpenChange={setShowVincularConnect}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-violet-700">
+              <Link2 className="h-5 w-5" />
+              Vincular venda da Connect
+            </DialogTitle>
+            <DialogDescription>
+              Use só para venda que <strong>já foi aprovada na Connect</strong>{' '}
+              (nº {budget.origem_connect_cod_orcamento}). As peças e o valor
+              ficam ligados ao projeto e a venda recebe o número da Connect.{' '}
+              <strong>Não</strong> reserva estoque, <strong>não</strong> gera
+              parcela nem boleto e <strong>não</strong> aparece para emitir nota
+              — tudo isso continua na Connect. Depois de vinculado, o orçamento
+              não pode ser editado (para corrigir, desfaça o vínculo).
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowVincularConnect(false)}
+              disabled={isVinculando}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmVincularConnect}
+              disabled={isVinculando}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              {isVinculando ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Vinculando...
+                </>
+              ) : (
+                'Vincular'
               )}
             </Button>
           </DialogFooter>

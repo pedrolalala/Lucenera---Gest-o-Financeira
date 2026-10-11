@@ -108,6 +108,8 @@ export interface Budget {
   origem_connect_cod_orcamento?: number | null
   /** SPEC-050: quando este orçamento foi criado a partir de um import Connect. */
   origem_connect_importado_em?: string | null
+  /** SPEC-195: venda já aprovada na Connect, só vinculada aqui (sem estoque/financeiro/nota). */
+  vinculo_connect?: boolean
   created_at: string
   empresa?: { nome: string }
   cliente?: {
@@ -187,6 +189,8 @@ interface BudgetState {
     motivo: string,
   ) => Promise<any>
   desfazerAprovacaoFinanceira: (budget: Budget, motivo: string) => Promise<any>
+  vincularVendaConnect: (budget: Budget) => Promise<any>
+  desvincularVendaConnect: (budget: Budget, motivo: string) => Promise<any>
 }
 
 const useBudgetStore = create<BudgetState>((set, get) => ({
@@ -619,6 +623,40 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
     if (error) {
       console.error('Error undoing financial approval:', error)
       throw new Error(error.message || 'Erro ao desfazer aprovação financeira.')
+    }
+
+    await get().fetchBudgets()
+
+    return data
+  },
+
+  // SPEC-195: venda já aprovada na Connect — liga peças e valor ao projeto sem
+  // reserva de estoque, sem parcela/boleto e sem nota (número da venda = o da Connect).
+  vincularVendaConnect: async (budget) => {
+    const { data, error } = await (supabase as any).rpc(
+      'vincular_orcamento_connect',
+      { p_orcamento_id: budget.id },
+    )
+
+    if (error) {
+      console.error('Error linking Connect sale:', error)
+      throw new Error(error.message || 'Erro ao vincular venda da Connect.')
+    }
+
+    await get().fetchBudgets()
+
+    return data
+  },
+
+  desvincularVendaConnect: async (budget, motivo) => {
+    const { data, error } = await (supabase as any).rpc(
+      'desvincular_orcamento_connect',
+      { p_orcamento_id: budget.id, p_motivo: motivo },
+    )
+
+    if (error) {
+      console.error('Error unlinking Connect sale:', error)
+      throw new Error(error.message || 'Erro ao desfazer vínculo.')
     }
 
     await get().fetchBudgets()
