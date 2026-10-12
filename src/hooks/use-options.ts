@@ -114,7 +114,7 @@ export function useOptions() {
             supabase
               .from('produtos')
               .select(
-                'id, nome, preco_venda, sku, referencia, codigo_legado, codigo_produto',
+                'id, nome, preco_venda, referencia, codigo_produto',
               )
               .order('nome')
               .range(from, to),
@@ -183,8 +183,10 @@ export function useOptions() {
         if (prodData.length || revendaRes?.data) {
           const normalProds = prodData.map((p: any) => ({
             ...p,
+            // SPEC-193 B3: `sku` era cópia da referência e vai sair do banco.
+            sku: p.referencia,
             originalNome: p.nome,
-            nome: `${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
+            nome: `${p.nome}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
             source: 'produtos',
           }))
           const revendaProds = (revendaRes?.data || []).map((r: any) => ({

@@ -758,7 +758,7 @@ export default function BudgetFormPage() {
               itens:orcamento_itens(
                 id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem,
                 descricao, projeto_item_origem_id, setor_origem,
-                produto:produtos(codigo_produto, referencia, nome, sku)
+                produto:produtos(codigo_produto, referencia, nome)
               )
             `,
             )
@@ -802,7 +802,7 @@ export default function BudgetFormPage() {
                 codigo_produto: i.produto.codigo_produto ?? null,
                 referencia: i.produto.referencia ?? null,
                 nome: i.produto.nome ?? null,
-                sku: i.produto.sku ?? null,
+                sku: i.produto.referencia ?? null,
               })
             }
           })
@@ -1914,7 +1914,7 @@ export default function BudgetFormPage() {
             codigo_produto: product.codigo_produto ?? null,
             referencia: product.referencia ?? null,
             nome: product.nome ?? null,
-            sku: product.sku ?? null,
+            sku: product.referencia ?? null,
           })
         }
       })
@@ -1927,7 +1927,7 @@ export default function BudgetFormPage() {
   ): ProductSearchItem => ({
     id: product.id,
     nome: product.nome,
-    sku: product.sku || null,
+    sku: product.referencia || null,
     referencia: product.referencia || null,
     codigo_produto: product.codigo_produto ?? null,
     preco_venda: product.preco_venda ?? null,
@@ -2293,7 +2293,7 @@ export default function BudgetFormPage() {
           const found = produtos.find(
             (p) =>
               (i.custom_id &&
-                (p.sku === i.custom_id || p.referencia === i.custom_id)) ||
+                p.referencia === i.custom_id) ||
               (i.descricao &&
                 (p.originalNome || p.nome)
                   .toLowerCase()
@@ -2526,7 +2526,7 @@ export default function BudgetFormPage() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, setor_origem, produto:produtos(codigo_produto, referencia, nome, sku)',
+          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, setor_origem, produto:produtos(codigo_produto, referencia, nome)',
         )
         .eq('orcamento_id', budgetToEdit.id)
       if (!error && data) {

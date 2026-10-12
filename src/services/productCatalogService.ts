@@ -15,6 +15,7 @@ export interface ProductCatalogPayload {
   // SPEC-053: codigo_produto não é mais enviado pelo payload — é gerado pelo
   // DEFAULT nextval(produtos_codigo_produto_seq) da coluna produtos.codigo_produto
   // (migration 20260727_068), e a RPC criar_produto_orcamento parou de exigi-lo.
+  // SPEC-193 B3: `sku` não é mais enviado (era cópia da referência e vai sair do banco).
   sku?: string | null
   nome: string
   marca_id: string
@@ -139,34 +140,6 @@ export async function createFornecedorQuick(
     .single()
   if (error) throw error
   return data as SupplierOption
-}
-
-export async function getNextProductSku(prefix = 'teste') {
-  try {
-    const { data, error } = await (supabase.rpc as any)('get_next_sku', {
-      prefix,
-    })
-    if (!error && data) return data as string
-  } catch (error) {
-    console.warn('RPC get_next_sku failed, using local fallback', error)
-  }
-
-  const { data, error } = await supabase
-    .from('produtos')
-    .select('sku')
-    .like('sku', `${prefix}%`)
-
-  if (error) throw error
-
-  let maxNum = 0
-  for (const row of data || []) {
-    if (!row.sku) continue
-    const numStr = row.sku.substring(prefix.length).replace(/[^0-9]/g, '')
-    const num = parseInt(numStr, 10)
-    if (!isNaN(num) && num > maxNum) maxNum = num
-  }
-
-  return `${prefix}${String(maxNum + 1).padStart(2, '0')}`
 }
 
 export async function createProductFromBudget(

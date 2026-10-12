@@ -153,7 +153,7 @@ export function FinancialApprovalTab() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, produto:produtos(codigo_produto, referencia, nome, sku)',
+          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, produto:produtos(codigo_produto, referencia, nome)',
         )
         .eq('orcamento_id', budget.id)
       if (!error && data) {

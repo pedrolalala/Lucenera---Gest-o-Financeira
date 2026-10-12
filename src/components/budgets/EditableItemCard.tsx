@@ -115,7 +115,7 @@ export function EditableItemCard({
             </Label>
             <Input
               readOnly
-              value={info?.sku || ''}
+              value={info?.referencia || info?.sku || ''}
               placeholder="-"
               className="bg-muted/40 font-mono text-xs text-gray-600 h-9 cursor-default truncate"
             />

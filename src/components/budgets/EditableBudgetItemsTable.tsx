@@ -131,7 +131,7 @@ export function EditableBudgetItemsTable({
                     codigo_produto: newProduct.codigo_produto,
                     referencia: newProduct.referencia,
                     nome: newProduct.nome,
-                    sku: newProduct.sku,
+                    sku: newProduct.referencia,
                   },
                   preco_unitario:
                     newProduct.valor_venda ||

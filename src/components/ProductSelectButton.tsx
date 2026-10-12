@@ -55,7 +55,7 @@ export function ProductSelectButton({
         // pra mostrar.
         const { data, error } = await supabase
           .from('produtos')
-          .select('nome, sku, referencia, codigo_produto, marca:marcas(nome)')
+          .select('nome, referencia, codigo_produto, marca:marcas(nome)')
           .eq('id', value)
           .single()
 
@@ -68,7 +68,7 @@ export function ProductSelectButton({
             ? data.marca[0]?.nome
             : (data.marca as { nome: string } | null)?.nome
           setLabel(
-            `${data.codigo_produto ? `[${data.codigo_produto}] ` : ''}${data.nome}${data.sku ? ` | SKU: ${data.sku}` : ''}${data.referencia ? ` | Ref: ${data.referencia}` : ''}${marcaNome ? ` | Marca: ${marcaNome}` : ''}`,
+            `${data.codigo_produto ? `[${data.codigo_produto}] ` : ''}${data.nome}${data.referencia ? ` | Ref: ${data.referencia}` : ''}${marcaNome ? ` | Marca: ${marcaNome}` : ''}`,
           )
         }
       }

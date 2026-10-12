@@ -106,7 +106,7 @@ const FMT = new Intl.NumberFormat('pt-BR', {
 })
 const COLS: { key: SortKey; label: string }[] = [
   { key: 'codigo_produto', label: 'Código' },
-  { key: 'sku', label: 'SKU / Referência' },
+  { key: 'sku', label: 'Referência' },
   { key: 'nome', label: 'Nome' },
   { key: 'marca_nome', label: 'Marca' },
   { key: 'categoria_nome', label: 'Categoria' },
@@ -332,7 +332,7 @@ export function ProductSearchModal({
         (p: any) => ({
           id: p.id,
           nome: p.nome,
-          sku: p.sku,
+          sku: p.referencia,
           referencia: p.referencia,
           codigo_produto: p.codigo_produto,
           preco_venda: p.preco_venda,
@@ -541,7 +541,7 @@ export function ProductSearchModal({
     const created: ProductSearchItem = {
       id: product.id,
       nome: product.nome,
-      sku: product.sku || null,
+      sku: product.referencia || null,
       referencia: product.referencia || null,
       codigo_produto: product.codigo_produto ?? null,
       preco_venda: product.preco_venda ?? null,
@@ -754,15 +754,8 @@ export function ProductSearchModal({
                           </TableCell>
                           <TableCell>
                             <div className="font-bold text-base text-gray-900">
-                              {p.sku || p.referencia || '-'}
+                              {p.referencia || '-'}
                             </div>
-                            {p.referencia &&
-                              p.sku &&
-                              p.referencia !== p.sku && (
-                                <div className="text-xs text-muted-foreground">
-                                  Ref: {p.referencia}
-                                </div>
-                              )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-start gap-2">

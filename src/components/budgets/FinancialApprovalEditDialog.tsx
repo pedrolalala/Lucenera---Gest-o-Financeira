@@ -109,7 +109,7 @@ export function FinancialApprovalEditDialog({
                     codigo_produto: i.produto.codigo_produto ?? null,
                     referencia: i.produto.referencia ?? null,
                     nome: i.produto.nome ?? null,
-                    sku: i.produto.sku ?? null,
+                    sku: i.produto.referencia ?? null,
                   }
                 : null,
             })),

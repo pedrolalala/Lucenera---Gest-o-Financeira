@@ -44,7 +44,6 @@ export interface BudgetItem {
   produto?: {
     nome: string
     codigo_produto?: number
-    codigo_legado?: number
     referencia?: string
     unidade?: string
     /** SPEC-193 C2: a peça tem ST (sem expor o %). */
@@ -223,7 +222,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         item_pai_id,
         projeto_item_origem_id,
         setor_origem,
-        produto:produtos(nome, codigo_produto, codigo_legado, referencia, unidade, tem_st)
+        produto:produtos(nome, codigo_produto, referencia, unidade, tem_st)
       )
     `)
 

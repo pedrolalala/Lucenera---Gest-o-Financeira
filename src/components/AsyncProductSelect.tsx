@@ -73,12 +73,12 @@ export function AsyncProductSelect({
       } else {
         const { data } = await supabase
           .from('produtos')
-          .select('id, nome, sku, referencia, codigo_produto')
+          .select('id, nome, referencia, codigo_produto')
           .eq('id', value)
           .single()
         if (data) {
           setSelectedLabel(
-            `${data.codigo_produto ? `[${data.codigo_produto}] ` : ''}${data.nome}${data.sku ? ` | SKU: ${data.sku}` : ''}${data.referencia ? ` | Ref: ${data.referencia}` : ''}`,
+            `${data.codigo_produto ? `[${data.codigo_produto}] ` : ''}${data.nome}${data.referencia ? ` | Ref: ${data.referencia}` : ''}`,
           )
         }
       }
@@ -101,7 +101,7 @@ export function AsyncProductSelect({
 
         let prodQuery = supabase
           .from('produtos')
-          .select('id, nome, preco_venda, sku, referencia, codigo_produto')
+          .select('id, nome, preco_venda, referencia, codigo_produto')
 
         let revQuery = supabase
           .from('revenda_ubiqua')
@@ -112,14 +112,14 @@ export function AsyncProductSelect({
           const isNumeric = !isNaN(numericTerm) && /^\d+$/.test(cleanTerm)
           if (isNumeric) {
             prodQuery = prodQuery.or(
-              `nome.ilike.%${cleanTerm}%,sku.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%,codigo_produto.eq.${numericTerm}`,
+              `nome.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%,codigo_produto.eq.${numericTerm}`,
             )
             revQuery = revQuery.or(
               `descricao.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%,cod_produto.eq.${numericTerm}`,
             )
           } else {
             prodQuery = prodQuery.or(
-              `nome.ilike.%${cleanTerm}%,sku.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
+              `nome.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
             )
             revQuery = revQuery.or(
               `descricao.ilike.%${cleanTerm}%,referencia.ilike.%${cleanTerm}%`,
@@ -135,9 +135,9 @@ export function AsyncProductSelect({
         if (pRes.data)
           prods = pRes.data.map((p) => ({
             id: p.id,
-            nome: `${p.codigo_produto ? `[${p.codigo_produto}] ` : ''}${p.nome}${p.sku ? ` | SKU: ${p.sku}` : ''}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
+            nome: `${p.codigo_produto ? `[${p.codigo_produto}] ` : ''}${p.nome}${p.referencia ? ` | Ref: ${p.referencia}` : ''}`,
             preco_venda: p.preco_venda,
-            sku: p.sku,
+            sku: p.referencia,
             referencia: p.referencia,
             codigo_produto: p.codigo_produto,
             source: 'produtos' as const,
@@ -241,7 +241,7 @@ export function AsyncProductSelect({
           <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
           <input
             className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder="Buscar por nome, sku, ref (ex: STL21836/30)"
+            placeholder="Buscar por nome, código ou ref (ex: STL21836/30)"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />

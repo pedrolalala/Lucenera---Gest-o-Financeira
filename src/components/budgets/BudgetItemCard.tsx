@@ -162,7 +162,7 @@ export function BudgetItemCard({
             </FormItem>
           </div>
 
-          {/* Código de Referência - Read-only, from sku column */}
+          {/* Código de Referência - somente leitura (SPEC-193 B3: vem de produtos.referencia) */}
           <div className="shrink-0 lg:w-[130px]">
             <FormItem>
               <FormLabel className={fieldLabelClass}>
@@ -170,7 +170,7 @@ export function BudgetItemCard({
               </FormLabel>
               <Input
                 readOnly
-                value={productInfo?.sku || ''}
+                value={productInfo?.referencia || productInfo?.sku || ''}
                 placeholder="-"
                 className="bg-muted/40 font-mono text-xs text-gray-600 h-9 cursor-default truncate"
               />
