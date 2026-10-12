@@ -383,8 +383,10 @@ export function ProductSearchModal({
       if (prodMapped.length > 0) {
         const produtoIds = prodMapped.map((p) => p.id)
         const [{ data: stockData }, { data: localData }] = await Promise.all([
-          supabase
-            .from('vw_detalhe_produto_estoque')
+          // SPEC-193 C4: mesma consulta de estoque do Cadastro (vw_consulta_estoque) —
+          // Disponível = Geral − maior(reserva + separação do sistema, reserva da
+          // Connect), o mesmo número da Consulta de Produtos.
+          (supabase.from as any)('vw_consulta_estoque')
             .select('produto_id, estoque_total, estoque_disponivel')
             .in('produto_id', produtoIds),
           // SPEC-113: setor físico (estoque_itens.local) onde a peça tem
