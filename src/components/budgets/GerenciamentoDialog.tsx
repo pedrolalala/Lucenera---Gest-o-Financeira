@@ -103,6 +103,8 @@ export function GerenciamentoDialog({
     {},
   )
   const [custosManuais, setCustosManuais] = useState<Record<string, number>>({})
+  // SPEC-193 C2: true quando o banco não devolveu custo (usuário fora da Administração).
+  const [semAcessoCusto, setSemAcessoCusto] = useState(false)
   const [descontoSimulado, setDescontoSimulado] = useState(
     calcDescontoInicialPct(itens, descontoAtual, descontoTipo),
   )
@@ -120,11 +122,13 @@ export function GerenciamentoDialog({
     )
     if (ids.length === 0) {
       setCustosProdutos({})
+      setSemAcessoCusto(false)
       return
     }
     setLoading(true)
     supabase
-      .from('produtos')
+      // SPEC-193 C2: custo só para a Administração — vw_produtos_custo volta vazia para os demais.
+      .from('vw_produtos_custo' as any)
       .select('id, preco_custo')
       .in('id', ids)
       .then(({ data }) => {
@@ -133,6 +137,7 @@ export function GerenciamentoDialog({
           map[p.id] = p.preco_custo || 0
         })
         setCustosProdutos(map)
+        setSemAcessoCusto((data || []).length === 0)
         setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,6 +193,13 @@ export function GerenciamentoDialog({
             em lugar nenhum, vale só pra essa simulação).
           </DialogDescription>
         </DialogHeader>
+
+        {semAcessoCusto && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            O custo das peças é visível só para a Administração (Lana, Débora,
+            Carol, Matheus e Vinícius). Sem ele, o custo aparece zerado.
+          </p>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm font-medium">Desconto simulado (%)</label>

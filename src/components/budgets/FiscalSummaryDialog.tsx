@@ -36,7 +36,8 @@ export function FiscalSummaryDialog({ budget }: { budget: Budget }) {
 
   const cfopItems =
     budget.itens?.map((item) => {
-      const isST = (item.produto?.porc_st || 0) > 0
+      // SPEC-193 C2: o % de ST é só da Administração; aqui basta saber se a peça tem ST.
+      const isST = item.produto?.tem_st === true
       const cfop = isST ? '5405' : '5102'
       const sub =
         item.quantidade * item.preco_unitario * (1 - (item.desconto || 0) / 100)
