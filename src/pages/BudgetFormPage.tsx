@@ -18,6 +18,7 @@ import {
   Undo2,
   Package,
   Headset,
+  Link2,
   MoreVertical,
   LineChart,
 } from 'lucide-react'
@@ -466,7 +467,13 @@ export default function BudgetFormPage() {
   const [searchParams] = useSearchParams()
   const isEditing = Boolean(id)
 
-  const { addBudget, updateBudget, budgets, fetchBudgets } = useBudgetStore()
+  const {
+    addBudget,
+    updateBudget,
+    budgets,
+    fetchBudgets,
+    vincularVendaConnect,
+  } = useBudgetStore()
   const [isBatchImportOpen, setIsBatchImportOpen] = useState(false)
   // SPEC-177: aba ativa do formulário (cliente/arquiteto, produtos, pagamento).
   const [abaAtiva, setAbaAtiva] = useState<
@@ -479,6 +486,9 @@ export default function BudgetFormPage() {
     cod_orcamento: number
     importado_em: string
   } | null>(null)
+  // SPEC-197: "Vínculo Connect" no Tipo de Operação. Por dentro é venda
+  // (natureza_operacao = 'venda'); ao salvar chama vincular_orcamento_connect.
+  const [modoVinculoConnect, setModoVinculoConnect] = useState(false)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
@@ -925,6 +935,22 @@ export default function BudgetFormPage() {
   }, [id, isEditing, budgets, form, navigate])
 
   const naturezaOperacao = form.watch('natureza_operacao') || 'venda'
+
+  // SPEC-197: o número da Connect só vem do XML (decisão do usuário 13/10) —
+  // do import feito agora ou do que já está gravado no orçamento.
+  const codConnectVinculo =
+    connectOrigin?.cod_orcamento ??
+    budgetToEdit?.origem_connect_cod_orcamento ??
+    null
+  // Ao editar, só um orçamento de venda ainda não vinculado nem aprovado.
+  const podeEscolherVinculoConnect =
+    !isEditing ||
+    (!!budgetToEdit &&
+      (budgetToEdit.natureza_operacao || 'venda') === 'venda' &&
+      !budgetToEdit.vinculo_connect &&
+      !['Orçamento Aprovado', 'Aprovação Financeira', 'cancelado'].includes(
+        budgetToEdit.status,
+      ))
 
   // Fix (achado 2026-08-13, teste ao vivo): quando SUBGRUPOS_POR_TIPO tem
   // só 1 opção pro tipo atual, o campo "Tipo" renderiza um Input
@@ -1514,7 +1540,39 @@ export default function BudgetFormPage() {
     })
   }
 
+  // SPEC-197: o orçamento já foi salvo; se o vínculo recusar (falta projeto,
+  // peça sem cadastro, nº repetido...), ele fica como rascunho e o motivo
+  // aparece — dá para corrigir e salvar de novo, ou usar o ícone da lista.
+  async function vincularDepoisDeSalvar(orcamentoId: string) {
+    try {
+      const r = await vincularVendaConnect({ id: orcamentoId } as Budget)
+      toast.success(
+        `Vinculado à Connect nº ${codConnectVinculo}${r?.numero_venda ? ` — ${r.numero_venda}` : ''}.`,
+        {
+          description: `${r?.projeto_itens_criados ?? 0} peça(s) ligadas ao projeto, sem estoque e sem financeiro.`,
+          duration: 6000,
+        },
+      )
+    } catch (e: any) {
+      toast.error(
+        'Orçamento salvo, mas o vínculo com a Connect não foi feito.',
+        {
+          description: e?.message,
+          duration: 10000,
+        },
+      )
+    }
+  }
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    // SPEC-197: vínculo só com o número da Connect vindo do XML.
+    if (modoVinculoConnect && codConnectVinculo == null) {
+      toast.error(
+        'Importe o XML da Connect antes de salvar o vínculo (botão "Importar XML (Connect)" no fim do formulário).',
+      )
+      return
+    }
+
     // SPEC-174 N2a: toda gravação feita enquanto o orçamento está em
     // "Aprovação da Equipe" exige confirmar a Previsão de Entrega antes de
     // seguir -- intercepta aqui (fora do try/setIsSubmitting) e só continua
@@ -1838,52 +1896,60 @@ export default function BudgetFormPage() {
           arquitetosPayload,
           editandoAprovado,
         )
-        toast.success(
-          itensMudaram
-            ? 'Orçamento atualizado — ciclo de aprovação do cliente reiniciado.'
-            : 'Orçamento atualizado com sucesso',
-        )
+        if (modoVinculoConnect) {
+          await vincularDepoisDeSalvar(budgetToEdit.id)
+        } else {
+          toast.success(
+            itensMudaram
+              ? 'Orçamento atualizado — ciclo de aprovação do cliente reiniciado.'
+              : 'Orçamento atualizado com sucesso',
+          )
+        }
       } else {
         const newBudgetId = await addBudget(
           payload,
           values.itens,
           arquitetosPayload,
         )
-        try {
-          const { data: newBudget } = await supabase
-            .from('orcamentos')
-            .select('token_aprovacao_cliente, status')
-            .eq('id', newBudgetId)
-            .single()
-          if (
-            newBudget?.status === 'enviado_cliente' &&
-            newBudget?.token_aprovacao_cliente
-          ) {
-            const link = buildClientApprovalLink(
-              newBudgetId,
-              newBudget.token_aprovacao_cliente,
-            )
-            await navigator.clipboard.writeText(link)
-            toast.success(
-              'Orçamento criado e enviado para aprovação do cliente! Link copiado.',
-              {
-                description: link,
-                duration: 8000,
-              },
-            )
-          } else {
-            // SPEC-051: a criação sempre nasce em rascunho agora — a
-            // promoção automática para enviado_cliente foi removida do
-            // banco. O envio ao cliente passa a ser sempre uma ação
-            // separada, feita na aba "Rascunho".
-            toast.info('Orçamento salvo como rascunho.', {
-              description:
-                'Vá até a aba "Rascunho" e use o botão "Enviar para o Cliente" quando estiver pronto para avançar o fluxo de aprovação.',
-              duration: 6000,
-            })
+        if (modoVinculoConnect) {
+          await vincularDepoisDeSalvar(newBudgetId)
+        } else {
+          try {
+            const { data: newBudget } = await supabase
+              .from('orcamentos')
+              .select('token_aprovacao_cliente, status')
+              .eq('id', newBudgetId)
+              .single()
+            if (
+              newBudget?.status === 'enviado_cliente' &&
+              newBudget?.token_aprovacao_cliente
+            ) {
+              const link = buildClientApprovalLink(
+                newBudgetId,
+                newBudget.token_aprovacao_cliente,
+              )
+              await navigator.clipboard.writeText(link)
+              toast.success(
+                'Orçamento criado e enviado para aprovação do cliente! Link copiado.',
+                {
+                  description: link,
+                  duration: 8000,
+                },
+              )
+            } else {
+              // SPEC-051: a criação sempre nasce em rascunho agora — a
+              // promoção automática para enviado_cliente foi removida do
+              // banco. O envio ao cliente passa a ser sempre uma ação
+              // separada, feita na aba "Rascunho".
+              toast.info('Orçamento salvo como rascunho.', {
+                description:
+                  'Vá até a aba "Rascunho" e use o botão "Enviar para o Cliente" quando estiver pronto para avançar o fluxo de aprovação.',
+                duration: 6000,
+              })
+            }
+          } catch {
+            toast.success('Orçamento criado com sucesso!')
           }
-        } catch {
-          toast.success('Orçamento criado com sucesso!')
         }
       }
 
@@ -2836,7 +2902,11 @@ export default function BudgetFormPage() {
             ) : (
               <Save className="w-4 h-4 mr-2" />
             )}
-            {isEditing ? 'Salvar Alterações' : 'Salvar orçamento'}
+            {modoVinculoConnect
+              ? 'Salvar e vincular'
+              : isEditing
+                ? 'Salvar Alterações'
+                : 'Salvar orçamento'}
           </Button>
         </div>
       </div>
@@ -2901,11 +2971,17 @@ export default function BudgetFormPage() {
                           type="button"
                           size="sm"
                           variant={
-                            naturezaOperacao === 'venda' ? 'default' : 'ghost'
+                            naturezaOperacao === 'venda' && !modoVinculoConnect
+                              ? 'default'
+                              : 'ghost'
                           }
-                          disabled={isEditing}
+                          disabled={
+                            isEditing &&
+                            !(modoVinculoConnect && podeEscolherVinculoConnect)
+                          }
                           className="rounded-sm"
                           onClick={() => {
+                            setModoVinculoConnect(false)
                             form.setValue('natureza_operacao', 'venda', {
                               shouldDirty: true,
                             })
@@ -2930,6 +3006,7 @@ export default function BudgetFormPage() {
                           disabled={isEditing}
                           className="rounded-sm"
                           onClick={() => {
+                            setModoVinculoConnect(false)
                             form.setValue('natureza_operacao', 'devolucao', {
                               shouldDirty: true,
                             })
@@ -2958,6 +3035,7 @@ export default function BudgetFormPage() {
                           disabled={isEditing}
                           className="rounded-sm"
                           onClick={() => {
+                            setModoVinculoConnect(false)
                             form.setValue('natureza_operacao', 'outros', {
                               shouldDirty: true,
                             })
@@ -2980,6 +3058,7 @@ export default function BudgetFormPage() {
                           disabled={isEditing}
                           className="rounded-sm"
                           onClick={() => {
+                            setModoVinculoConnect(false)
                             form.setValue('natureza_operacao', 'sac', {
                               shouldDirty: true,
                             })
@@ -2993,10 +3072,38 @@ export default function BudgetFormPage() {
                         >
                           <Headset className="w-3.5 h-3.5 mr-1.5" /> SAC
                         </Button>
+                        {/* SPEC-197: venda já aprovada na Connect — por dentro
+                        é venda; o vínculo é feito ao salvar. */}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={modoVinculoConnect ? 'default' : 'ghost'}
+                          disabled={isEditing && !podeEscolherVinculoConnect}
+                          className="rounded-sm"
+                          onClick={() => {
+                            setModoVinculoConnect(true)
+                            form.setValue('natureza_operacao', 'venda', {
+                              shouldDirty: true,
+                            })
+                            const opcoes = SUBGRUPOS_POR_TIPO.venda
+                            form.setValue(
+                              'subgrupo',
+                              opcoes.length === 1 ? opcoes[0] : '',
+                              { shouldValidate: true },
+                            )
+                          }}
+                        >
+                          <Link2 className="w-3.5 h-3.5 mr-1.5" /> Vínculo
+                          Connect
+                        </Button>
                       </div>
-                      {isEditing ? (
+                      {isEditing && !podeEscolherVinculoConnect ? (
                         <span className="text-xs text-muted-foreground">
                           Não pode ser alterado após a criação do orçamento.
+                        </span>
+                      ) : isEditing && !modoVinculoConnect ? (
+                        <span className="text-xs text-muted-foreground">
+                          Só é possível trocar para "Vínculo Connect".
                         </span>
                       ) : naturezaOperacao === 'devolucao' ? (
                         <span className="text-xs text-muted-foreground">
@@ -3006,6 +3113,24 @@ export default function BudgetFormPage() {
                         </span>
                       ) : null}
                     </div>
+
+                    {modoVinculoConnect && (
+                      <div className="rounded-md border border-purple-200 bg-purple-50 p-3 text-sm text-purple-900 dark:border-purple-900 dark:bg-purple-950/40 dark:text-purple-100">
+                        <p className="font-medium">
+                          Venda já aprovada na Connect
+                        </p>
+                        <p className="mt-1">
+                          Liga as peças e o valor ao projeto e a venda recebe o
+                          número da Connect. Não reserva estoque, não gera
+                          parcela/boleto e não vai para emissão de nota.
+                        </p>
+                        <p className="mt-2 font-medium">
+                          {codConnectVinculo != null
+                            ? `Orçamento da Connect nº ${codConnectVinculo} (do XML).`
+                            : 'Importe o XML da Connect pelo botão "Importar XML (Connect)" no fim do formulário antes de salvar.'}
+                        </p>
+                      </div>
+                    )}
 
                     <FormField
                       control={form.control}
@@ -4500,7 +4625,11 @@ export default function BudgetFormPage() {
               ) : (
                 <Save className="w-4 h-4 mr-2" />
               )}
-              {isEditing ? 'Salvar Alterações' : 'Salvar orçamento'}
+              {modoVinculoConnect
+                ? 'Salvar e vincular'
+                : isEditing
+                  ? 'Salvar Alterações'
+                  : 'Salvar orçamento'}
             </Button>
           </div>
         </form>

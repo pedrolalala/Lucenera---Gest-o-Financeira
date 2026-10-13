@@ -109,8 +109,10 @@ export function BudgetTableRow({
   const canDesfazerAprovacao = role === 'admin' || role === 'gerente'
   // SPEC-195: venda já aprovada na Connect (veio do XML) — vincula sem estoque/financeiro.
   const isVinculoConnect = !!budget.vinculo_connect
+  // SPEC-197: todos que fazem orçamento podem vincular (o banco confere a
+  // permissão de criar/aprovar no Hub); desfazer continua só para quem aprova.
   const podeVincularConnect =
-    canApproveFinancial &&
+    role !== 'viewer' &&
     budget.origem_connect_cod_orcamento != null &&
     !isVinculoConnect &&
     (budget as any).natureza_operacao !== 'devolucao' &&
