@@ -25,15 +25,10 @@ const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
   { label: 'Rascunho', value: 'rascunho' },
   { label: 'Enviado para o Cliente', value: 'enviado_cliente' },
-  { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
   { label: 'Aprovado pelo Cliente', value: 'aprovado' },
   { label: 'Revisão da Equipe (Pós-Visita)', value: 'Aprovação da Equipe' },
   { label: 'Revisão Financeira Pendente', value: 'Aprovação Financeira' },
   { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
-  { label: 'Finalizado', value: 'Finalizado' },
-  { label: 'Obra Finalizada', value: 'Obra Finalizada' },
-  { label: 'Recusado', value: 'recusado' },
-  { label: 'Expirado', value: 'expirado' },
 ]
 
 export default function Budgets() {
@@ -43,6 +38,12 @@ export default function Budgets() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [abaAtiva, setAbaAtiva] = useState('todos')
+
+  const handleStatusChange = (value: string) => {
+    setStatusFilter(value)
+    setAbaAtiva('todos')
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -88,7 +89,35 @@ export default function Budgets() {
         </Button>
       </div>
 
-      <Tabs defaultValue="todos" className="w-full">
+      {/* Pedido do usuário (14/10): busca + dropdown de status sempre
+          visíveis no topo (antes ficavam só dentro da aba Todos). Escolher um
+          status leva para a aba Todos, onde a tabela é filtrada. */}
+      <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder="Pesquisar por projeto, código ou cliente..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <Select value={statusFilter} onValueChange={handleStatusChange}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="todos">Todos</TabsTrigger>
           <TabsTrigger value="rascunho">Rascunho</TabsTrigger>
@@ -106,32 +135,7 @@ export default function Budgets() {
           <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="todos" className="flex flex-col gap-4 mt-0">
-          <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                placeholder="Pesquisar por projeto, código ou cliente..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
+        <TabsContent value="todos" className="mt-0">
           {showLoading ? (
             <div className="flex justify-center py-10">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

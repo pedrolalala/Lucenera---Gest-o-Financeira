@@ -60,6 +60,26 @@ import {
 } from '@/lib/budget-status'
 import { sendInitialBudgetPdfAndEmail } from '@/lib/envio-inicial-cliente'
 import { semPrefixo } from '@/lib/numeros'
+import { FORMA_PAGAMENTO_LABELS } from '@/lib/budget-financial-summary'
+
+// Rótulos das colunas Tipo e Perfil (mesmos textos do formulário).
+const NATUREZA_LABELS: Record<string, string> = {
+  venda: 'Venda',
+  devolucao: 'Devolução',
+  outros: 'Outros',
+  sac: 'SAC',
+}
+const PERFIL_LABELS: Record<string, string> = {
+  ribeirao: 'Ribeirão',
+  sao_paulo: 'São Paulo',
+}
+
+// Coluna `date` ('yyyy-MM-dd'): formata a string direto, sem passar por Date
+// (evita mostrar o dia anterior por fuso) -- mesmo cuidado da SPEC-167.
+function formatDataColuna(valor: string | null | undefined) {
+  if (!valor) return '-'
+  return valor.slice(0, 10).split('-').reverse().join('/')
+}
 
 interface BudgetTableRowProps {
   budgetId: string
@@ -399,8 +419,14 @@ export function BudgetTableRow({
             ? budget.previsao_entrega.split('-').reverse().join('/')
             : '-'}
         </TableCell>
+        <TableCell className="text-gray-600">
+          {formatDataColuna(budget.validade)}
+        </TableCell>
         <TableCell className="font-semibold text-gray-900">
           {budget.empresa?.nome || '-'}
+        </TableCell>
+        <TableCell className="font-mono text-sm text-gray-600 whitespace-nowrap">
+          {semPrefixo(budget.numero) || '-'}
         </TableCell>
         <TableCell className="font-mono text-sm text-gray-600">
           <div className="flex items-center gap-1.5">
@@ -422,6 +448,20 @@ export function BudgetTableRow({
             </div>
           )}
         </TableCell>
+        <TableCell
+          className="text-gray-700 text-sm max-w-[200px] truncate"
+          title={budget.projeto?.nome || undefined}
+        >
+          {budget.projeto?.nome || '-'}
+        </TableCell>
+        <TableCell className="text-gray-600 text-sm whitespace-nowrap">
+          {budget.subgrupo ||
+            NATUREZA_LABELS[budget.natureza_operacao || ''] ||
+            '-'}
+        </TableCell>
+        <TableCell className="text-gray-600 text-sm whitespace-nowrap">
+          {PERFIL_LABELS[(budget as any).perfil || ''] || '-'}
+        </TableCell>
         <TableCell className="text-gray-700">
           {budget.cliente?.razao_social || budget.cliente?.nome || '-'}
         </TableCell>
@@ -436,6 +476,51 @@ export function BudgetTableRow({
               budget.arquiteto?.nome ||
               '-'
             : budget.arquiteto?.nome || '-'}
+        </TableCell>
+        {/* Pedido do usuário (14/10): demais campos do orçamento na lista. */}
+        <TableCell className="text-gray-700 text-sm whitespace-nowrap">
+          {budget.vendedor?.nome || '-'}
+        </TableCell>
+        {/* SPEC-200: equipe do orçamento e quem digitou (login). */}
+        <TableCell className="text-gray-700 text-sm whitespace-nowrap">
+          {budget.equipe?.equipes || '-'}
+        </TableCell>
+        <TableCell className="text-gray-700 text-sm whitespace-nowrap">
+          {budget.digitador?.nome || '-'}
+        </TableCell>
+        <TableCell className="text-gray-600 text-sm whitespace-nowrap">
+          {FORMA_PAGAMENTO_LABELS[budget.forma_pagamento || ''] ||
+            budget.forma_pagamento ||
+            '-'}
+          {budget.condicoes_pagamento && (
+            <div className="text-xs text-gray-400">
+              {budget.condicoes_pagamento}
+            </div>
+          )}
+        </TableCell>
+        <TableCell className="text-gray-600 text-sm whitespace-nowrap">
+          {budget.prazo_entrega_dias != null
+            ? `${budget.prazo_entrega_dias} dias`
+            : '-'}
+        </TableCell>
+        <TableCell className="text-gray-600 text-sm whitespace-nowrap">
+          {budget.frete_tipo === 'com_frete'
+            ? fmt(Number(budget.frete_valor) || 0)
+            : budget.frete_tipo === 'sem_frete'
+              ? 'Sem frete'
+              : '-'}
+        </TableCell>
+        <TableCell className="text-right text-gray-600 text-sm whitespace-nowrap">
+          {Number(budget.desconto_global) > 0
+            ? (budget as any).desconto_tipo === 'valor'
+              ? fmt(Number(budget.desconto_global))
+              : `${Number(budget.desconto_global).toLocaleString('pt-BR')}%`
+            : '-'}
+        </TableCell>
+        <TableCell className="text-right text-gray-600 text-sm whitespace-nowrap">
+          {Number((budget as any).valor_sinal) > 0
+            ? fmt(Number((budget as any).valor_sinal))
+            : '-'}
         </TableCell>
         <TableCell>
           <div className="flex flex-col gap-1">
