@@ -1,5 +1,5 @@
 export const CLIENT_APPROVAL_BASE_URL =
-  'https://gestaofinanceiralucenera.goskip.app/aprovacao'
+  'https://financeiro-lucenera.pages.dev/aprovacao'
 
 export const FINANCIAL_APPROVAL_STATUS = 'Aprovação Financeira'
 

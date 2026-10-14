@@ -31,7 +31,7 @@ export function Header() {
 
       <Button variant="ghost" size="icon" asChild className="rounded-full">
         <a
-          href="https://central-lucenera-dashboard-1c9ba.goskip.app/dashboard"
+          href="https://central-lucenera.pages.dev/dashboard"
           title="Voltar para a Central Lucenera"
         >
           <Building2 className="w-5 h-5 text-gray-600" />

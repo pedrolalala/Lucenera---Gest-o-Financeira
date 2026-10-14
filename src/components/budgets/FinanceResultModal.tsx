@@ -11,7 +11,7 @@ import { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { redirectWithCode } from '@/lib/cross-system-auth'
 import { semPrefixo } from '@/lib/numeros'
 
-const FINANCEIRO_URL = 'https://retorno-bancario-bradesco-5392a.goskip.app'
+const FINANCEIRO_URL = 'https://adm-bancaria-lucenera.pages.dev'
 
 interface FinanceResultModalProps {
   budget: Budget
