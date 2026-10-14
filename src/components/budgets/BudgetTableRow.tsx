@@ -84,7 +84,7 @@ export function BudgetTableRow({
     vincularVendaConnect,
     desvincularVendaConnect,
   } = useBudgetStore()
-  const { canApproveQuotes, role } = useAuth()
+  const { canApproveQuotes, canApproveClient, role } = useAuth()
   const [isApproving, setIsApproving] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
   const [showFinanceModal, setShowFinanceModal] = useState(false)
@@ -103,7 +103,8 @@ export function BudgetTableRow({
 
   const normalizedStatus = normalizeStatus(status)
   const canManageClient =
-    role !== null && ['admin', 'gerente', 'operador'].includes(role)
+    canApproveClient ||
+    (role !== null && ['admin', 'gerente', 'operador'].includes(role))
   const canApproveFinancial =
     canApproveQuotes || role === 'admin' || role === 'gerente'
   const canDesfazerAprovacao = role === 'admin' || role === 'gerente'
@@ -184,7 +185,7 @@ export function BudgetTableRow({
     if (!canManageClient) {
       toast.error('Permissão negada', {
         description:
-          'Apenas admin, gerente ou operador podem aprovar manualmente.',
+          'Peça ao administrador o acesso "Aprovação do Cliente" no Hub.',
       })
       return
     }
@@ -401,6 +402,14 @@ export function BudgetTableRow({
         </TableCell>
         <TableCell className="font-semibold text-gray-900">
           {budget.empresa?.nome || '-'}
+          {/* SPEC-200: equipe do orçamento e quem digitou (login). */}
+          {(budget.equipe?.equipes || budget.digitador?.nome) && (
+            <div className="text-xs font-normal text-gray-500 mt-0.5">
+              {budget.equipe?.equipes && `Equipe ${budget.equipe.equipes}`}
+              {budget.equipe?.equipes && budget.digitador?.nome && ' · '}
+              {budget.digitador?.nome && `Digitado por ${budget.digitador.nome}`}
+            </div>
+          )}
         </TableCell>
         <TableCell className="font-mono text-sm text-gray-600">
           <div className="flex items-center gap-1.5">

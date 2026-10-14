@@ -66,6 +66,11 @@ export interface Budget {
   /** SPEC-158 (P2.3): quem de fato criou o orçamento (capturado do login na
    * criação, nunca editável) -- distinto do vendedor (SPEC-140, lista fixa). */
   digitado_por?: string | null
+  /** SPEC-200: equipe do orçamento (obrigatória; define quem da Equipe de
+   * Projetos enxerga o orçamento -- filtro feito no banco, RLS). */
+  equipe_id?: string | null
+  equipe?: { equipes: string } | null
+  digitador?: { nome: string | null } | null
   status: string
   /** SPEC-071: 'venda' (padrão), 'devolucao', 'outros' ou 'sac' — trava na criação. */
   natureza_operacao?: string
@@ -209,6 +214,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       arquiteto:contatos!orcamentos_arquiteto_id_fkey(nome),
       arquitetos:orcamento_arquitetos(percentual, arquiteto:arquiteto_id(id, nome)),
       projeto:projetos(nome, codigo),
+      equipe:equipes_projetos(equipes),
+      digitador:usuarios!orcamentos_digitado_por_fkey(nome),
       itens:orcamento_itens(
         id,
         produto_id,
