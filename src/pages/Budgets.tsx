@@ -21,19 +21,18 @@ import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
 
+// Pedido do usuário (14/10): o filtro mostra só os status do fluxo, sem
+// "Recusado pelo Cliente" (o orçamento recusado continua na aba Aprovação
+// do cliente e no filtro "Todos"). Finalizado, Obra Finalizada, Recusado e
+// Expirado saíram: nenhum orçamento usa esses status.
 const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
   { label: 'Rascunho', value: 'rascunho' },
   { label: 'Enviado para o Cliente', value: 'enviado_cliente' },
-  { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
   { label: 'Aprovado pelo Cliente', value: 'aprovado' },
   { label: 'Revisão da Equipe (Pós-Visita)', value: 'Aprovação da Equipe' },
   { label: 'Revisão Financeira Pendente', value: 'Aprovação Financeira' },
   { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
-  { label: 'Finalizado', value: 'Finalizado' },
-  { label: 'Obra Finalizada', value: 'Obra Finalizada' },
-  { label: 'Recusado', value: 'recusado' },
-  { label: 'Expirado', value: 'expirado' },
 ]
 
 export default function Budgets() {

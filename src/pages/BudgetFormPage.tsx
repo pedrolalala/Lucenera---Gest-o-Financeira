@@ -2202,7 +2202,70 @@ export default function BudgetFormPage() {
   // SPEC-080: o modal "Buscar Produtos" já coleta os L's de cada peça
   // selecionada (painel inline, ver ProductSearchModal.tsx) — não precisa
   // mais de um diálogo separado depois de fechar a busca.
-  const handleProductSearchConfirm = (selections: ProductSelectionEntry[]) => {
+  // Achado 14/10 (ORC-0002/0003): peça da Ubiqua (revenda_ubiqua) escolhida
+  // na busca entrava sem produto_id -- sem código e referência na linha e
+  // tratada como item sem cadastro, embora 77 das 87 peças existam em
+  // produtos. Liga ao cadastro pelo código do produto (ou pela referência)
+  // e mantém o valor da linha escolhida. Sem correspondência, segue como
+  // item sem cadastro.
+  const vincularUbiquaAoCadastro = async (
+    products: ProductSearchItem[],
+  ): Promise<ProductSearchItem[]> => {
+    const ubiqua = products.filter((p) => p.source === 'revenda_ubiqua')
+    if (ubiqua.length === 0) return products
+    const codigos = ubiqua
+      .map((p) => p.codigo_produto)
+      .filter((c): c is number => c != null)
+    const referencias = ubiqua
+      .map((p) => p.referencia?.trim())
+      .filter((r): r is string => Boolean(r))
+    const filtros = [
+      codigos.length > 0 ? `codigo_produto.in.(${codigos.join(',')})` : null,
+      referencias.length > 0
+        ? `referencia.in.(${referencias.map((r) => `"${r.replace(/"/g, '')}"`).join(',')})`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(',')
+    if (!filtros) return products
+
+    const { data, error } = await supabase
+      .from('produtos')
+      .select('id, nome, referencia, codigo_produto')
+      .eq('ativo', true)
+      .or(filtros)
+    if (error || !data) return products
+
+    return products.map((p) => {
+      if (p.source !== 'revenda_ubiqua') return p
+      const cadastro =
+        data.find(
+          (c) => p.codigo_produto != null && c.codigo_produto === p.codigo_produto,
+        ) ||
+        data.find((c) => p.referencia && c.referencia === p.referencia?.trim())
+      if (!cadastro) return p
+      return {
+        ...p,
+        id: cadastro.id,
+        nome: cadastro.nome,
+        referencia: cadastro.referencia,
+        sku: cadastro.referencia,
+        codigo_produto: cadastro.codigo_produto,
+        source: 'produtos' as const,
+      }
+    })
+  }
+
+  const handleProductSearchConfirm = async (
+    selecoesOriginais: ProductSelectionEntry[],
+  ) => {
+    const produtosVinculados = await vincularUbiquaAoCadastro(
+      selecoesOriginais.map((s) => s.product),
+    )
+    const selections = selecoesOriginais.map((s, idx) => ({
+      ...s,
+      product: produtosVinculados[idx],
+    }))
     // Trocar o produto de UMA linha existente (ícone de busca na linha)
     // continua sendo 1:1 direto — mantém o L/quantidade que já estavam
     // naquela linha, só troca o produto.
