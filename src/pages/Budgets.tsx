@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { BudgetsTable } from '@/components/budgets/BudgetsTable'
 import { ApprovalsTab } from '@/components/budgets/ApprovalsTab'
+import { FinancialApprovalTab } from '@/components/budgets/FinancialApprovalTab'
 import { TeamApprovalTab } from '@/components/budgets/TeamApprovalTab'
 import { ClientApprovalTab } from '@/components/budgets/ClientApprovalTab'
 import { DraftBudgetsTab } from '@/components/budgets/DraftBudgetsTab'
@@ -20,18 +21,19 @@ import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
 
-// Pedido do usuário (14/10): o filtro mostra só os status do fluxo, sem
-// "Recusado pelo Cliente" (o orçamento recusado continua na aba Aprovação
-// do cliente e no filtro "Todos"). Finalizado, Obra Finalizada, Recusado e
-// Expirado saíram: nenhum orçamento usa esses status.
 const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
   { label: 'Rascunho', value: 'rascunho' },
   { label: 'Enviado para o Cliente', value: 'enviado_cliente' },
+  { label: 'Recusado pelo Cliente', value: 'recusado_cliente' },
   { label: 'Aprovado pelo Cliente', value: 'aprovado' },
   { label: 'Revisão da Equipe (Pós-Visita)', value: 'Aprovação da Equipe' },
   { label: 'Revisão Financeira Pendente', value: 'Aprovação Financeira' },
   { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
+  { label: 'Finalizado', value: 'Finalizado' },
+  { label: 'Obra Finalizada', value: 'Obra Finalizada' },
+  { label: 'Recusado', value: 'recusado' },
+  { label: 'Expirado', value: 'expirado' },
 ]
 
 export default function Budgets() {
@@ -86,9 +88,6 @@ export default function Budgets() {
         </Button>
       </div>
 
-      {/* Especificação do usuário (14/10): exatamente 5 abas. A aprovação
-          financeira segue pela aba Todos (filtro "Revisão Financeira
-          Pendente" + botão da linha); FinancialApprovalTab ficou sem uso. */}
       <Tabs defaultValue="todos" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="todos">Todos</TabsTrigger>
@@ -99,6 +98,11 @@ export default function Budgets() {
           <TabsTrigger value="aprovacao-equipe">
             Aprovação da Equipe
           </TabsTrigger>
+          {(role === 'admin' || role === 'gerente') && (
+            <TabsTrigger value="aprovacao-financeira">
+              Revisão Financeira Pendente
+            </TabsTrigger>
+          )}
           <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
         </TabsList>
 
@@ -149,6 +153,11 @@ export default function Budgets() {
           <TeamApprovalTab />
         </TabsContent>
 
+        {(role === 'admin' || role === 'gerente') && (
+          <TabsContent value="aprovacao-financeira" className="mt-0">
+            <FinancialApprovalTab />
+          </TabsContent>
+        )}
         <TabsContent value="aprovados" className="mt-0">
           <ApprovalsTab />
         </TabsContent>

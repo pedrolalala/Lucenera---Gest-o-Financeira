@@ -185,7 +185,6 @@ const CAMPOS_ABA_CLIENTE = new Set([
   'cliente_id',
   'arquitetos',
   'vendedor_id',
-  'equipe_id',
   'data_emissao',
   'validade',
   'previsao_entrega',
@@ -311,8 +310,6 @@ const formSchema = z
         'A soma dos percentuais dos arquitetos deve ser 100%',
       ),
     vendedor_id: z.string().optional().nullable(),
-    // SPEC-200: todo orçamento tem equipe (o banco também recusa sem).
-    equipe_id: z.string().min(1, 'Informe a equipe do orçamento'),
     status: z.string().default('rascunho'),
     data_emissao: z.date({ required_error: 'Data de emissão é obrigatória' }),
     // SPEC-068: desconto aceita percentual OU valor fechado em R$, conforme
@@ -538,14 +535,6 @@ export default function BudgetFormPage() {
   const [assignedVendedorNome, setAssignedVendedorNome] = useState<
     string | null
   >(null)
-  // SPEC-200: equipes (Marina, Thairine, Thais...) e quem digitou.
-  const [equipes, setEquipes] = useState<{ id: string; equipes: string }[]>(
-    [],
-  )
-  const [digitadoPorNome, setDigitadoPorNome] = useState<string | null>(null)
-  // true quando a equipe veio do orçamento salvo ou foi escolhida à mão --
-  // aí o preenchimento automático não mexe mais.
-  const equipeEscolhidaRef = useRef(false)
   const [projectDetails, setProjectDetails] = useState<{
     // SPEC-105: id real do projeto selecionado, usado pra buscar venda de
     // origem na devolução também por projeto (não só por cliente) — ver
@@ -650,7 +639,6 @@ export default function BudgetFormPage() {
       cliente_id: '',
       arquitetos: [],
       vendedor_id: 'none',
-      equipe_id: '',
       status: 'rascunho',
       data_emissao: new Date(),
       desconto_global: 0,
@@ -812,16 +800,6 @@ export default function BudgetFormPage() {
               .single()
             if (vData) setAssignedVendedorNome(vData.nome)
           }
-          // SPEC-200: quem digitou (gravado pelo banco com o login).
-          if ((budget as any).equipe_id) equipeEscolhidaRef.current = true
-          if (budget.digitado_por) {
-            const { data: dData } = await supabase
-              .from('usuarios')
-              .select('nome')
-              .eq('id', budget.digitado_por)
-              .maybeSingle()
-            setDigitadoPorNome(dData?.nome || null)
-          }
 
           let projetoCodigo = ''
           if (budget.projeto_id) {
@@ -873,7 +851,6 @@ export default function BudgetFormPage() {
             cliente_id: budget.cliente_id || '',
             arquitetos: orcamentoArquitetosParaPicker(budget),
             vendedor_id: budget.vendedor_id || 'none',
-            equipe_id: (budget as any).equipe_id || '',
             status: budget.status || 'enviado_cliente',
             desconto_global: budget.desconto_global ?? 0,
             desconto_tipo: (budget as any).desconto_tipo || 'percentual',
@@ -1886,7 +1863,6 @@ export default function BudgetFormPage() {
         projeto_id: projeto.id,
         cliente_id: values.cliente_id,
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
-        equipe_id: values.equipe_id,
         status: isEditing ? values.status : 'rascunho',
         desconto_global: values.desconto_global ?? 0,
         desconto_tipo: values.desconto_tipo || 'percentual',
@@ -2202,72 +2178,7 @@ export default function BudgetFormPage() {
   // SPEC-080: o modal "Buscar Produtos" já coleta os L's de cada peça
   // selecionada (painel inline, ver ProductSearchModal.tsx) — não precisa
   // mais de um diálogo separado depois de fechar a busca.
-  // Achado 14/10 (ORC-0002/0003): peça da Ubiqua (revenda_ubiqua) escolhida
-  // na busca entrava sem produto_id -- sem código e referência na linha e
-  // tratada como item sem cadastro, embora 77 das 87 peças existam em
-  // produtos. Liga ao cadastro pelo código do produto (ou pela referência)
-  // e puxa do cadastro código, referência e valor (especificação do
-  // usuário, 14/10). Sem correspondência, segue como item sem cadastro.
-  const vincularUbiquaAoCadastro = async (
-    products: ProductSearchItem[],
-  ): Promise<ProductSearchItem[]> => {
-    const ubiqua = products.filter((p) => p.source === 'revenda_ubiqua')
-    if (ubiqua.length === 0) return products
-    const codigos = ubiqua
-      .map((p) => p.codigo_produto)
-      .filter((c): c is number => c != null)
-    const referencias = ubiqua
-      .map((p) => p.referencia?.trim())
-      .filter((r): r is string => Boolean(r))
-    const filtros = [
-      codigos.length > 0 ? `codigo_produto.in.(${codigos.join(',')})` : null,
-      referencias.length > 0
-        ? `referencia.in.(${referencias.map((r) => `"${r.replace(/"/g, '')}"`).join(',')})`
-        : null,
-    ]
-      .filter(Boolean)
-      .join(',')
-    if (!filtros) return products
-
-    const { data, error } = await supabase
-      .from('produtos')
-      .select('id, nome, referencia, codigo_produto, preco_venda, valor_venda')
-      .eq('ativo', true)
-      .or(filtros)
-    if (error || !data) return products
-
-    return products.map((p) => {
-      if (p.source !== 'revenda_ubiqua') return p
-      const cadastro =
-        data.find(
-          (c) => p.codigo_produto != null && c.codigo_produto === p.codigo_produto,
-        ) ||
-        data.find((c) => p.referencia && c.referencia === p.referencia?.trim())
-      if (!cadastro) return p
-      return {
-        ...p,
-        id: cadastro.id,
-        nome: cadastro.nome,
-        referencia: cadastro.referencia,
-        sku: cadastro.referencia,
-        codigo_produto: cadastro.codigo_produto,
-        preco_venda: cadastro.preco_venda ?? p.preco_venda,
-        valor_venda: cadastro.valor_venda ?? p.valor_venda,
-        source: 'produtos' as const,
-      }
-    })
-  }
-
-  const handleProductSearchConfirm = async (
-    selecoesOriginais: ProductSelectionEntry[],
-  ) => {
-    const produtosVinculados = await vincularUbiquaAoCadastro(
-      selecoesOriginais.map((s) => s.product),
-    )
-    const selections = selecoesOriginais.map((s, idx) => ({
-      ...s,
-      product: produtosVinculados[idx],
-    }))
+  const handleProductSearchConfirm = (selections: ProductSelectionEntry[]) => {
     // Trocar o produto de UMA linha existente (ícone de busca na linha)
     // continua sendo 1:1 direto — mantém o L/quantidade que já estavam
     // naquela linha, só troca o produto.
@@ -2795,67 +2706,6 @@ export default function BudgetFormPage() {
       setPendingTeamDeliveryValues(null)
     }
   }
-
-  // SPEC-200: lista de equipes para o campo obrigatório "Equipe".
-  useEffect(() => {
-    supabase
-      .from('equipes_projetos')
-      .select('id, equipes')
-      .order('equipes')
-      .then(({ data }) => setEquipes((data as any) || []))
-  }, [])
-
-  // SPEC-200: preenche a equipe sozinho -- do projeto; se o projeto não tem,
-  // do vendedor; se não, de quem está logado. Para de mexer quando a equipe
-  // veio do orçamento salvo ou foi escolhida à mão.
-  const equipeProjetoCodigo = form.watch('projeto_codigo')
-  const equipeVendedorId = form.watch('vendedor_id')
-  useEffect(() => {
-    if (equipeEscolhidaRef.current) return
-    let cancelado = false
-    ;(async () => {
-      let equipeId: string | null = null
-      if (equipeProjetoCodigo) {
-        const { data } = await supabase
-          .from('projetos')
-          .select('equipe_id')
-          .eq('codigo', equipeProjetoCodigo)
-          .maybeSingle()
-        equipeId = (data as any)?.equipe_id ?? null
-      }
-      if (!equipeId && equipeVendedorId && equipeVendedorId !== 'none') {
-        const { data } = await supabase
-          .from('funcionarios')
-          .select('equipe_id')
-          .eq('id', equipeVendedorId)
-          .maybeSingle()
-        equipeId = (data as any)?.equipe_id ?? null
-      }
-      if (!equipeId) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (user) {
-          const { data } = await supabase
-            .from('funcionarios')
-            .select('equipe_id')
-            .eq('usuario_id', user.id)
-            .not('equipe_id', 'is', null)
-            .limit(1)
-            .maybeSingle()
-          equipeId = (data as any)?.equipe_id ?? null
-        }
-      }
-      if (cancelado || equipeEscolhidaRef.current || !equipeId) return
-      form.setValue('equipe_id', equipeId, {
-        shouldValidate: true,
-        shouldDirty: true,
-      })
-    })()
-    return () => {
-      cancelado = true
-    }
-  }, [equipeProjetoCodigo, equipeVendedorId, form])
 
   if (isLoadingBudget || optionsLoading) {
     return (
@@ -3787,40 +3637,6 @@ export default function BudgetFormPage() {
                               emptyText="Nenhum vendedor encontrado."
                             />
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* SPEC-200: equipe obrigatória -- define quem da Equipe
-                        de Projetos enxerga o orçamento. */}
-                    <FormField
-                      control={form.control}
-                      name="equipe_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Equipe *</FormLabel>
-                          <FormControl>
-                            <SearchableSelect
-                              options={equipes.map((e) => ({
-                                value: e.id,
-                                label: e.equipes,
-                              }))}
-                              value={field.value || ''}
-                              onChange={(v) => {
-                                equipeEscolhidaRef.current = true
-                                field.onChange(v)
-                              }}
-                              placeholder="Selecione a equipe"
-                              searchPlaceholder="Buscar equipe..."
-                              emptyText="Nenhuma equipe encontrada."
-                            />
-                          </FormControl>
-                          {digitadoPorNome && (
-                            <p className="text-xs text-gray-500">
-                              Digitado por {digitadoPorNome}
-                            </p>
-                          )}
                           <FormMessage />
                         </FormItem>
                       )}

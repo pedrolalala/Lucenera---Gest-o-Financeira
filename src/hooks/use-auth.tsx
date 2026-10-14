@@ -17,8 +17,6 @@ interface AuthContextType {
   role: Role | null
   hasAccess: boolean | null
   canApproveQuotes: boolean
-  /** SPEC-200: pode "Aprovar Manualmente" (módulo aprovacao_cliente do Hub). */
-  canApproveClient: boolean
   signUp: (
     email: string,
     password: string,
@@ -45,7 +43,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<Role | null>(null)
   const [hasAccess, setHasAccess] = useState<boolean | null>(null)
   const [canApproveQuotes, setCanApproveQuotes] = useState(false)
-  const [canApproveClient, setCanApproveClient] = useState(false)
   // "loading" é derivado (ver abaixo), não mais um estado ligado/desligado
   // em vários pontos. Antes, entrando pela Central (?sso_code), o evento de
   // login chegava antes da inicialização terminar: o papel era buscado,
@@ -74,23 +71,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         p_acao: null,
       })
       .then(({ data }) => setHasAccess(Boolean(data)))
-  }, [user?.id])
-
-  // SPEC-200: além de admin/gerente/operador, quem tem o módulo
-  // "aprovacao_cliente" no Hub (Equipe de Projetos) aprova pelo cliente.
-  useEffect(() => {
-    if (!user?.id) {
-      setCanApproveClient(false)
-      return
-    }
-    supabase
-      .rpc('hub_pode_executar', {
-        p_usuario_id: user.id,
-        p_system_slug: 'orcamentos',
-        p_modulo_chave: 'aprovacao_cliente',
-        p_acao: 'editar',
-      })
-      .then(({ data }) => setCanApproveClient(Boolean(data)))
   }, [user?.id])
 
   const fetchUserInfo = async (
@@ -252,7 +232,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     role,
     hasAccess,
     canApproveQuotes,
-    canApproveClient,
     signUp,
     signIn,
     signOut,

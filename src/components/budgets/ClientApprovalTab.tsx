@@ -63,7 +63,7 @@ export function ClientApprovalTab() {
     aprovarManualmenteCliente,
     voltarOrcamentoRascunho,
   } = useBudgetStore()
-  const { role, canApproveQuotes, canApproveClient } = useAuth()
+  const { role, canApproveQuotes } = useAuth()
   const navigate = useNavigate()
   const [actionId, setActionId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -72,8 +72,7 @@ export function ClientApprovalTab() {
   const [motivoVoltarRascunho, setMotivoVoltarRascunho] = useState('')
   const [isVoltandoRascunho, setIsVoltandoRascunho] = useState(false)
 
-  const canManage =
-    canApproveClient || (role !== null && APPROVAL_ROLES.includes(role))
+  const canManage = role !== null && APPROVAL_ROLES.includes(role)
   const canApproveFinancial =
     canApproveQuotes || role === 'admin' || role === 'gerente'
 
