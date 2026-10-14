@@ -60,8 +60,6 @@ import {
 } from '@/lib/budget-status'
 import { sendInitialBudgetPdfAndEmail } from '@/lib/envio-inicial-cliente'
 import { semPrefixo } from '@/lib/numeros'
-import { TEAM_APPROVAL_STATUS } from '@/lib/budget-status'
-import { TeamApprovalRowActions } from '@/components/budgets/TeamApprovalRowActions'
 
 interface BudgetTableRowProps {
   budgetId: string
@@ -586,12 +584,6 @@ export function BudgetTableRow({
               >
                 <Undo2 className="h-4 w-4" />
               </Button>
-            )}
-
-            {/* Pedido do usuário (14/10): ações da antiga aba "Aprovação da
-                Equipe" na própria linha (a lista ficou só com o dropdown). */}
-            {status === TEAM_APPROVAL_STATUS && (
-              <TeamApprovalRowActions budget={budget} />
             )}
 
             {normalizedStatus === 'aprovacao_financeira' &&
