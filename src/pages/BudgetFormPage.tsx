@@ -2206,8 +2206,8 @@ export default function BudgetFormPage() {
   // na busca entrava sem produto_id -- sem código e referência na linha e
   // tratada como item sem cadastro, embora 77 das 87 peças existam em
   // produtos. Liga ao cadastro pelo código do produto (ou pela referência)
-  // e mantém o valor da linha escolhida. Sem correspondência, segue como
-  // item sem cadastro.
+  // e puxa do cadastro código, referência e valor (especificação do
+  // usuário, 14/10). Sem correspondência, segue como item sem cadastro.
   const vincularUbiquaAoCadastro = async (
     products: ProductSearchItem[],
   ): Promise<ProductSearchItem[]> => {
@@ -2231,7 +2231,7 @@ export default function BudgetFormPage() {
 
     const { data, error } = await supabase
       .from('produtos')
-      .select('id, nome, referencia, codigo_produto')
+      .select('id, nome, referencia, codigo_produto, preco_venda, valor_venda')
       .eq('ativo', true)
       .or(filtros)
     if (error || !data) return products
@@ -2251,6 +2251,8 @@ export default function BudgetFormPage() {
         referencia: cadastro.referencia,
         sku: cadastro.referencia,
         codigo_produto: cadastro.codigo_produto,
+        preco_venda: cadastro.preco_venda ?? p.preco_venda,
+        valor_venda: cadastro.valor_venda ?? p.valor_venda,
         source: 'produtos' as const,
       }
     })
