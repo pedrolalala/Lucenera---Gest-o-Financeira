@@ -7,6 +7,8 @@ import { PackageSearch, PackagePlus, Trash2 } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 import type { EditableItemData } from '@/services/financialApprovalEditService'
+import { ehPorMetro } from '@/lib/numeros'
+import { QuantidadeInput } from './QuantidadeInput'
 
 const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -168,22 +170,10 @@ export function EditableItemCard({
             <Label className="text-[10px] text-gray-500 font-medium uppercase">
               Qtd
             </Label>
-            <Input
-              type="number"
-              step="1"
-              min="1"
-              max="9999"
+            <QuantidadeInput
               value={item.quantidade}
-              onChange={(e) => {
-                const val = e.target.value
-                if (val.length > 4) return
-                onUpdate(
-                  orcId,
-                  item.id,
-                  'quantidade',
-                  val ? Math.min(9999, Math.floor(Number(val))) : 0,
-                )
-              }}
+              onChange={(v) => onUpdate(orcId, item.id, 'quantidade', v || 0)}
+              porMetro={ehPorMetro(item.produto_info?.unidade, item.quantidade)}
               className="text-sm h-9 text-center"
             />
           </div>

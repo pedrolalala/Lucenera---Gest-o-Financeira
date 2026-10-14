@@ -128,7 +128,7 @@ import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
 import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
 import { FORMA_PAGAMENTO_LABELS } from '@/lib/budget-financial-summary'
 import logoImg from '@/assets/lucenera-vertical-527dd.png'
-import { semPrefixo } from '@/lib/numeros'
+import { arredondarQtd, semPrefixo } from '@/lib/numeros'
 
 // SPEC-152: formas de pagamento que tipicamente não fazem sentido em mais
 // de 1 parcela (pagamento à vista, instantâneo). Todas as outras (boleto,
@@ -402,10 +402,14 @@ const formSchema = z
           custom_id: z.string().optional(),
           produto_id: z.string().optional().default(''),
           descricao: z.string().optional().default(''),
+          // SPEC-199: aceita fração (peça por metro), até 3 casas.
           quantidade: z.coerce
             .number()
-            .int('Deve ser um valor inteiro')
-            .min(1, 'Quantidade inválida'),
+            .min(0.001, 'Quantidade inválida')
+            .refine(
+              (q) => Math.abs(q * 1000 - Math.round(q * 1000)) < 1e-6,
+              'No máximo 3 casas decimais',
+            ),
           preco_unitario: z.coerce.number().min(0, 'Preço inválido'),
           desconto: z.coerce
             .number()
@@ -581,6 +585,12 @@ export default function BudgetFormPage() {
   const [productMetaMap, setProductMetaMap] = useState<
     Map<string, ProductMeta>
   >(new Map())
+  // SPEC-199: unidade de cada peça do orçamento (MT = por metro, destacada
+  // no item). Busca só os ids que ainda não conhece — vale para item
+  // carregado, importado do XML ou adicionado pela busca.
+  const [unidadePorProduto, setUnidadePorProduto] = useState<
+    Map<string, string | null>
+  >(new Map())
   const { role } = useAuth()
   // SPEC-108: só admin edita valor de peça ou adiciona produto NUM
   // ORÇAMENTO JÁ EXISTENTE. Na criação (isEditing = false), continua
@@ -730,8 +740,9 @@ export default function BudgetFormPage() {
     produtoId: string | null | undefined,
   ): ProductMeta | null => {
     if (!produtoId || !isValidUUID(produtoId)) return null
+    const unidade = unidadePorProduto.get(produtoId) ?? null
     const fromMeta = productMetaMap.get(produtoId)
-    if (fromMeta) return fromMeta
+    if (fromMeta) return { ...fromMeta, unidade }
     const fromList = produtos.find((p) => p.id === produtoId)
     if (fromList) {
       return {
@@ -739,6 +750,7 @@ export default function BudgetFormPage() {
         referencia: fromList.referencia ?? null,
         nome: ((fromList as any).originalNome || fromList.nome) ?? null,
         sku: fromList.sku ?? null,
+        unidade,
       }
     }
     return null
@@ -899,7 +911,9 @@ export default function BudgetFormPage() {
                 custom_id: formatCircuitId(i.custom_id || ''),
                 produto_id: i.produto_id || '',
                 descricao: i.descricao || '',
-                quantidade: Math.max(1, Math.floor(Number(i.quantidade) || 1)),
+                // SPEC-199: peça por metro tem quantidade quebrada (4,5 m) —
+                // não arredondar para inteiro, senão salvar grava 4.
+                quantidade: arredondarQtd(Number(i.quantidade) || 1),
                 preco_unitario: i.preco_unitario,
                 desconto: i.desconto || 0,
                 sub_ordem: i.sub_ordem ?? 0,
@@ -985,6 +999,43 @@ export default function BudgetFormPage() {
     | undefined
   const clienteIdAtual = form.watch('cliente_id')
   const watchItens = form.watch('itens')
+
+  // SPEC-199: carrega a unidade (MT = por metro) das peças que entraram no
+  // orçamento e ainda não estão no mapa.
+  const idsSemUnidade = Array.from(
+    new Set(
+      (watchItens || [])
+        .map((i: any) => i?.produto_id)
+        .filter(
+          (pid: any): pid is string =>
+            Boolean(pid) && isValidUUID(pid) && !unidadePorProduto.has(pid),
+        ),
+    ),
+  )
+    .sort()
+    .join(',')
+  useEffect(() => {
+    if (!idsSemUnidade) return
+    let cancelado = false
+    const ids = idsSemUnidade.split(',')
+    supabase
+      .from('produtos')
+      .select('id, unidade')
+      .in('id', ids)
+      .then(({ data, error }) => {
+        if (cancelado || error) return
+        setUnidadePorProduto((prev) => {
+          const next = new Map(prev)
+          ids.forEach((pid) => next.set(pid, null))
+          ;(data || []).forEach((p: any) => next.set(p.id, p.unidade ?? null))
+          return next
+        })
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [idsSemUnidade])
+
   const descontoGlobalPerc = form.watch('desconto_global') || 0
   const descontoTipo = form.watch('desconto_tipo') || 'percentual'
   const valorSinal = form.watch('valor_sinal') || 0

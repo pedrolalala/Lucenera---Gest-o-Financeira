@@ -110,6 +110,7 @@ export function FinancialApprovalEditDialog({
                     referencia: i.produto.referencia ?? null,
                     nome: i.produto.nome ?? null,
                     sku: i.produto.referencia ?? null,
+                    unidade: i.produto.unidade ?? null,
                   }
                 : null,
             })),

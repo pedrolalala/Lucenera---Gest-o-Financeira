@@ -13,6 +13,8 @@ import { Trash2, PackageSearch, PackagePlus } from 'lucide-react'
 import { formatCircuitId, formatCircuitIdInput } from '@/lib/utils'
 import { isValidUUID } from '@/lib/uuid'
 import { getDisplayValorTotal } from '@/lib/budget-status'
+import { ehPorMetro } from '@/lib/numeros'
+import { QuantidadeInput } from './QuantidadeInput'
 import {
   SETOR_DEVOLUCAO_LABEL,
   type SetorDevolucao,
@@ -29,6 +31,8 @@ export interface ProductMeta {
   referencia: string | null
   nome: string | null
   sku: string | null
+  // SPEC-199: unidade do cadastro (MT = vendida por metro)
+  unidade?: string | null
 }
 
 interface BudgetItemCardProps {
@@ -94,6 +98,7 @@ export function BudgetItemCard({
 
   const hasProduct = Boolean(produtoId) && isValidUUID(produtoId)
   const productInfo = getProductInfo(produtoId)
+  const porMetro = ehPorMetro(productInfo?.unidade, quantidade)
 
   return (
     <div key={fieldId} className="w-full">
@@ -267,7 +272,7 @@ export function BudgetItemCard({
             )}
           </div>
 
-          {/* Quantidade - Fixed 80px, max 4 digits */}
+          {/* Quantidade - Fixed 80px, até 4 dígitos + 3 casas (SPEC-199: peça por metro) */}
           <div className="shrink-0 lg:w-[80px]">
             <FormField
               control={control}
@@ -276,19 +281,10 @@ export function BudgetItemCard({
                 <FormItem>
                   <FormLabel className={fieldLabelClass}>Qtd</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="1"
-                      min="1"
-                      max="9999"
-                      {...f}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        if (val.length > 4) return
-                        f.onChange(
-                          val ? Math.min(9999, Math.floor(Number(val))) : '',
-                        )
-                      }}
+                    <QuantidadeInput
+                      value={f.value}
+                      onChange={f.onChange}
+                      porMetro={porMetro}
                       className="text-sm h-9 text-center"
                     />
                   </FormControl>

@@ -2,6 +2,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Plus, Trash2 } from 'lucide-react'
 import { formatCircuitIdInput } from '@/lib/utils'
+import { formatarQtd } from '@/lib/numeros'
+import { QuantidadeInput } from './QuantidadeInput'
 
 export interface LEntry {
   custom_id: string
@@ -62,18 +64,12 @@ export function LQuantityRepeater({
             }
             className="w-24"
           />
-          <Input
-            type="number"
-            min={1}
-            step={1}
+          <QuantidadeInput
             placeholder="Qtd"
             value={entry.quantidade || ''}
             disabled={disabled}
-            onChange={(e) =>
-              handleChange(index, {
-                quantidade: parseInt(e.target.value, 10) || 0,
-              })
-            }
+            porMetro={!Number.isInteger(Number(entry.quantidade) || 0)}
+            onChange={(v) => handleChange(index, { quantidade: v || 0 })}
             className="w-24"
           />
           <Button
@@ -100,7 +96,7 @@ export function LQuantityRepeater({
       </Button>
 
       <p className="text-sm font-medium text-muted-foreground pt-1">
-        Quantidade total: {total}
+        Quantidade total: {formatarQtd(total)}
       </p>
     </div>
   )

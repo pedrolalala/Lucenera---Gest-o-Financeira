@@ -7,6 +7,8 @@ export interface ProdutoInfo {
   referencia: string | null
   nome: string | null
   sku: string | null
+  // SPEC-199: MT = peça vendida por metro
+  unidade?: string | null
 }
 
 export interface EditableProjectData {
@@ -59,7 +61,7 @@ export async function fetchEditableProjectBudget(
         orcamento_itens(
           id, produto_id, descricao, quantidade, preco_unitario, desconto,
           custom_id, ordem, peca_nova,
-          produto:produtos(codigo_produto, referencia, nome)
+          produto:produtos(codigo_produto, referencia, nome, unidade)
         )
       )
     `,
