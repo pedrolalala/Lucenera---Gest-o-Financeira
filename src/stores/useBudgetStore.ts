@@ -71,6 +71,8 @@ export interface Budget {
   equipe_id?: string | null
   equipe?: { equipes: string } | null
   digitador?: { nome: string | null } | null
+  /** Prazo de entrega em dias (coluna da lista de orçamentos). */
+  prazo_entrega_dias?: number | null
   status: string
   /** SPEC-071: 'venda' (padrão), 'devolucao', 'outros' ou 'sac' — trava na criação. */
   natureza_operacao?: string
@@ -216,6 +218,7 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
       projeto:projetos(nome, codigo),
       equipe:equipes_projetos(equipes),
       digitador:usuarios!orcamentos_digitado_por_fkey(nome),
+      vendedor:funcionarios!orcamentos_vendedor_id_fkey(nome),
       itens:orcamento_itens(
         id,
         produto_id,
