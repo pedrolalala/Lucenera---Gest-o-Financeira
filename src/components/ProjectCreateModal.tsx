@@ -112,12 +112,22 @@ export function ProjectCreateModal({
         tipo_projeto: '',
       })
       setLocalClientes(clientes || [])
+      // SPEC-202 E: Responsável = equipe (equipes_projetos), não funcionário.
       supabase
-        .from('funcionarios')
-        .select('id, nome')
-        .eq('status', 'Ativo')
-        .order('nome')
-        .then(({ data }) => data && setFuncionarios(data))
+        .from('equipes_projetos')
+        .select('id, equipes, lider_funcionario_id')
+        .order('equipes')
+        .then(
+          ({ data }) =>
+            data &&
+            setFuncionarios(
+              data.map((e: any) => ({
+                id: e.id,
+                nome: e.equipes,
+                lider: e.lider_funcionario_id,
+              })),
+            ),
+        )
       supabase
         .from('contato_tipos')
         .select('tipo, contatos:contato_id(id, nome)')
@@ -167,7 +177,11 @@ export function ProjectCreateModal({
           estado: val.estado || null,
           cliente_id: val.cliente_id || null,
           arquiteto_id: val.arquiteto_id || null,
-          responsavel_funcionario_id: val.responsavel_funcionario_id || null,
+          // SPEC-202 E: o campo guarda a equipe; o líder vai como
+          // responsavel_funcionario_id (Vendedor) e o nome da equipe em
+          // responsavel_nome (trigger fn_sync_equipe_por_responsavel).
+          equipe_id: funcionarioSelecionado?.id || null,
+          responsavel_funcionario_id: funcionarioSelecionado?.lider || null,
           responsavel_nome: funcionarioSelecionado?.nome || null,
           // SPEC-202 D: engenheiro é contato → engenheiro_id (responsavel_obra_id
           // tem FK para usuarios, usado pela sincronização SharePoint).
@@ -343,7 +357,7 @@ export function ProjectCreateModal({
                   name="responsavel_funcionario_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Responsável</FormLabel>
+                      <FormLabel>Responsável (equipe)</FormLabel>
                       <FormControl>
                         <SearchableSelect
                           options={funcionarios.map((f) => ({
