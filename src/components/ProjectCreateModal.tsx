@@ -169,7 +169,9 @@ export function ProjectCreateModal({
           arquiteto_id: val.arquiteto_id || null,
           responsavel_funcionario_id: val.responsavel_funcionario_id || null,
           responsavel_nome: funcionarioSelecionado?.nome || null,
-          responsavel_obra_id: val.responsavel_obra_id || null,
+          // SPEC-202 D: engenheiro é contato → engenheiro_id (responsavel_obra_id
+          // tem FK para usuarios, usado pela sincronização SharePoint).
+          engenheiro_id: val.responsavel_obra_id || null,
           area_do_projeto: val.tipo_projeto ? { tipo: val.tipo_projeto } : null,
           historico: [],
         })
