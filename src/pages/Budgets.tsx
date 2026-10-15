@@ -21,6 +21,10 @@ import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
 
+// Pedido do usuário (14/10): o filtro mostra só os status do fluxo, sem
+// "Recusado pelo Cliente" (o orçamento recusado continua na aba Aprovação
+// do cliente e no filtro "Todos"). Finalizado, Obra Finalizada, Recusado e
+// Expirado saíram: nenhum orçamento usa esses status.
 const STATUS_OPTIONS = [
   { label: 'Todos', value: 'all' },
   { label: 'Rascunho', value: 'rascunho' },
@@ -38,12 +42,6 @@ export default function Budgets() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [abaAtiva, setAbaAtiva] = useState('todos')
-
-  const handleStatusChange = (value: string) => {
-    setStatusFilter(value)
-    setAbaAtiva('todos')
-  }
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -89,35 +87,7 @@ export default function Budgets() {
         </Button>
       </div>
 
-      {/* Pedido do usuário (14/10): busca + dropdown de status sempre
-          visíveis no topo (antes ficavam só dentro da aba Todos). Escolher um
-          status leva para a aba Todos, onde a tabela é filtrada. */}
-      <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            placeholder="Pesquisar por projeto, código ou cliente..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        <Select value={statusFilter} onValueChange={handleStatusChange}>
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="w-full">
+      <Tabs defaultValue="todos" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="todos">Todos</TabsTrigger>
           <TabsTrigger value="rascunho">Rascunho</TabsTrigger>
@@ -135,7 +105,32 @@ export default function Budgets() {
           <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="todos" className="mt-0">
+        <TabsContent value="todos" className="flex flex-col gap-4 mt-0">
+          <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Pesquisar por projeto, código ou cliente..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {showLoading ? (
             <div className="flex justify-center py-10">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
