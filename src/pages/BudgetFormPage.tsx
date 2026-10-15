@@ -2693,7 +2693,7 @@ export default function BudgetFormPage() {
       setAbaAtiva('cliente')
       toast.warning('Cliente do XML não encontrado no sistema.', {
         description:
-          'Os itens foram importados. Escolha o cliente na aba Cliente, cadastre um novo, ou salve como rascunho e escolha depois.',
+          'As peças foram importadas. Escolha o cliente na aba Cliente ou salve como rascunho e adicione o cliente depois.',
         duration: 8000,
       })
     }
@@ -3796,16 +3796,8 @@ export default function BudgetFormPage() {
                               </p>
                               <p>
                                 Se ele já está cadastrado, escolha abaixo. Se
-                                não,{' '}
-                                <button
-                                  type="button"
-                                  className="underline font-medium"
-                                  onClick={() => setIsClientModalOpen(true)}
-                                >
-                                  cadastre um novo cliente
-                                </button>
-                                . Também dá para salvar como rascunho agora e
-                                escolher o cliente depois.
+                                não, salve como rascunho, cadastre o cliente
+                                no CRM e depois volte aqui para escolher.
                               </p>
                             </div>
                           )}
