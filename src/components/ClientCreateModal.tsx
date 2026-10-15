@@ -155,7 +155,27 @@ export function ClientCreateModal({
   const numeroCobrancaRef = useRef<HTMLInputElement>(null)
 
   const AUTHORIZED_ROLES = ['admin', 'gerente', 'operador']
-  const isWriteAllowed = AUTHORIZED_ROLES.includes(role || '')
+  const isRoleAllowed = AUTHORIZED_ROLES.includes(role || '')
+  // SPEC-201: a Equipe de Projetos (role legado "funcionario") cadastra
+  // cliente/arquiteto/engenheiro/eletricista pela permissão "criar" do CRM no
+  // Hub — a mesma regra da política spec069_contatos_insert. Fornecedor
+  // continua só para admin/gerente/operador (Compras/Cadastro).
+  const [canCreateCrm, setCanCreateCrm] = useState(false)
+  useEffect(() => {
+    if (!open || !user?.id) return
+    supabase
+      .rpc('hub_pode_executar', {
+        p_usuario_id: user.id,
+        p_system_slug: 'crm',
+        p_modulo_chave: null,
+        p_acao: 'criar',
+      })
+      .then(({ data }) => setCanCreateCrm(Boolean(data)))
+  }, [open, user?.id])
+  const isWriteAllowed = isRoleAllowed || canCreateCrm
+  const tiposPermitidos = isRoleAllowed
+    ? TIPOS
+    : TIPOS.filter((t) => t.value !== 'fornecedor')
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -332,31 +352,14 @@ export function ClientCreateModal({
       if (!isWriteAllowed) {
         toast.error('Você não tem permissão para cadastrar contatos.', {
           description:
-            'Apenas administradores, gerentes ou operadores podem cadastrar contatos.',
+            'Peça ao administrador o acesso de cadastro do CRM no Hub.',
         })
         setIsSubmitting(false)
         return
       }
 
-      const { data: userData, error: userErr } = await supabase
-        .from('usuarios')
-        .select('role')
-        .eq('id', user?.id || '')
-        .single()
-
-      if (userErr || !userData) {
-        toast.error('Não foi possível verificar suas permissões.', {
-          description: userErr?.message || 'Tente novamente.',
-        })
-        setIsSubmitting(false)
-        return
-      }
-
-      if (!AUTHORIZED_ROLES.includes(userData.role)) {
-        toast.error('Usuário sem permissão de escrita', {
-          description:
-            'Seu perfil atual não permite cadastrar contatos. Contate um administrador.',
-        })
+      if (values.tipo === 'fornecedor' && !isRoleAllowed) {
+        toast.error('Fornecedor é cadastrado pela Administração.')
         setIsSubmitting(false)
         return
       }
@@ -539,7 +542,7 @@ export function ClientCreateModal({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {TIPOS.map((t) => (
+                          {tiposPermitidos.map((t) => (
                             <SelectItem key={t.value} value={t.value}>
                               {t.label}
                             </SelectItem>

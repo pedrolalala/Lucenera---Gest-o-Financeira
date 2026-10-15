@@ -257,12 +257,22 @@ export function resolveConnectXmlImport(
  * Idempotência do import (checklist da SPEC-050): consulta pontual para
  * saber se este `cod_orcamento` do Connect já foi importado antes.
  */
+// SPEC-201 C: até a Aprovação da Equipe o XML revisado na Connect pode ser
+// importado de novo e substitui os itens do orçamento já existente. Depois disso
+// (Revisão Financeira, Aprovado) já há parcelas/boletos e a reimportação é recusada.
+export const STATUS_PERMITE_REIMPORTAR_XML = [
+  'rascunho',
+  'enviado_cliente',
+  'recusado_cliente',
+  'Aprovação da Equipe',
+]
+
 export async function findOrcamentoJaImportado(
   codOrcamento: number,
-): Promise<{ id: string; numero: string | null } | null> {
+): Promise<{ id: string; numero: string | null; status: string } | null> {
   const { data, error } = await supabase
     .from('orcamentos')
-    .select('id, numero')
+    .select('id, numero, status')
     .eq('origem_connect_cod_orcamento', codOrcamento)
     .maybeSingle()
 

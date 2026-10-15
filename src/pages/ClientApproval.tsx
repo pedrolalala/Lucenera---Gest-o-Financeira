@@ -52,7 +52,8 @@ export default function ClientApproval() {
         setBudget(data)
         if (
           data.status === 'Orçamento Aprovado' ||
-          data.status === 'Aprovação Financeira'
+          data.status === 'Aprovação Financeira' ||
+          data.status === 'Aprovação da Equipe'
         ) {
           setViewState('approved')
         } else if (data.status === 'recusado_cliente') {

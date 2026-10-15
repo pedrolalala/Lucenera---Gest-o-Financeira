@@ -19,6 +19,7 @@ import {
   parseConnectXml,
   resolveConnectXmlImport,
   findOrcamentoJaImportado,
+  STATUS_PERMITE_REIMPORTAR_XML,
   validateXmlFile,
   type ResolvedXmlBudget,
 } from '@/lib/xml-budget-import'
@@ -30,9 +31,16 @@ export interface ImportConnectXmlModalProps {
   clientes: any[]
   produtos: any[]
   /** Chamado quando o resumo está pronto para ser aplicado ao formulário (empresa e cliente resolvidos, sem conflito de idempotência). */
-  onApply: (resolved: ResolvedXmlBudget) => void
+  onApply: (
+    resolved: ResolvedXmlBudget,
+    opts?: { substituirItens?: boolean },
+  ) => void
   /** Chamado quando o cliente do XML não foi encontrado — quem chama deve abrir o ClientCreateModal e retomar o import depois. */
   onClienteNaoEncontrado: (resolved: ResolvedXmlBudget) => void
+  /** SPEC-201 C: id do orçamento aberto no formulário (edição), se houver. */
+  orcamentoAtualId?: string | null
+  /** SPEC-201 C: o XML é de outro orçamento já importado — abrir ele e atualizar. */
+  onAtualizarExistente?: (orcamentoId: string, resolved: ResolvedXmlBudget) => void
 }
 
 export function ImportConnectXmlModal({
@@ -43,6 +51,8 @@ export function ImportConnectXmlModal({
   produtos,
   onApply,
   onClienteNaoEncontrado,
+  orcamentoAtualId,
+  onAtualizarExistente,
 }: ImportConnectXmlModalProps) {
   const [fileName, setFileName] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -51,6 +61,7 @@ export function ImportConnectXmlModal({
   const [orcamentoExistente, setOrcamentoExistente] = useState<{
     id: string
     numero: string | null
+    status: string
   } | null>(null)
 
   const reset = useCallback(() => {
@@ -96,13 +107,28 @@ export function ImportConnectXmlModal({
     [empresas, clientes, produtos, reset],
   )
 
+  const podeAtualizar =
+    !!orcamentoExistente &&
+    STATUS_PERMITE_REIMPORTAR_XML.includes(orcamentoExistente.status) &&
+    (orcamentoExistente.id === orcamentoAtualId || !!onAtualizarExistente)
+
   const handleApply = useCallback(() => {
     if (!resolved) return
 
     if (orcamentoExistente) {
-      toast.error('Este orçamento Connect já foi importado', {
-        description: `Já existe como ${orcamentoExistente.numero || orcamentoExistente.id}.`,
-      })
+      if (!podeAtualizar) {
+        toast.error('Este orçamento Connect já foi importado', {
+          description: `Já existe como ${orcamentoExistente.numero || orcamentoExistente.id}, que está em "${orcamentoExistente.status}". Só dá para atualizar pelo XML até a Aprovação da Equipe.`,
+        })
+        return
+      }
+      if (orcamentoExistente.id === orcamentoAtualId) {
+        onApply(resolved, { substituirItens: true })
+      } else {
+        onAtualizarExistente?.(orcamentoExistente.id, resolved)
+      }
+      reset()
+      onOpenChange(false)
       return
     }
 
@@ -127,13 +153,17 @@ export function ImportConnectXmlModal({
   }, [
     resolved,
     orcamentoExistente,
+    podeAtualizar,
+    orcamentoAtualId,
+    onAtualizarExistente,
     onApply,
     onClienteNaoEncontrado,
     reset,
     onOpenChange,
   ])
 
-  const canApply = !isLoading && !error && !!resolved && !orcamentoExistente
+  const canApply =
+    !isLoading && !error && !!resolved && (!orcamentoExistente || podeAtualizar)
 
   return (
     <Dialog
@@ -234,13 +264,26 @@ export function ImportConnectXmlModal({
               </span>
             </div>
 
-            {orcamentoExistente && (
+            {orcamentoExistente && podeAtualizar && (
+              <div className="mt-3 flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Este orçamento Connect já existe como{' '}
+                  {orcamentoExistente.numero || orcamentoExistente.id}. Ao
+                  aplicar, os itens dele serão trocados pelos deste XML — revise
+                  e salve para gravar.
+                </span>
+              </div>
+            )}
+
+            {orcamentoExistente && !podeAtualizar && (
               <div className="mt-3 flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-red-800">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>
                   Este orçamento Connect já foi importado como{' '}
-                  {orcamentoExistente.numero || orcamentoExistente.id}.
-                  Reimportação bloqueada.
+                  {orcamentoExistente.numero || orcamentoExistente.id}, que está
+                  em "{orcamentoExistente.status}". Só dá para atualizar pelo
+                  XML até a Aprovação da Equipe.
                 </span>
               </div>
             )}
@@ -269,7 +312,9 @@ export function ImportConnectXmlModal({
             Cancelar
           </Button>
           <Button type="button" onClick={handleApply} disabled={!canApply}>
-            Aplicar ao formulário
+            {orcamentoExistente && podeAtualizar
+              ? `Atualizar ${orcamentoExistente.numero || 'orçamento'}`
+              : 'Aplicar ao formulário'}
           </Button>
         </div>
       </DialogContent>

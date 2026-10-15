@@ -21,6 +21,19 @@ import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
 
+// SPEC-201 D: o que significa cada etapa e quem age (pedido do Filippo na
+// apresentação de 14/10 — "o status é o mais importante do orçamento").
+const LEGENDA_STATUS = [
+  ['Rascunho', 'equipe montando o orçamento; o cliente ainda não recebeu.'],
+  ['Enviado ao Cliente', 'aguardando o retorno do cliente.'],
+  [
+    'Aprovação da Equipe',
+    'o cliente aprovou; a equipe valida cores, articulação e obra.',
+  ],
+  ['Revisão Financeira', 'com a Administração.'],
+  ['Aprovado', 'virou venda e gera a necessidade de compra.'],
+]
+
 // Pedido do usuário (14/10): o filtro mostra só os status do fluxo, sem
 // "Recusado pelo Cliente" (o orçamento recusado continua na aba Aprovação
 // do cliente e no filtro "Todos"). Finalizado, Obra Finalizada, Recusado e
@@ -92,7 +105,7 @@ export default function Budgets() {
           <TabsTrigger value="todos">Todos</TabsTrigger>
           <TabsTrigger value="rascunho">Rascunho</TabsTrigger>
           <TabsTrigger value="aprovacao-cliente">
-            Aprovação do cliente
+            Enviado ao Cliente
           </TabsTrigger>
           <TabsTrigger value="aprovacao-equipe">
             Aprovação da Equipe
@@ -104,6 +117,20 @@ export default function Budgets() {
           )}
           <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
         </TabsList>
+
+        <details className="mb-4 text-sm text-gray-600">
+          <summary className="cursor-pointer select-none text-gray-500 hover:text-gray-700">
+            O que significa cada status?
+          </summary>
+          <ul className="mt-2 space-y-1 rounded-lg border bg-white p-3">
+            {LEGENDA_STATUS.map(([nome, texto]) => (
+              <li key={nome}>
+                <span className="font-medium text-gray-800">{nome}:</span>{' '}
+                {texto}
+              </li>
+            ))}
+          </ul>
+        </details>
 
         <TabsContent value="todos" className="flex flex-col gap-4 mt-0">
           <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border shadow-sm">

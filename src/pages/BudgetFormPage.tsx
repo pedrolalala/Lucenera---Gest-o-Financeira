@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
+import {
+  useParams,
+  useNavigate,
+  useSearchParams,
+  useLocation,
+  Link,
+} from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -471,6 +477,7 @@ const formSchema = z
 export default function BudgetFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const isEditing = Boolean(id)
 
@@ -493,6 +500,10 @@ export default function BudgetFormPage() {
     cod_orcamento: number
     importado_em: string
   } | null>(null)
+  // SPEC-201 C: os itens deste orçamento foram trocados por um XML reimportado
+  // nesta edição — ao salvar, registra no histórico.
+  const [xmlReimportado, setXmlReimportado] = useState(false)
+  const xmlReimportAplicadoRef = useRef(false)
   // SPEC-197: "Vínculo Connect" no Tipo de Operação. Por dentro é venda
   // (natureza_operacao = 'venda'); ao salvar chama vincular_orcamento_connect.
   const [modoVinculoConnect, setModoVinculoConnect] = useState(false)
@@ -602,7 +613,7 @@ export default function BudgetFormPage() {
   const [unidadePorProduto, setUnidadePorProduto] = useState<
     Map<string, string | null>
   >(new Map())
-  const { role } = useAuth()
+  const { role, user: authUser } = useAuth()
   // SPEC-108: só admin edita valor de peça ou adiciona produto NUM
   // ORÇAMENTO JÁ EXISTENTE. Na criação (isEditing = false), continua
   // liberado pra todo mundo — é assim que vendedora monta um orçamento novo.
@@ -1971,6 +1982,18 @@ export default function BudgetFormPage() {
           arquitetosPayload,
           editandoAprovado,
         )
+        if (xmlReimportado) {
+          const { error: histErr } = await supabase
+            .from('historico_status_orcamentos')
+            .insert({
+              orcamento_id: budgetToEdit.id,
+              status_anterior: budgetToEdit.status,
+              status_novo: budgetToEdit.status,
+              usuario: authUser?.id ?? null,
+              observacao: `Itens atualizados pelo XML da Connect (nº ${connectOrigin?.cod_orcamento ?? '-'})`,
+            })
+          if (histErr) console.warn('Histórico da reimportação:', histErr)
+        }
         if (modoVinculoConnect) {
           await vincularDepoisDeSalvar(budgetToEdit.id)
         } else {
@@ -2538,25 +2561,33 @@ export default function BudgetFormPage() {
   const applyResolvedXmlImport = (
     resolved: ResolvedXmlBudget,
     clienteIdOverride?: string,
+    substituirItens = false,
   ) => {
-    const clienteId = clienteIdOverride || resolved.cliente_id
+    const currentValues = form.getValues()
+    // SPEC-201 C: na reimportação o cliente/empresa já estão no orçamento.
+    const clienteId =
+      clienteIdOverride ||
+      resolved.cliente_id ||
+      (substituirItens ? currentValues.cliente_id : undefined)
+    const empresaId =
+      resolved.empresa_id ||
+      (substituirItens ? currentValues.empresa_id : undefined)
     if (!clienteId) {
       toast.error(
         'Cliente ainda não resolvido. Cadastre o cliente antes de aplicar o import.',
       )
       return
     }
-    if (!resolved.empresa_id) {
+    if (!empresaId) {
       toast.error(
         'Empresa não resolvida. Cadastre a empresa antes de aplicar o import.',
       )
       return
     }
 
-    const currentValues = form.getValues()
     form.reset({
       ...currentValues,
-      empresa_id: resolved.empresa_id,
+      empresa_id: empresaId,
       cliente_id: clienteId,
       data_emissao: resolved.raw.data_emissao || currentValues.data_emissao,
     })
@@ -2572,8 +2603,9 @@ export default function BudgetFormPage() {
       preco_unitario: item.preco_unitario,
       desconto: item.desconto,
     }))
-    const existingItems = form.getValues('itens') || []
+    const existingItems = substituirItens ? [] : form.getValues('itens') || []
     replace(sortItemsByCircuitId([...existingItems, ...newItens]))
+    if (substituirItens) setXmlReimportado(true)
 
     if (resolved.raw.cod_orcamento != null) {
       setConnectOrigin({
@@ -2583,13 +2615,45 @@ export default function BudgetFormPage() {
     }
 
     toast.success(
-      `XML importado: ${resolved.itensCasados} item(ns) casado(s), ${resolved.itensAvulsos} avulso(s). Revise os dados antes de salvar.`,
+      substituirItens
+        ? `Itens trocados pelos do XML: ${resolved.itensCasados} casado(s), ${resolved.itensAvulsos} avulso(s). Revise e salve para gravar.`
+        : `XML importado: ${resolved.itensCasados} item(ns) casado(s), ${resolved.itensAvulsos} avulso(s). Revise os dados antes de salvar.`,
     )
   }
 
-  const handleXmlImportApply = (resolved: ResolvedXmlBudget) => {
-    applyResolvedXmlImport(resolved)
+  const handleXmlImportApply = (
+    resolved: ResolvedXmlBudget,
+    opts?: { substituirItens?: boolean },
+  ) => {
+    applyResolvedXmlImport(resolved, undefined, !!opts?.substituirItens)
   }
+
+  // SPEC-201 C: XML de um orçamento já importado (outro que não o aberto) —
+  // abre o existente e troca os itens lá.
+  const handleXmlAtualizarExistente = (
+    orcamentoId: string,
+    resolved: ResolvedXmlBudget,
+  ) => {
+    navigate(`/budgets/${orcamentoId}`, { state: { xmlReimport: resolved } })
+  }
+
+  useEffect(() => {
+    const pendente = (location.state as any)?.xmlReimport as
+      | ResolvedXmlBudget
+      | undefined
+    if (
+      !pendente ||
+      xmlReimportAplicadoRef.current ||
+      isLoadingBudget ||
+      !budgetToEdit ||
+      budgetToEdit.id !== id
+    )
+      return
+    xmlReimportAplicadoRef.current = true
+    applyResolvedXmlImport(pendente, undefined, true)
+    navigate(location.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, isLoadingBudget, budgetToEdit, id])
 
   const handleXmlImportNeedsClient = (resolved: ResolvedXmlBudget) => {
     setPendingXmlImport(resolved)
@@ -4822,6 +4886,8 @@ export default function BudgetFormPage() {
             produtos={produtos}
             onApply={handleXmlImportApply}
             onClienteNaoEncontrado={handleXmlImportNeedsClient}
+            orcamentoAtualId={isEditing ? id : null}
+            onAtualizarExistente={handleXmlAtualizarExistente}
           />
 
           <div className="flex justify-end gap-2 mt-6 flex-wrap">
