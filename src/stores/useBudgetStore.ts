@@ -525,6 +525,18 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
   },
 
   enviarOrcamentoCliente: async (budgetId) => {
+    // SPEC-203: rascunho pode existir sem cliente (XML da Connect sem cliente
+    // casado) — só sai para o cliente depois de escolhido.
+    const { data: orc } = await supabase
+      .from('orcamentos')
+      .select('cliente_id')
+      .eq('id', budgetId)
+      .maybeSingle()
+    if (orc && !orc.cliente_id) {
+      throw new Error(
+        'Este rascunho ainda não tem cliente. Abra o orçamento, escolha o cliente e salve antes de enviar.',
+      )
+    }
     const { data, error } = await (supabase as any).rpc(
       'enviar_orcamento_para_cliente',
       { p_orcamento_id: budgetId },

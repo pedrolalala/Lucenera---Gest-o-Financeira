@@ -294,9 +294,9 @@ const formSchema = z
       .string({ required_error: 'O código do projeto é obrigatório' })
       .trim()
       .min(1, 'O código do projeto é obrigatório'),
-    cliente_id: z
-      .string({ required_error: 'Selecione um cliente' })
-      .min(1, 'Selecione um cliente'),
+    // SPEC-203: rascunho pode ser salvo sem cliente (XML da Connect com
+    // cliente que não casou) — obrigatório nos demais status (superRefine).
+    cliente_id: z.string().optional().default(''),
     // SPEC-077: divisão de lucro entre múltiplos arquitetos — segue opcional
     // (nem todo orçamento tem arquiteto vinculado), mas quando preenchido a
     // soma dos percentuais precisa fechar 100%.
@@ -436,6 +436,13 @@ const formSchema = z
       .min(1, 'Adicione pelo menos um item'),
   })
   .superRefine((data, ctx) => {
+    if (!data.cliente_id && (data.status || 'rascunho') !== 'rascunho') {
+      ctx.addIssue({
+        path: ['cliente_id'],
+        code: z.ZodIssueCode.custom,
+        message: 'Selecione um cliente',
+      })
+    }
     if (data.natureza_operacao !== 'devolucao' && !data.frete_tipo) {
       ctx.addIssue({
         path: ['frete_tipo'],
@@ -494,8 +501,11 @@ export default function BudgetFormPage() {
     'cliente' | 'produtos' | 'pagamento'
   >('cliente')
   const [isXmlImportOpen, setIsXmlImportOpen] = useState(false)
-  const [pendingXmlImport, setPendingXmlImport] =
-    useState<ResolvedXmlBudget | null>(null)
+  // SPEC-203: XML importado cujo cod_cliente não casou com nenhum cliente —
+  // os itens já entram no formulário e o cliente é escolhido/cadastrado depois.
+  const [clienteXmlPendente, setClienteXmlPendente] = useState<{
+    cod_cliente: number | null
+  } | null>(null)
   const [connectOrigin, setConnectOrigin] = useState<{
     cod_orcamento: number
     importado_em: string
@@ -1651,6 +1661,11 @@ export default function BudgetFormPage() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     // SPEC-197: vínculo só com o número da Connect vindo do XML.
+    if (modoVinculoConnect && !values.cliente_id) {
+      setAbaAtiva('cliente')
+      toast.error('Escolha o cliente antes de salvar o vínculo com a Connect.')
+      return
+    }
     if (modoVinculoConnect && codConnectVinculo == null) {
       toast.error(
         'Importe o XML da Connect antes de salvar o vínculo (botão "Importar XML (Connect)" no fim do formulário).',
@@ -1895,7 +1910,7 @@ export default function BudgetFormPage() {
         subgrupo: values.subgrupo,
         empresa_id: values.empresa_id,
         projeto_id: projeto.id,
-        cliente_id: values.cliente_id,
+        cliente_id: values.cliente_id || null,
         vendedor_id: values.vendedor_id === 'none' ? null : values.vendedor_id,
         equipe_id: values.equipe_id,
         status: isEditing ? values.status : 'rascunho',
@@ -2048,6 +2063,24 @@ export default function BudgetFormPage() {
           } catch {
             toast.success('Orçamento criado com sucesso!')
           }
+        }
+      }
+
+      // SPEC-203: cliente escolhido à mão para um XML que não casou — se ele
+      // ainda não tem código da Connect, grava o do XML para o próximo import
+      // achar sozinho (o índice único (codigo_legado, tipo) barra duplicado).
+      const codXml = clienteXmlPendente?.cod_cliente
+      if (codXml != null && values.cliente_id) {
+        const escolhido = clientes.find((c) => c.id === values.cliente_id)
+        const codigoJaUsado = clientes.some(
+          (c) => Number(c.codigo_legado) === codXml,
+        )
+        if (escolhido && escolhido.codigo_legado == null && !codigoJaUsado) {
+          const { error: codErr } = await supabase
+            .from('contatos')
+            .update({ codigo_legado: codXml })
+            .eq('id', values.cliente_id)
+          if (codErr) console.warn('Código Connect do cliente:', codErr)
         }
       }
 
@@ -2572,12 +2605,6 @@ export default function BudgetFormPage() {
     const empresaId =
       resolved.empresa_id ||
       (substituirItens ? currentValues.empresa_id : undefined)
-    if (!clienteId) {
-      toast.error(
-        'Cliente ainda não resolvido. Cadastre o cliente antes de aplicar o import.',
-      )
-      return
-    }
     if (!empresaId) {
       toast.error(
         'Empresa não resolvida. Cadastre a empresa antes de aplicar o import.',
@@ -2588,7 +2615,8 @@ export default function BudgetFormPage() {
     form.reset({
       ...currentValues,
       empresa_id: empresaId,
-      cliente_id: clienteId,
+      // SPEC-203: sem cliente casado mantém o que já estava escolhido.
+      cliente_id: clienteId || currentValues.cliente_id || '',
       data_emissao: resolved.raw.data_emissao || currentValues.data_emissao,
     })
 
@@ -2655,12 +2683,20 @@ export default function BudgetFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, isLoadingBudget, budgetToEdit, id])
 
+  // SPEC-203: cliente do XML não casou — aplica o import mesmo assim e deixa
+  // escolher um cliente já cadastrado, cadastrar um novo ou salvar o rascunho
+  // sem cliente (antes abria o cadastro à força e o import se perdia).
   const handleXmlImportNeedsClient = (resolved: ResolvedXmlBudget) => {
-    setPendingXmlImport(resolved)
-    setIsClientModalOpen(true)
-    toast.info(
-      'Cliente do XML não encontrado. Cadastre o cliente para retomar o import.',
-    )
+    applyResolvedXmlImport(resolved)
+    if (!form.getValues('cliente_id')) {
+      setClienteXmlPendente({ cod_cliente: resolved.raw.cod_cliente })
+      setAbaAtiva('cliente')
+      toast.warning('Cliente do XML não encontrado no sistema.', {
+        description:
+          'Os itens foram importados. Escolha o cliente na aba Cliente, cadastre um novo, ou salve como rascunho e escolha depois.',
+        duration: 8000,
+      })
+    }
   }
 
   const handleExportXml = () => {
@@ -3748,6 +3784,31 @@ export default function BudgetFormPage() {
                           <FormLabel>
                             Cliente <span className="text-red-500">*</span>
                           </FormLabel>
+                          {clienteXmlPendente && !field.value && (
+                            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 space-y-1">
+                              <p>
+                                O cliente do XML
+                                {clienteXmlPendente.cod_cliente != null
+                                  ? ` (código Connect ${clienteXmlPendente.cod_cliente})`
+                                  : ''}{' '}
+                                não foi encontrado. Os itens já foram
+                                importados.
+                              </p>
+                              <p>
+                                Se ele já está cadastrado, escolha abaixo. Se
+                                não,{' '}
+                                <button
+                                  type="button"
+                                  className="underline font-medium"
+                                  onClick={() => setIsClientModalOpen(true)}
+                                >
+                                  cadastre um novo cliente
+                                </button>
+                                . Também dá para salvar como rascunho agora e
+                                escolher o cliente depois.
+                              </p>
+                            </div>
+                          )}
                           <FormControl>
                             <div className="flex gap-2 items-center">
                               <div className="flex-1">
@@ -4810,12 +4871,6 @@ export default function BudgetFormPage() {
                 shouldValidate: true,
               })
               if (fetchClientes) fetchClientes()
-              // SPEC-050 (P-2): retoma o import de XML pendente com o
-              // cliente recém-cadastrado.
-              if (pendingXmlImport) {
-                applyResolvedXmlImport(pendingXmlImport, newClient.id)
-                setPendingXmlImport(null)
-              }
             }}
           />
 

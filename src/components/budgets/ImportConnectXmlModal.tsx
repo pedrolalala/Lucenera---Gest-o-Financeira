@@ -35,7 +35,7 @@ export interface ImportConnectXmlModalProps {
     resolved: ResolvedXmlBudget,
     opts?: { substituirItens?: boolean },
   ) => void
-  /** Chamado quando o cliente do XML não foi encontrado — quem chama deve abrir o ClientCreateModal e retomar o import depois. */
+  /** Chamado quando o cliente do XML não foi encontrado — SPEC-203: quem chama aplica o import sem cliente e deixa escolher/cadastrar depois. */
   onClienteNaoEncontrado: (resolved: ResolvedXmlBudget) => void
   /** SPEC-201 C: id do orçamento aberto no formulário (edição), se houver. */
   orcamentoAtualId?: string | null
@@ -252,7 +252,7 @@ export function ImportConnectXmlModal({
                 </span>
               ) : (
                 <span className="font-medium text-amber-600">
-                  Não encontrado (será solicitado cadastro)
+                  Não encontrado — escolha ou cadastre depois
                 </span>
               )}
             </div>
