@@ -11,7 +11,8 @@ import { ApprovalResult, Budget } from '@/stores/useBudgetStore'
 import { redirectWithCode } from '@/lib/cross-system-auth'
 import { semPrefixo } from '@/lib/numeros'
 
-const FINANCEIRO_URL = 'https://adm-bancaria-lucenera.pages.dev'
+// SPEC-225: boletos/recebimento ficam no sistema Contas a Receber.
+const FINANCEIRO_URL = 'https://contas-receber-lucenera.pages.dev'
 
 interface FinanceResultModalProps {
   budget: Budget
@@ -28,7 +29,7 @@ export function FinanceResultModal({
 }: FinanceResultModalProps) {
   const openFinanceRoute = async (route: string) => {
     try {
-      await redirectWithCode(FINANCEIRO_URL, route, 'financeiro', {
+      await redirectWithCode(FINANCEIRO_URL, route, 'contas-receber', {
         newTab: true,
       })
     } catch {
