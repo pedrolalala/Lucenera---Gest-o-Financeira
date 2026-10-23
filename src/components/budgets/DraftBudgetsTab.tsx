@@ -229,19 +229,31 @@ export function DraftBudgetsTab() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="sm"
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
-                          onClick={() => handleEnviar(budget)}
-                          disabled={actionId === budget.id}
-                        >
-                          {actionId === budget.id ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : (
-                            <Send className="h-4 w-4 mr-1" />
-                          )}
-                          Enviar para o Cliente
-                        </Button>
+                        {/* SPEC-223: empréstimo não vai para o cliente — confirma dentro do orçamento. */}
+                        {budget.natureza_operacao === 'outros' &&
+                        budget.subgrupo === 'EMPRESTIMO' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEdit(budget)}
+                          >
+                            Confirmar empréstimo
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            onClick={() => handleEnviar(budget)}
+                            disabled={actionId === budget.id}
+                          >
+                            {actionId === budget.id ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <Send className="h-4 w-4 mr-1" />
+                            )}
+                            Enviar para o Cliente
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

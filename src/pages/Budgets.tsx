@@ -17,6 +17,7 @@ import { FinancialApprovalTab } from '@/components/budgets/FinancialApprovalTab'
 import { TeamApprovalTab } from '@/components/budgets/TeamApprovalTab'
 import { ClientApprovalTab } from '@/components/budgets/ClientApprovalTab'
 import { DraftBudgetsTab } from '@/components/budgets/DraftBudgetsTab'
+import { EmprestimosTab } from '@/components/emprestimo/EmprestimosTab'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
@@ -32,6 +33,10 @@ const LEGENDA_STATUS = [
   ],
   ['Revisão Financeira', 'com a Administração.'],
   ['Aprovado', 'virou venda e gera a necessidade de compra.'],
+  [
+    'Empréstimo',
+    'peças emprestadas ao cliente (Outros → EMPRÉSTIMO); não mexe no estoque nem no financeiro.',
+  ],
 ]
 
 // Pedido do usuário (14/10): o filtro mostra só os status do fluxo, sem
@@ -46,6 +51,7 @@ const STATUS_OPTIONS = [
   { label: 'Revisão da Equipe (Pós-Visita)', value: 'Aprovação da Equipe' },
   { label: 'Revisão Financeira Pendente', value: 'Aprovação Financeira' },
   { label: 'Orçamento Aprovado', value: 'Orçamento Aprovado' },
+  { label: 'Empréstimo', value: 'emprestimo' },
 ]
 
 export default function Budgets() {
@@ -116,6 +122,7 @@ export default function Budgets() {
             </TabsTrigger>
           )}
           <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
+          <TabsTrigger value="emprestimos">Empréstimos</TabsTrigger>
         </TabsList>
 
         <details className="mb-4 text-sm text-gray-600">
@@ -186,6 +193,9 @@ export default function Budgets() {
         )}
         <TabsContent value="aprovados" className="mt-0">
           <ApprovalsTab />
+        </TabsContent>
+        <TabsContent value="emprestimos" className="mt-0">
+          <EmprestimosTab />
         </TabsContent>
       </Tabs>
     </div>

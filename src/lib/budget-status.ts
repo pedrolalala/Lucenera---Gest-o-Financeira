@@ -38,6 +38,9 @@ export function getStatusLabel(status: string | null | undefined): string {
     rascunho: 'Rascunho',
     recusado: 'Recusado',
     expirado: 'Expirado',
+    // SPEC-223: orçamento de empréstimo confirmado (status do empréstimo fica no painel).
+    emprestimo: 'Empréstimo',
+    cancelado: 'Cancelado',
   }
   return labels[status || ''] || status || 'Rascunho'
 }
@@ -55,6 +58,7 @@ export function getStatusBadgeClass(status: string | null | undefined): string {
     recusado_cliente: 'bg-red-50 text-red-700 border-red-200',
     recusado: 'bg-red-50 text-red-700 border-red-200',
     rascunho: 'bg-gray-50 text-gray-700 border-gray-200',
+    emprestimo: 'bg-orange-50 text-orange-700 border-orange-200',
   }
   return classes[status || ''] || 'bg-gray-50'
 }

@@ -69,6 +69,8 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { EmprestimoPainel } from '@/components/emprestimo/EmprestimoPainel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
@@ -159,7 +161,10 @@ function normalizarQtdParcelas(v: unknown): number {
 const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
   venda: ['VENDAS'],
   devolucao: ['TROCA DEV', 'CASA COR ENTRADA'],
+  // SPEC-223: EMPRESTIMO = orçamento de empréstimo (sem financeiro; confirma
+  // dentro do orçamento, devolve ou vira venda).
   outros: [
+    'EMPRESTIMO',
     'CASA COR SAIDA',
     'REMESSA TRANSP',
     'RETORNO',
@@ -195,6 +200,7 @@ const CAMPOS_ABA_CLIENTE = new Set([
   'data_emissao',
   'validade',
   'previsao_entrega',
+  'data_prevista_devolucao',
   'status',
 ])
 function abaDoCampo(campo: string): 'cliente' | 'produtos' | 'pagamento' {
@@ -290,10 +296,8 @@ const formSchema = z
     empresa_id: z
       .string({ required_error: 'Selecione uma empresa' })
       .min(1, 'Selecione uma empresa'),
-    projeto_codigo: z
-      .string({ required_error: 'O código do projeto é obrigatório' })
-      .trim()
-      .min(1, 'O código do projeto é obrigatório'),
+    // SPEC-223: obrigatório, menos no empréstimo (conferido no superRefine).
+    projeto_codigo: z.string().trim().optional().default(''),
     // SPEC-203: rascunho pode ser salvo sem cliente (XML da Connect com
     // cliente que não casou) — obrigatório nos demais status (superRefine).
     cliente_id: z.string().optional().default(''),
@@ -402,6 +406,8 @@ const formSchema = z
     validade: z.date().optional().nullable(),
     // SPEC-167: previsão de entrega do orçamento (opcional).
     previsao_entrega: z.date().optional().nullable(),
+    // SPEC-223: só no empréstimo (obrigatória nele, superRefine).
+    data_prevista_devolucao: z.date().optional().nullable(),
     // SPEC-064: rótulo Ribeirão/São Paulo, só visualização.
     perfil: z.string().optional().nullable(),
     itens: z
@@ -431,11 +437,55 @@ const formSchema = z
           projeto_item_origem_id: z.string().optional().nullable(),
           // SPEC-178: setor da venda de origem (uma linha por setor).
           setor_origem: z.string().optional().nullable(),
+          // SPEC-223: venda que veio de empréstimo — a peça já está com o
+          // cliente e vai direto para Entregue na aprovação.
+          ja_com_cliente: z.boolean().optional(),
         }),
       )
       .min(1, 'Adicione pelo menos um item'),
   })
   .superRefine((data, ctx) => {
+    const emprestimo =
+      data.natureza_operacao === 'outros' && data.subgrupo === 'EMPRESTIMO'
+    if (!emprestimo && !data.projeto_codigo) {
+      ctx.addIssue({
+        path: ['projeto_codigo'],
+        code: z.ZodIssueCode.custom,
+        message: 'O código do projeto é obrigatório',
+      })
+    }
+    if (emprestimo) {
+      if (!data.cliente_id) {
+        ctx.addIssue({
+          path: ['cliente_id'],
+          code: z.ZodIssueCode.custom,
+          message: 'Selecione o cliente do empréstimo',
+        })
+      }
+      if (!data.data_prevista_devolucao) {
+        ctx.addIssue({
+          path: ['data_prevista_devolucao'],
+          code: z.ZodIssueCode.custom,
+          message: 'Informe a data prevista de devolução',
+        })
+      }
+      data.itens.forEach((item, index) => {
+        if (!item.produto_id) {
+          ctx.addIssue({
+            path: ['itens', index, 'produto_id'],
+            code: z.ZodIssueCode.custom,
+            message: 'No empréstimo a peça precisa vir do cadastro',
+          })
+        }
+        if (!Number.isInteger(Number(item.quantidade))) {
+          ctx.addIssue({
+            path: ['itens', index, 'quantidade'],
+            code: z.ZodIssueCode.custom,
+            message: 'No empréstimo a quantidade é inteira',
+          })
+        }
+      })
+    }
     if (!data.cliente_id && (data.status || 'rascunho') !== 'rascunho') {
       ctx.addIssue({
         path: ['cliente_id'],
@@ -443,7 +493,7 @@ const formSchema = z
         message: 'Selecione um cliente',
       })
     }
-    if (data.natureza_operacao !== 'devolucao' && !data.frete_tipo) {
+    if (data.natureza_operacao !== 'devolucao' && !emprestimo && !data.frete_tipo) {
       ctx.addIssue({
         path: ['frete_tipo'],
         code: z.ZodIssueCode.custom,
@@ -686,6 +736,7 @@ export default function BudgetFormPage() {
       observacoes: '',
       validade: null,
       previsao_entrega: null,
+      data_prevista_devolucao: null,
       perfil: '',
       itens: [],
     },
@@ -812,7 +863,7 @@ export default function BudgetFormPage() {
               arquitetos:orcamento_arquitetos(percentual, arquiteto:arquiteto_id(id, nome)),
               itens:orcamento_itens(
                 id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem,
-                descricao, projeto_item_origem_id, setor_origem,
+                descricao, projeto_item_origem_id, setor_origem, ja_com_cliente,
                 produto:produtos(codigo_produto, referencia, nome)
               )
             `,
@@ -948,6 +999,9 @@ export default function BudgetFormPage() {
             previsao_entrega: budget.previsao_entrega
               ? new Date(`${budget.previsao_entrega}T00:00:00`)
               : null,
+            data_prevista_devolucao: budget.data_prevista_devolucao
+              ? new Date(`${budget.data_prevista_devolucao}T00:00:00`)
+              : null,
             perfil: budget.perfil || '',
             itens: sortItemsByCircuitId(
               budget.itens?.map((i) => ({
@@ -964,6 +1018,7 @@ export default function BudgetFormPage() {
                 projeto_item_origem_id:
                   (i as any).projeto_item_origem_id ?? null,
                 setor_origem: (i as any).setor_origem ?? null,
+                ja_com_cliente: !!(i as any).ja_com_cliente,
               })) || [],
             ),
           })
@@ -993,6 +1048,16 @@ export default function BudgetFormPage() {
   }, [id, isEditing, budgets, form, navigate])
 
   const naturezaOperacao = form.watch('natureza_operacao') || 'venda'
+  // SPEC-223: orçamento de empréstimo (Outros → EMPRESTIMO). Depois de
+  // confirmado, peças e cliente não mudam; tudo passa pelo quadro do empréstimo.
+  const subgrupoAtual = form.watch('subgrupo')
+  const modoEmprestimo =
+    naturezaOperacao === 'outros' && subgrupoAtual === 'EMPRESTIMO'
+  const emprestimoConfirmado =
+    modoEmprestimo &&
+    isEditing &&
+    !!budgetToEdit &&
+    (budgetToEdit.status || 'rascunho') !== 'rascunho'
 
   // SPEC-197: o número da Connect só vem do XML (decisão do usuário 13/10) —
   // do import feito agora ou do que já está gravado no orçamento.
@@ -1734,11 +1799,18 @@ export default function BudgetFormPage() {
         )
       }
 
-      const { data: projeto, error: projError } = await supabase
-        .from('projetos')
-        .select('id, arquivado')
-        .eq('codigo', values.projeto_codigo)
-        .single()
+      // SPEC-223: no empréstimo o projeto é opcional e não há pagamento.
+      const ehEmprestimo =
+        values.natureza_operacao === 'outros' &&
+        values.subgrupo === 'EMPRESTIMO'
+      const { data: projeto, error: projError } =
+        ehEmprestimo && !values.projeto_codigo
+          ? { data: { id: null, arquivado: false }, error: null }
+          : await supabase
+              .from('projetos')
+              .select('id, arquivado')
+              .eq('codigo', values.projeto_codigo)
+              .single()
 
       if (projError || !projeto) {
         form.setError('projeto_codigo', {
@@ -1768,15 +1840,17 @@ export default function BudgetFormPage() {
       // existe mais pra um negócio fechado há semanas.
       const editandoAprovado =
         isEditing && budgetToEdit?.status === 'Orçamento Aprovado'
+      // SPEC-223: empréstimo não tem condição de pagamento.
+      const pularPagamento = editandoAprovado || ehEmprestimo
 
-      if (!editandoAprovado && !values.data_inicio_pagamento) {
+      if (!pularPagamento && !values.data_inicio_pagamento) {
         form.setError('data_inicio_pagamento', {
           message: 'Data de início do pagamento é obrigatória',
         })
         setIsSubmitting(false)
         return
       }
-      if (!editandoAprovado && values.data_inicio_pagamento) {
+      if (!pularPagamento && values.data_inicio_pagamento) {
         const checarData = new Date(values.data_inicio_pagamento)
         checarData.setHours(0, 0, 0, 0)
         const hoje = new Date()
@@ -1816,7 +1890,7 @@ export default function BudgetFormPage() {
             permuta_fornecedor_id: string | null
           }>
         | undefined
-      if (!editandoAprovado) {
+      if (!pularPagamento) {
         const totalParcelas = FORMAS_PAGAMENTO_PARCELAVEIS(
           values.forma_pagamento,
         )
@@ -1917,7 +1991,11 @@ export default function BudgetFormPage() {
         desconto_global: values.desconto_global ?? 0,
         desconto_tipo: values.desconto_tipo || 'percentual',
         valor_sinal: values.valor_sinal ?? 0,
-        forma_pagamento: values.forma_pagamento || null,
+        forma_pagamento: ehEmprestimo ? null : values.forma_pagamento || null,
+        data_prevista_devolucao:
+          ehEmprestimo && values.data_prevista_devolucao
+            ? format(values.data_prevista_devolucao, 'yyyy-MM-dd')
+            : null,
         // Achado 2026-08-14: ao editar orçamento já aprovado, não
         // recalcula/sobrescreve os campos de prazo de pagamento — eles só
         // registram o histórico da negociação original, e as
@@ -2009,6 +2087,16 @@ export default function BudgetFormPage() {
             })
           if (histErr) console.warn('Histórico da reimportação:', histErr)
         }
+        if (ehEmprestimo) {
+          // SPEC-223: fica no orçamento para tirar as fotos e confirmar.
+          await fetchBudgets()
+          form.reset(values)
+          toast.success('Empréstimo salvo.', {
+            description:
+              'Quando as peças forem sair, tire as fotos e use "Confirmar empréstimo" no quadro do empréstimo.',
+          })
+          return
+        }
         if (modoVinculoConnect) {
           await vincularDepoisDeSalvar(budgetToEdit.id)
         } else {
@@ -2024,6 +2112,16 @@ export default function BudgetFormPage() {
           values.itens,
           arquitetosPayload,
         )
+        if (ehEmprestimo) {
+          // SPEC-223: abre o orçamento salvo para tirar as fotos e confirmar.
+          toast.success('Empréstimo salvo como rascunho.', {
+            description:
+              'Quando as peças forem sair, tire as fotos e use "Confirmar empréstimo" no quadro do empréstimo.',
+            duration: 8000,
+          })
+          navigate(`/budgets/${newBudgetId}`)
+          return
+        }
         if (modoVinculoConnect) {
           await vincularDepoisDeSalvar(newBudgetId)
         } else {
@@ -2830,7 +2928,7 @@ export default function BudgetFormPage() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, setor_origem, produto:produtos(codigo_produto, referencia, nome)',
+          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, setor_origem, ja_com_cliente, produto:produtos(codigo_produto, referencia, nome)',
         )
         .eq('orcamento_id', budgetToEdit.id)
       if (!error && data) {
@@ -3195,6 +3293,7 @@ export default function BudgetFormPage() {
           <Button
             onClick={form.handleSubmit(onSubmit, onInvalid)}
             disabled={isSubmitting}
+            className={emprestimoConfirmado ? 'hidden' : undefined}
           >
             {isSubmitting ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -3217,6 +3316,83 @@ export default function BudgetFormPage() {
         >
           {resumoOrcamento}
 
+          {/* SPEC-223: quadro do empréstimo (confirmar, termo, devolução,
+              virar venda, cancelar). */}
+          {modoEmprestimo && (
+            <Card className="border-orange-300">
+              <CardHeader>
+                <CardTitle>Empréstimo</CardTitle>
+                <CardDescription>
+                  As peças continuam no estoque e não geram financeiro. O que o
+                  cliente ficar vira um orçamento de venda.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isEditing && budgetToEdit ? (
+                  <EmprestimoPainel
+                    orcamentoId={budgetToEdit.id}
+                    bloqueioConfirmar={
+                      form.formState.isDirty
+                        ? 'Salve as alterações antes de confirmar o empréstimo.'
+                        : null
+                    }
+                    pecas={(form.watch('itens') || []).map((i) => ({
+                      produto_id: i.produto_id || '',
+                      nome: i.descricao || '',
+                      quantidade: Number(i.quantidade) || 0,
+                    }))}
+                    onAlterado={() => void fetchBudgets()}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Escolha o cliente, as peças e a data prevista de devolução e
+                    salve. Depois, quando as peças forem sair, tire as fotos e
+                    confirme o empréstimo aqui.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* SPEC-223: venda que veio do "Virar venda" de um empréstimo. */}
+          {budgetToEdit?.emprestimo_origem_id && (
+            <Card className="border-blue-300">
+              <CardHeader>
+                <CardTitle>Peças que já estão com o cliente</CardTitle>
+                <CardDescription>
+                  Esta venda veio de um empréstimo. Peça marcada vai direto para
+                  Entregue na aprovação financeira (não passa pela separação).
+                  Desmarque se ela ainda vai sair do estoque.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {(form.watch('itens') || []).map((item, index) => (
+                  <label
+                    key={item.uid || index}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <Checkbox
+                      checked={!!item.ja_com_cliente}
+                      disabled={emprestimoConfirmado}
+                      onCheckedChange={(v) =>
+                        form.setValue(`itens.${index}.ja_com_cliente`, !!v, {
+                          shouldDirty: true,
+                        })
+                      }
+                    />
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {item.custom_id || '—'}
+                    </span>
+                    <span>{item.descricao || 'Peça'}</span>
+                    <span className="text-muted-foreground">
+                      × {Number(item.quantidade) || 0}
+                    </span>
+                  </label>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* SPEC-177: o formulário vira 3 abas. As abas ficam montadas (só
               escondidas) para não perder estado de campos e modais; o resumo
               de valores fica na barra fixa do rodapé, visível em todas. */}
@@ -3235,9 +3411,11 @@ export default function BudgetFormPage() {
                   {fields.length}
                 </span>
               </TabsTrigger>
-              <TabsTrigger value="pagamento" className="px-4 py-2">
-                3. Condição de Pagamento
-              </TabsTrigger>
+              {!modoEmprestimo && (
+                <TabsTrigger value="pagamento" className="px-4 py-2">
+                  3. Condição de Pagamento
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent
@@ -3469,6 +3647,50 @@ export default function BudgetFormPage() {
                         )
                       }}
                     />
+
+                    {/* SPEC-223: orçamento de empréstimo. */}
+                    {modoEmprestimo && (
+                      <div className="space-y-3 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-950">
+                        <p>
+                          <strong>Empréstimo:</strong> o cliente leva as peças
+                          e assina o termo. Não sai do estoque, não reserva e não
+                          gera financeiro. Cliente obrigatório; projeto
+                          opcional; peças só do cadastro, em quantidade inteira.
+                          O valor de cada peça é o cobrado em caso de dano.
+                        </p>
+                        <FormField
+                          control={form.control}
+                          name="data_prevista_devolucao"
+                          render={({ field }) => (
+                            <FormItem className="max-w-xs">
+                              <FormLabel>
+                                Data prevista de devolução{' '}
+                                <span className="text-red-500">*</span>
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="date"
+                                  disabled={emprestimoConfirmado}
+                                  value={
+                                    field.value
+                                      ? format(field.value, 'yyyy-MM-dd')
+                                      : ''
+                                  }
+                                  onChange={(e) =>
+                                    field.onChange(
+                                      e.target.value
+                                        ? new Date(`${e.target.value}T00:00:00`)
+                                        : null,
+                                    )
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* SPEC-182 (D1/D2): a devolução se liga ao código do
@@ -3628,7 +3850,13 @@ export default function BudgetFormPage() {
                         <FormItem>
                           <FormLabel className="flex items-center gap-1">
                             Código do Projeto{' '}
-                            <span className="text-red-500">*</span>
+                            {modoEmprestimo ? (
+                              <span className="text-xs font-normal text-muted-foreground">
+                                (opcional no empréstimo)
+                              </span>
+                            ) : (
+                              <span className="text-red-500">*</span>
+                            )}
                           </FormLabel>
                           <FormControl>
                             <div className="flex gap-2 items-center">
