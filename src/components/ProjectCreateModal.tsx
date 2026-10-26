@@ -49,7 +49,6 @@ const STATUS_OPTS = [
 ]
 
 const schema = z.object({
-  codigo: z.string().min(1, 'Obrigatório').max(50, 'Max 50 chars'),
   nome: z.string().min(1, 'Obrigatório'),
   nivel_estrategico: z
     .enum(['1', '2', '3', '4'])
@@ -100,7 +99,6 @@ export function ProjectCreateModal({
     if (open) {
       form.reset({
         status: 'Estudo Inicial',
-        codigo: '',
         nome: '',
         nivel_estrategico: '',
         cidade: '',
@@ -148,16 +146,6 @@ export function ProjectCreateModal({
   async function onSubmit(val: z.infer<typeof schema>) {
     try {
       setLoading(true)
-      const { data: exists } = await supabase
-        .from('projetos')
-        .select('id')
-        .eq('codigo', val.codigo)
-        .maybeSingle()
-      if (exists)
-        return form.setError('codigo', {
-          message: 'Este código de projeto já está em uso',
-        })
-
       // SPEC-077: responsavel_nome precisa ir junto no mesmo INSERT porque
       // o trigger fn_sync_equipe_por_responsavel (BEFORE INSERT/UPDATE OF
       // responsavel_nome) resolve a equipe/comissão do projeto a partir
@@ -168,8 +156,9 @@ export function ProjectCreateModal({
 
       const { data: novo, error } = await supabase
         .from('projetos')
+        // SPEC-228: sem código — o banco grava um provisório (PROV-NNNN) e o
+        // oficial vem do fluxo do SharePoint (que também cria o grupo no Teams).
         .insert({
-          codigo: val.codigo,
           nome: val.nome,
           nivel_estrategico: val.nivel_estrategico || null,
           status: val.status,
@@ -188,8 +177,8 @@ export function ProjectCreateModal({
           engenheiro_id: val.responsavel_obra_id || null,
           area_do_projeto: val.tipo_projeto ? { tipo: val.tipo_projeto } : null,
           historico: [],
-        })
-        .select('id')
+        } as any)
+        .select('id, codigo')
         .single()
 
       if (error) throw error
@@ -215,7 +204,7 @@ export function ProjectCreateModal({
       }
 
       toast.success('Projeto criado com sucesso!')
-      onSuccess({ codigo: val.codigo })
+      onSuccess({ codigo: novo.codigo, id: novo.id })
       onOpenChange(false)
     } catch (err: any) {
       toast.error(err.message || 'Erro ao criar projeto')
@@ -240,19 +229,12 @@ export function ProjectCreateModal({
               className="space-y-4"
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="codigo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Código *</FormLabel>
-                      <FormControl>
-                        <Input {...field} value={field.value || ''} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Código</p>
+                  <p className="flex h-10 items-center rounded-md border border-dashed px-3 text-sm text-muted-foreground">
+                    Gerado pelo SharePoint em alguns minutos
+                  </p>
+                </div>
                 <FormField
                   control={form.control}
                   name="nome"

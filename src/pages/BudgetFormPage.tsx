@@ -568,6 +568,10 @@ export default function BudgetFormPage() {
   // (natureza_operacao = 'venda'); ao salvar chama vincular_orcamento_connect.
   const [modoVinculoConnect, setModoVinculoConnect] = useState(false)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
+  // SPEC-228: projeto criado aqui nasce com código provisório (PROV-NNNN) que o
+  // SharePoint troca pelo oficial em alguns minutos — guarda o id para o salvar
+  // achar o projeto mesmo depois da troca.
+  const projetoCriadoRef = useRef<{ codigo: string; id: string } | null>(null)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
   const [productSearchRowIndex, setProductSearchRowIndex] = useState<
@@ -1803,14 +1807,24 @@ export default function BudgetFormPage() {
       const ehEmprestimo =
         values.natureza_operacao === 'outros' &&
         values.subgrupo === 'EMPRESTIMO'
+      const projetoCriado =
+        projetoCriadoRef.current?.codigo === values.projeto_codigo
+          ? projetoCriadoRef.current
+          : null
       const { data: projeto, error: projError } =
         ehEmprestimo && !values.projeto_codigo
           ? { data: { id: null, arquivado: false }, error: null }
-          : await supabase
-              .from('projetos')
-              .select('id, arquivado')
-              .eq('codigo', values.projeto_codigo)
-              .single()
+          : projetoCriado
+            ? await supabase
+                .from('projetos')
+                .select('id, arquivado')
+                .eq('id', projetoCriado.id)
+                .single()
+            : await supabase
+                .from('projetos')
+                .select('id, arquivado')
+                .eq('codigo', values.projeto_codigo)
+                .single()
 
       if (projError || !projeto) {
         form.setError('projeto_codigo', {
@@ -5054,6 +5068,7 @@ export default function BudgetFormPage() {
             open={isProjectModalOpen}
             onOpenChange={setIsProjectModalOpen}
             onSuccess={async (newProj: any) => {
+              projetoCriadoRef.current = { codigo: newProj.codigo, id: newProj.id }
               if (fetchProjetos) await fetchProjetos()
               form.setValue('projeto_codigo', newProj.codigo, {
                 shouldValidate: true,
