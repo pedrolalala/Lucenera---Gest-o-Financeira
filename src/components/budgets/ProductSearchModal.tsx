@@ -64,7 +64,20 @@ export interface ProductSearchItem {
   // (estoque_itens.local — hoje só "Estoque"/"Showroom") — pedido pendente
   // de reunião anterior, nunca implementado nesta tela.
   setor: string | null
+  // SPEC-235 C/D: Normal | Lançamento | Fora de Linha (vw_consulta_estoque; nulo = Normal)
+  status_comercial?: string | null
   source: 'produtos' | 'revenda_ubiqua'
+}
+
+const FORA_DE_LINHA = 'Fora de Linha'
+
+/** SPEC-235 C: fora de linha só entra com saldo e até o disponível (o banco também trava). */
+function validarForaDeLinha(product: ProductSearchItem, entries: LEntry[]): string | null {
+  if (product.status_comercial !== FORA_DE_LINHA) return null
+  const total = entries.reduce((s, e) => s + (Number(e.quantidade) || 0), 0)
+  if (total > product.estoque_disponivel)
+    return `peça fora de linha — só ${product.estoque_disponivel} disponível (pedido: ${total}).`
+  return null
 }
 
 // SPEC-080: cada peça selecionada carrega sua própria lista de L's — o
@@ -226,6 +239,10 @@ export function ProductSearchModal({
     Map<string, { product: ProductSearchItem; entries: LEntry[] }>
   >(new Map())
   const [createOpen, setCreateOpen] = useState(false)
+  // SPEC-235 C: peças desativadas que casam com a busca — não aparecem na lista, só o aviso
+  const [desativadas, setDesativadas] = useState<
+    { codigo_produto: number | null; nome: string }[]
+  >([])
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
@@ -387,7 +404,7 @@ export function ProductSearchModal({
           // Disponível = Geral − maior(reserva + separação do sistema, reserva da
           // Connect), o mesmo número da Consulta de Produtos.
           (supabase.from as any)('vw_consulta_estoque')
-            .select('produto_id, estoque_total, estoque_disponivel')
+            .select('produto_id, estoque_total, estoque_disponivel, status_comercial')
             .in('produto_id', produtoIds),
           // SPEC-113: setor físico (estoque_itens.local) onde a peça tem
           // saldo disponível — mesma tabela já usada pelo StockPopover
@@ -401,13 +418,14 @@ export function ProductSearchModal({
 
         const stockMap = new Map<
           string,
-          { estoque_total: number; estoque_disponivel: number }
+          { estoque_total: number; estoque_disponivel: number; status_comercial: string | null }
         >(
           (stockData || []).map((s: any) => [
             s.produto_id,
             {
               estoque_total: s.estoque_total ?? 0,
               estoque_disponivel: s.estoque_disponivel ?? 0,
+              status_comercial: s.status_comercial ?? null,
             },
           ]),
         )
@@ -426,6 +444,7 @@ export function ProductSearchModal({
           if (stock) {
             p.estoque_total = stock.estoque_total
             p.estoque_disponivel = stock.estoque_disponivel
+            p.status_comercial = stock.status_comercial
           }
           const setores = setorMap.get(p.id)
           p.setor = setores && setores.length > 0 ? setores.join(' + ') : null
@@ -461,6 +480,30 @@ export function ProductSearchModal({
     setHasMore(true)
     fetchPage(0, false)
   }, [open, debounced, brandFilter, catFilter, fornecedorFilter, fetchPage])
+
+  // SPEC-235 C: a busca (buscar_produtos_fuzzy) só traz peça ativa — avisa quando o termo casa com desativada
+  useEffect(() => {
+    const termo = open ? (debounced || '').trim().replace(/[%,()]/g, ' ') : ''
+    if (!termo) {
+      setDesativadas([])
+      return
+    }
+    let cancelled = false
+    const filtros = [`nome.ilike.%${termo}%`, `referencia.ilike.%${termo}%`]
+    if (/^\d+$/.test(termo)) filtros.push(`codigo_produto.eq.${termo}`)
+    supabase
+      .from('produtos')
+      .select('codigo_produto, nome')
+      .eq('ativo', false)
+      .or(filtros.join(','))
+      .limit(5)
+      .then(({ data }) => {
+        if (!cancelled) setDesativadas((data as any[]) || [])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, debounced])
 
   const loadMore = useCallback(() => {
     if (loadingMore || loading || !hasMore) return
@@ -504,6 +547,14 @@ export function ProductSearchModal({
   }
 
   const toggleSelect = (p: ProductSearchItem) => {
+    if (
+      !selected.has(p.id) &&
+      p.status_comercial === FORA_DE_LINHA &&
+      p.estoque_disponivel <= 0
+    ) {
+      toast.error(`${p.codigo_produto ?? ''} ${p.nome}: fora de linha e sem saldo — não pode entrar no orçamento.`)
+      return
+    }
     setSelected((s) => {
       const n = new Map(s)
       if (n.has(p.id)) n.delete(p.id)
@@ -528,6 +579,7 @@ export function ProductSearchModal({
         sorted.forEach((p) => n.delete(p.id))
       } else {
         sorted.forEach((p) => {
+          if (p.status_comercial === FORA_DE_LINHA && p.estoque_disponivel <= 0) return
           if (!n.has(p.id)) n.set(p.id, { product: p, entries: [] })
         })
       }
@@ -579,7 +631,7 @@ export function ProductSearchModal({
   const validationErrors = Array.from(selected.values())
     .map(({ product, entries }) => ({
       product,
-      error: validarEntries(entries),
+      error: validarEntries(entries) || validarForaDeLinha(product, entries),
     }))
     .filter((v) => v.error)
 
@@ -674,6 +726,15 @@ export function ProductSearchModal({
             </Button>
           </div>
 
+          {desativadas.length > 0 && (
+            <div className="px-6 py-2 border-b bg-red-50 text-sm text-red-700">
+              Peça desativada — não pode entrar no orçamento:{' '}
+              {desativadas
+                .map((d) => `${d.codigo_produto ?? ''} ${d.nome}`.trim())
+                .join(' · ')}
+            </div>
+          )}
+
           <div ref={scrollContainerRef} className="flex-1 overflow-auto">
             {loading ? (
               <div className="flex items-center justify-center h-full">
@@ -764,6 +825,16 @@ export function ProductSearchModal({
                               <div className="line-clamp-2 max-w-[200px] text-sm text-gray-600">
                                 {p.nome}
                               </div>
+                              {p.status_comercial === FORA_DE_LINHA && (
+                                <span className="shrink-0 text-[9px] text-orange-700 font-bold uppercase whitespace-nowrap px-1 py-0.5 rounded bg-orange-50 border border-orange-200">
+                                  Fora de linha
+                                </span>
+                              )}
+                              {p.status_comercial === 'Lançamento' && (
+                                <span className="shrink-0 text-[9px] text-sky-700 font-bold uppercase whitespace-nowrap px-1 py-0.5 rounded bg-sky-50 border border-sky-200">
+                                  Lançamento
+                                </span>
+                              )}
                               {selected.has(p.id) && (
                                 <Badge
                                   variant="default"

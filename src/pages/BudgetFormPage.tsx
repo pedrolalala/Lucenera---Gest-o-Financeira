@@ -27,6 +27,7 @@ import {
   Link2,
   MoreVertical,
   LineChart,
+  Search,
 } from 'lucide-react'
 
 import { cn, formatCircuitId, sortItemsByCircuitId } from '@/lib/utils'
@@ -58,8 +59,13 @@ import {
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
   ArchitectSplitPicker,
+  redistribuirPercentuais,
   type ArquitetoSplit,
 } from '@/components/ArchitectSplitPicker'
+import {
+  BuscaPessoaDialog,
+  type ModoBuscaPessoa,
+} from '@/components/budgets/BuscaPessoaDialog'
 import { ProjectCreateModal } from '@/components/ProjectCreateModal'
 import { ClientCreateModal } from '@/components/ClientCreateModal'
 import {
@@ -573,6 +579,8 @@ export default function BudgetFormPage() {
   // achar o projeto mesmo depois da troca.
   const projetoCriadoRef = useRef<{ codigo: string; id: string } | null>(null)
   const [isClientModalOpen, setIsClientModalOpen] = useState(false)
+  // SPEC-235 F: dois cliques (ou a lupa) em cliente/projeto/arquiteto abrem a busca do cadastro
+  const [buscaPessoa, setBuscaPessoa] = useState<ModoBuscaPessoa | null>(null)
   const [isProductSearchOpen, setIsProductSearchOpen] = useState(false)
   const [productSearchRowIndex, setProductSearchRowIndex] = useState<
     number | null
@@ -3874,7 +3882,13 @@ export default function BudgetFormPage() {
                           </FormLabel>
                           <FormControl>
                             <div className="flex gap-2 items-center">
-                              <div className="flex-1">
+                              <div
+                                className="flex-1"
+                                title="Dois cliques: buscar no cadastro"
+                                onDoubleClick={() =>
+                                  !travadoPelaVenda && setBuscaPessoa('projeto')
+                                }
+                              >
                                 <SearchableSelect
                                   options={projetos
                                     .filter(
@@ -3901,6 +3915,16 @@ export default function BudgetFormPage() {
                                   disabled={travadoPelaVenda}
                                 />
                               </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                disabled={travadoPelaVenda}
+                                onClick={() => setBuscaPessoa('projeto')}
+                                title="Buscar projeto no cadastro"
+                              >
+                                <Search className="w-4 h-4" />
+                              </Button>
                               <Button
                                 type="button"
                                 variant="outline"
@@ -4045,7 +4069,11 @@ export default function BudgetFormPage() {
                           )}
                           <FormControl>
                             <div className="flex gap-2 items-center">
-                              <div className="flex-1">
+                              <div
+                                className="flex-1"
+                                title="Dois cliques: buscar no cadastro"
+                                onDoubleClick={() => setBuscaPessoa('cliente')}
+                              >
                                 <SearchableSelect
                                   options={clientes.map((c) => {
                                     // SPEC-068: combina Razão Social + Nome
@@ -4079,6 +4107,15 @@ export default function BudgetFormPage() {
                                 type="button"
                                 variant="outline"
                                 size="icon"
+                                onClick={() => setBuscaPessoa('cliente')}
+                                title="Buscar cliente no cadastro"
+                              >
+                                <Search className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
                                 onClick={() => setIsClientModalOpen(true)}
                                 title="Criar Novo Cliente"
                               >
@@ -4096,13 +4133,27 @@ export default function BudgetFormPage() {
                       name="arquitetos"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Arquiteto / Profissional</FormLabel>
+                          <FormLabel className="flex items-center justify-between gap-2">
+                            Arquiteto / Profissional
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs font-normal text-primary hover:underline"
+                              onClick={() => setBuscaPessoa('arquiteto')}
+                            >
+                              <Search className="w-3 h-3" /> Buscar no cadastro
+                            </button>
+                          </FormLabel>
                           <FormControl>
-                            <ArchitectSplitPicker
-                              value={field.value}
-                              onChange={field.onChange}
-                              options={arquitetos}
-                            />
+                            <div
+                              title="Dois cliques: buscar no cadastro"
+                              onDoubleClick={() => setBuscaPessoa('arquiteto')}
+                            >
+                              <ArchitectSplitPicker
+                                value={field.value}
+                                onChange={field.onChange}
+                                options={arquitetos}
+                              />
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -5063,6 +5114,32 @@ export default function BudgetFormPage() {
           </Tabs>
 
           {barraTotais}
+
+          <BuscaPessoaDialog
+            modo={buscaPessoa ?? 'cliente'}
+            open={!!buscaPessoa}
+            onClose={() => setBuscaPessoa(null)}
+            onSelect={(p) => {
+              if (buscaPessoa === 'projeto') {
+                form.setValue('projeto_codigo', p.valor, { shouldValidate: true })
+                handleProjectSelect(p.valor)
+              } else if (buscaPessoa === 'cliente') {
+                form.setValue('cliente_id', p.valor, { shouldValidate: true })
+              } else if (buscaPessoa === 'arquiteto') {
+                const atuais: ArquitetoSplit[] = form.getValues('arquitetos') || []
+                if (!atuais.some((a) => a.arquiteto_id === p.valor)) {
+                  form.setValue(
+                    'arquitetos',
+                    redistribuirPercentuais([
+                      ...atuais,
+                      { arquiteto_id: p.valor, nome: p.nome, percentual: 0 },
+                    ]),
+                    { shouldValidate: true },
+                  )
+                }
+              }
+            }}
+          />
 
           <ProjectCreateModal
             open={isProjectModalOpen}
