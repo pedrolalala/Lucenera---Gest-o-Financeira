@@ -169,26 +169,44 @@ const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
   devolucao: ['TROCA DEV', 'CASA COR ENTRADA'],
   // SPEC-223: EMPRESTIMO = orçamento de empréstimo (sem financeiro; confirma
   // dentro do orçamento, devolve ou vira venda).
+  // SPEC-234 A1 (reunião 27/10): saíram RETORNO, TRANSFERENCIA, OUTRAS ENTRADAS (orçamento é saída),
+  // ACERTO CITEL e INVENTARIO (vai ter sistema próprio de inventário).
   outros: [
     'EMPRESTIMO',
     'CASA COR SAIDA',
     'REMESSA TRANSP',
-    'RETORNO',
-    'TRANSFERENCIA',
     'GARANTIA',
-    'OUTRAS ENTRADAS',
     'OUTRAS SAIDAS',
-    'ACERTO CITEL',
-    'INVENTARIO',
     'SAIDA INDUSTRIALIZACAO',
     'BONIFICACAO',
     'USO E CONSUMO',
     'DESCARTE',
-    'REMESSA CONSERTO',
-    'DEV EM GARANTIA',
-    'DEV COMPRA',
   ],
-  sac: ['SAC'],
+  // SPEC-234 A2: SAC = o que vai para o fornecedor (remessa para conserto, devolução em garantia, devolução de compra).
+  sac: ['REMESSA CONSERTO', 'DEV EM GARANTIA', 'DEV COMPRA'],
+}
+
+// SPEC-234 A: o que cada Tipo de Outros/SAC faz na aprovação (espelha public.tipo_operacao_regra no banco).
+const REGRA_TIPO_OPERACAO: Record<string, string> = {
+  GARANTIA:
+    'Sai do Estoque Geral para o cliente (reserva / entrega futura e entrega, como uma venda), sem parcela, boleto nem número de venda.',
+  'OUTRAS SAIDAS':
+    'Sai do estoque (reserva / entrega futura e entrega), sem parcela, boleto nem número de venda.',
+  BONIFICACAO:
+    'Sai do estoque para o cliente (reserva / entrega futura e entrega), sem parcela, boleto nem número de venda.',
+  'CASA COR SAIDA':
+    'Sai do estoque para a exposição (reserva / entrega futura e entrega), sem parcela, boleto nem número de venda.',
+  'USO E CONSUMO': 'Baixa direto do Estoque Geral na aprovação. Não gera financeiro.',
+  DESCARTE: 'Baixa direto do Estoque Geral na aprovação (peça quebrada, danificada). Não gera financeiro.',
+  'REMESSA TRANSP': 'Não mexe no estoque nem no financeiro — serve para emitir a nota de remessa.',
+  'SAIDA INDUSTRIALIZACAO':
+    'Não mexe no estoque nem no financeiro — serve para emitir a nota de saída para industrialização.',
+  'REMESSA CONSERTO':
+    'Não mexe no estoque nem no financeiro — peça já trocada para o cliente, vai ao fornecedor para conserto.',
+  'DEV EM GARANTIA':
+    'Não mexe no estoque nem no financeiro — devolução da peça queimada ao fornecedor.',
+  'DEV COMPRA':
+    'Ainda não pode ser aprovada: falta ligar com a nota de compra e o Contas a Pagar.',
 }
 
 // SPEC-177: em qual aba do formulário cada campo aparece (usado para abrir a
@@ -3631,6 +3649,13 @@ export default function BudgetFormPage() {
                       </div>
                     )}
 
+                    {(naturezaOperacao === 'outros' || naturezaOperacao === 'sac') &&
+                      REGRA_TIPO_OPERACAO[form.watch('subgrupo')] && (
+                        <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 max-w-2xl">
+                          {REGRA_TIPO_OPERACAO[form.watch('subgrupo')]}
+                        </div>
+                      )}
+
                     <FormField
                       control={form.control}
                       name="subgrupo"
@@ -3656,7 +3681,11 @@ export default function BudgetFormPage() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {opcoes.map((o) => (
+                                  {/* SPEC-234 A1: orçamento antigo com Tipo que saiu da lista continua mostrando o dele */}
+                                  {(field.value && !opcoes.includes(field.value)
+                                    ? [...opcoes, field.value]
+                                    : opcoes
+                                  ).map((o) => (
                                     <SelectItem key={o} value={o}>
                                       {o}
                                     </SelectItem>
