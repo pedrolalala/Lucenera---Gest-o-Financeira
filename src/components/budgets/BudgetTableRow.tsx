@@ -324,8 +324,9 @@ export function BudgetTableRow({
   // SPEC-109: 2 modelos de PDF — "cliente" (padrão, sem referência) e
   // "interno" (com Código real + Referência, usado quando o item não tem
   // cadastro e o código sai "0" — a referência ajuda a identificar a peça).
+  // SPEC-241: "cliente_ncm" = o do cliente com a coluna NCM (clientes PJ).
   const handleDownloadPdf = async (
-    modelo: 'cliente' | 'interno' = 'cliente',
+    modelo: 'cliente' | 'cliente_ncm' | 'interno' = 'cliente',
   ) => {
     try {
       setIsPrinting(true)
@@ -675,6 +676,9 @@ export function BudgetTableRow({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => handleDownloadPdf('cliente')}>
                   PDF para o cliente
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownloadPdf('cliente_ncm')}>
+                  PDF para o cliente com NCM
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleDownloadPdf('interno')}>
                   PDF interno (com código e referência)
