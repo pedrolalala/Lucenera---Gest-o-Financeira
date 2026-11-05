@@ -3589,8 +3589,9 @@ export default function BudgetFormPage() {
                         >
                           <Headset className="w-3.5 h-3.5 mr-1.5" /> SAC
                         </Button>
-                        {/* SPEC-197: venda já aprovada na Connect — por dentro
-                        é venda; o vínculo é feito ao salvar. */}
+                        {/* SPEC-197 / SPEC-244: "XML importado da Connect" (antes "Vínculo Connect"). Por dentro é venda; o vínculo é feito ao
+                        salvar. Com a Connect em paralelo, a opção é só de administradores. */}
+                        {role === 'admin' && (
                         <Button
                           type="button"
                           size="sm"
@@ -3610,9 +3611,10 @@ export default function BudgetFormPage() {
                             )
                           }}
                         >
-                          <Link2 className="w-3.5 h-3.5 mr-1.5" /> Vínculo
-                          Connect
+                          <Link2 className="w-3.5 h-3.5 mr-1.5" /> XML importado
+                          da Connect
                         </Button>
+                        )}
                       </div>
                       {isEditing && !podeEscolherVinculoConnect ? (
                         <span className="text-xs text-muted-foreground">
@@ -3620,7 +3622,7 @@ export default function BudgetFormPage() {
                         </span>
                       ) : isEditing && !modoVinculoConnect ? (
                         <span className="text-xs text-muted-foreground">
-                          Só é possível trocar para "Vínculo Connect".
+                          Só é possível trocar para "XML importado da Connect".
                         </span>
                       ) : naturezaOperacao === 'devolucao' ? (
                         <span className="text-xs text-muted-foreground">
@@ -3634,10 +3636,10 @@ export default function BudgetFormPage() {
                     {modoVinculoConnect && (
                       <div className="rounded-md border border-purple-200 bg-purple-50 p-3 text-sm text-purple-900 dark:border-purple-900 dark:bg-purple-950/40 dark:text-purple-100">
                         <p className="font-medium">
-                          Venda já aprovada na Connect
+                          Orçamento importado do XML da Connect
                         </p>
                         <p className="mt-1">
-                          Liga as peças e o valor ao projeto e a venda recebe o
+                          Liga as peças e o valor ao projeto e o orçamento recebe o
                           número da Connect. Não reserva estoque, não gera
                           parcela/boleto e não vai para emissão de nota.
                         </p>

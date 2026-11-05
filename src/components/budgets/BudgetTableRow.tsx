@@ -110,10 +110,10 @@ export function BudgetTableRow({
   const canDesfazerAprovacao = role === 'admin' || role === 'gerente'
   // SPEC-195: venda já aprovada na Connect (veio do XML) — vincula sem estoque/financeiro.
   const isVinculoConnect = !!budget.vinculo_connect
-  // SPEC-197: todos que fazem orçamento podem vincular (o banco confere a
-  // permissão de criar/aprovar no Hub); desfazer continua só para quem aprova.
+  // SPEC-197 / SPEC-244: com a Connect em paralelo, "XML importado da Connect" (antes "Vínculo Connect") é só de administradores
+  // (o banco também confere); desfazer continua só para quem aprova.
   const podeVincularConnect =
-    role !== 'viewer' &&
+    role === 'admin' &&
     budget.origem_connect_cod_orcamento != null &&
     !isVinculoConnect &&
     (budget as any).natureza_operacao !== 'devolucao' &&
@@ -225,12 +225,12 @@ export function BudgetTableRow({
     try {
       setIsVinculando(true)
       const r = await vincularVendaConnect(budget)
-      toast.success('Venda da Connect vinculada', {
+      toast.success('XML da Connect vinculado', {
         description: `Venda ${semPrefixo(r?.numero_venda) || ''}: ${r?.projeto_itens_criados ?? 0} peças ligadas ao projeto, sem reserva de estoque e sem financeiro.`,
       })
       setShowVincularConnect(false)
     } catch (error: any) {
-      toast.error('Falha ao vincular venda da Connect', {
+      toast.error('Falha ao vincular o XML da Connect', {
         description: error?.message,
       })
     } finally {
@@ -244,7 +244,7 @@ export function BudgetTableRow({
       setIsDesfazendoAprovacao(true)
       if (isVinculoConnect) {
         await desvincularVendaConnect(budget, motivoDesfazerAprovacao.trim())
-        toast.success('Vínculo com a Connect desfeito', {
+        toast.success('Vínculo do XML da Connect desfeito', {
           description:
             'As peças ligadas ao projeto por esse vínculo foram removidas.',
         })
@@ -428,7 +428,7 @@ export function BudgetTableRow({
               número da venda, distinto do orçamento/projeto acima. */}
           {budget.numero_venda && (
             <div className="text-xs text-gray-400 mt-0.5">
-              Venda: {semPrefixo(budget.numero_venda)}
+              {isVinculoConnect ? 'Nº Connect' : 'Venda'}: {semPrefixo(budget.numero_venda)}
             </div>
           )}
         </TableCell>
@@ -461,9 +461,9 @@ export function BudgetTableRow({
               <Badge
                 variant="outline"
                 className="border-violet-300 bg-violet-50 text-violet-700 w-fit"
-                title="Venda aprovada na Connect, só vinculada aqui: sem reserva de estoque, sem financeiro e sem nota."
+                title="Orçamento importado do XML da Connect: só registro aqui, sem reserva de estoque, sem financeiro e sem nota."
               >
-                <Link2 className="h-3 w-3 mr-1" /> Vínculo Connect
+                <Link2 className="h-3 w-3 mr-1" /> XML importado da Connect
                 {budget.origem_connect_cod_orcamento != null &&
                   ` nº ${budget.origem_connect_cod_orcamento}`}
               </Badge>
@@ -631,7 +631,7 @@ export function BudgetTableRow({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
-                title="Vincular venda da Connect (já aprovada lá)"
+                title="Vincular XML importado da Connect (já aprovado lá) — só administradores"
                 onClick={() => setShowVincularConnect(true)}
               >
                 <Link2 className="h-4 w-4" />
@@ -648,7 +648,7 @@ export function BudgetTableRow({
                   className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
                   title={
                     isVinculoConnect
-                      ? 'Desfazer vínculo com a Connect'
+                      ? 'Desfazer vínculo do XML da Connect'
                       : 'Desfazer Aprovação Financeira'
                   }
                   onClick={() => setShowDesfazerAprovacao(true)}
@@ -807,7 +807,7 @@ export function BudgetTableRow({
             <DialogTitle className="flex items-center gap-2 text-orange-700">
               <Undo2 className="h-5 w-5" />
               {isVinculoConnect
-                ? 'Desfazer vínculo com a Connect'
+                ? 'Desfazer vínculo do XML da Connect'
                 : 'Desfazer Aprovação Financeira'}
             </DialogTitle>
             <DialogDescription>
@@ -879,7 +879,7 @@ export function BudgetTableRow({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-violet-700">
               <Link2 className="h-5 w-5" />
-              Vincular venda da Connect
+              Vincular XML importado da Connect
             </DialogTitle>
             <DialogDescription>
               Use só para venda que <strong>já foi aprovada na Connect</strong>{' '}
