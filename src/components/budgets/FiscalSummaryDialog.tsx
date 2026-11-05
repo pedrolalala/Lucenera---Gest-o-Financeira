@@ -32,7 +32,17 @@ export function FiscalSummaryDialog({ budget }: { budget: Budget }) {
         item.quantidade * item.preco_unitario * (1 - (item.desconto || 0) / 100)
       )
     }, 0) || 0
-  const valorLiquido = subtotalItens * (1 - (budget.desconto_global || 0) / 100)
+  // desconto_global guarda o número digitado (10 = "10%" ou 150 = "R$150,00");
+  // desconto_tipo diz como ler. Mesma regra do formulário/resumo financeiro. O
+  // desconto em R$ nunca passa do bruto e o % nunca passa de 100.
+  const descontoNum = Number(budget.desconto_global) || 0
+  const descontoValor =
+    budget.desconto_tipo === 'valor'
+      ? Math.min(Math.max(descontoNum, 0), subtotalItens)
+      : subtotalItens * (Math.min(Math.max(descontoNum, 0), 100) / 100)
+  const valorLiquido = subtotalItens - descontoValor
+  // fator rateado igualmente entre os itens (desconto proporcional ao subtotal)
+  const fatorLiquido = subtotalItens > 0 ? valorLiquido / subtotalItens : 1
 
   const cfopItems =
     budget.itens?.map((item) => {
@@ -44,7 +54,7 @@ export function FiscalSummaryDialog({ budget }: { budget: Budget }) {
       return {
         nome: item.produto?.nome || item.descricao || item.custom_id || 'Item',
         cfop,
-        subtotal: sub * (1 - (budget.desconto_global || 0) / 100),
+        subtotal: sub * fatorLiquido,
       }
     }) || []
 
