@@ -14,6 +14,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import {
   parseConnectXml,
@@ -41,6 +43,8 @@ export interface ImportConnectXmlModalProps {
   orcamentoAtualId?: string | null
   /** SPEC-201 C: o XML é de outro orçamento já importado — abrir ele e atualizar. */
   onAtualizarExistente?: (orcamentoId: string, resolved: ResolvedXmlBudget) => void
+  /** Pré-cadastro: o cliente do XML não existia e foi criado aqui (quem chama põe na lista local do formulário). */
+  onClienteCriado?: (cliente: any) => void
 }
 
 export function ImportConnectXmlModal({
@@ -53,6 +57,7 @@ export function ImportConnectXmlModal({
   onClienteNaoEncontrado,
   orcamentoAtualId,
   onAtualizarExistente,
+  onClienteCriado,
 }: ImportConnectXmlModalProps) {
   const [fileName, setFileName] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -63,8 +68,14 @@ export function ImportConnectXmlModal({
     numero: string | null
     status: string
   } | null>(null)
+  // Pré-cadastro: o XML da Connect só traz o CÓDIGO do cliente (sem nome). Se ele não existe aqui, a pessoa informa a razão social e o cliente
+  // nasce como pré-cadastro (código da Connect + razão social + aviso para completar), para nenhum cliente se perder.
+  const [razaoSocial, setRazaoSocial] = useState('')
+  const [criandoPreCadastro, setCriandoPreCadastro] = useState(false)
 
   const reset = useCallback(() => {
+    setRazaoSocial('')
+    setCriandoPreCadastro(false)
     setFileName(null)
     setIsLoading(false)
     setError(null)
@@ -112,6 +123,61 @@ export function ImportConnectXmlModal({
     STATUS_PERMITE_REIMPORTAR_XML.includes(orcamentoExistente.status) &&
     (orcamentoExistente.id === orcamentoAtualId || !!onAtualizarExistente)
 
+  const criarPreCadastroEImportar = async () => {
+    if (!resolved) return
+    const nome = razaoSocial.trim()
+    const codCliente = resolved.raw.cod_cliente
+    if (nome.length < 3) {
+      toast.error('Informe a razão social do cliente', {
+        description:
+          'O XML da Connect só traz o código do cliente. A razão social cria o pré-cadastro para o cliente não se perder; o resto (CPF/CNPJ, contato, endereço) se completa depois.',
+      })
+      return
+    }
+    setCriandoPreCadastro(true)
+    try {
+      const { data: auth } = await supabase.auth.getUser()
+      // se já existe cliente com esse código da Connect (outro usuário acabou de criar), reaproveita
+      let cliente: any = null
+      if (codCliente != null) {
+        const { data: ja } = await supabase
+          .from('contatos')
+          .select('*')
+          .eq('codigo_legado', codCliente)
+          .eq('tipo', 'cliente')
+          .maybeSingle()
+        cliente = ja
+      }
+      if (!cliente) {
+        const { data, error } = await supabase
+          .from('contatos')
+          .insert({
+            tipo: 'cliente',
+            nome,
+            razao_social: nome,
+            codigo_legado: codCliente,
+            created_by: auth?.user?.id ?? null,
+            observacoes: `PRÉ-CADASTRO criado ao importar o XML da Connect (orçamento nº ${resolved.raw.cod_orcamento ?? '-'}, cliente Connect nº ${codCliente ?? '-'}). Completar CPF/CNPJ, telefone, e-mail e endereço.`,
+          } as any)
+          .select('*')
+          .single()
+        if (error) throw error
+        cliente = data
+        toast.success('Pré-cadastro do cliente criado', {
+          description: `${nome} (código Connect ${codCliente ?? '-'}). Complete os dados dele no cadastro de clientes.`,
+        })
+      }
+      onClienteCriado?.(cliente)
+      onApply({ ...resolved, cliente_id: cliente.id, cliente_nome: cliente.nome ?? nome })
+      reset()
+      onOpenChange(false)
+    } catch (e: any) {
+      toast.error('Não foi possível criar o pré-cadastro', { description: e?.message })
+    } finally {
+      setCriandoPreCadastro(false)
+    }
+  }
+
   const handleApply = useCallback(() => {
     if (!resolved) return
 
@@ -141,9 +207,8 @@ export function ImportConnectXmlModal({
     }
 
     if (!resolved.cliente_id) {
-      onClienteNaoEncontrado(resolved)
-      reset()
-      onOpenChange(false)
+      // cliente não cadastrado: com razão social informada cria o pré-cadastro e segue; sem ela, a pessoa escolhe "Importar e escolher o cliente"
+      void criarPreCadastroEImportar()
       return
     }
 
@@ -160,6 +225,7 @@ export function ImportConnectXmlModal({
     onClienteNaoEncontrado,
     reset,
     onOpenChange,
+    razaoSocial,
   ])
 
   const canApply =
@@ -252,10 +318,37 @@ export function ImportConnectXmlModal({
                 </span>
               ) : (
                 <span className="font-medium text-amber-600">
-                  Não encontrado — escolha ou cadastre depois
+                  Não cadastrado (código Connect {resolved.raw.cod_cliente ?? '-'})
                 </span>
               )}
             </div>
+            {!resolved.cliente_id && !orcamentoExistente && (
+              <div className="mt-2 space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                <p className="text-sm">
+                  O XML só traz o <b>código</b> do cliente. Informe a <b>razão social</b> para criar o{' '}
+                  <b>pré-cadastro</b> agora e não perder o cliente; os demais dados se completam depois no cadastro.
+                </p>
+                <Input
+                  value={razaoSocial}
+                  onChange={(e) => setRazaoSocial(e.target.value)}
+                  placeholder="Razão social / nome do cliente"
+                  disabled={criandoPreCadastro}
+                />
+                <button
+                  type="button"
+                  className="text-xs underline text-amber-800"
+                  disabled={criandoPreCadastro}
+                  onClick={() => {
+                    if (!resolved) return
+                    onClienteNaoEncontrado(resolved)
+                    reset()
+                    onOpenChange(false)
+                  }}
+                >
+                  Já está cadastrado? Importar e escolher o cliente depois
+                </button>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-slate-500">Itens</span>
               <span className="font-medium">

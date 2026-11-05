@@ -5284,6 +5284,11 @@ export default function BudgetFormPage() {
             produtos={produtos}
             onApply={handleXmlImportApply}
             onClienteNaoEncontrado={handleXmlImportNeedsClient}
+            onClienteCriado={(novo: any) => {
+              // pré-cadastro criado pelo import do XML: entra na lista local do formulário e reconcilia com o servidor
+              setClientes((prev: any[]) => [novo, ...prev.filter((c) => c.id !== novo.id)])
+              if (fetchClientes) fetchClientes()
+            }}
             orcamentoAtualId={isEditing ? id : null}
             onAtualizarExistente={handleXmlAtualizarExistente}
           />
