@@ -232,13 +232,21 @@ export function TeamApprovalTab() {
     // Observação registrada em historico_status_orcamentos (via RPC
     // equipe_aprovar_orcamento, p_observacao) para auditoria da data
     // confirmada nesta etapa.
-    await equipeAprovarOrcamento(
+    const resultadoEquipe = await equipeAprovarOrcamento(
       deliveryBudget,
       `Previsão de entrega confirmada pela equipe: ${format(date, 'dd/MM/yyyy', { locale: ptBR })}.${anexos.length > 0 ? ` ${anexos.length} anexo(s) enviado(s) para a revisão financeira.` : ''}`,
     )
-    toast.success('Orçamento aprovado pela equipe', {
-      description: 'Encaminhado para revisão financeira.',
-    })
+    // SPEC-255 A: garantia e demais saídas sem cobrança concluem na aprovação da equipe (não vão para a revisão financeira)
+    if (resultadoEquipe?.sem_revisao_financeira) {
+      toast.success('Orçamento aprovado', {
+        description:
+          'Operação sem cobrança: não passa pela revisão financeira e não gera financeiro.',
+      })
+    } else {
+      toast.success('Orçamento aprovado pela equipe', {
+        description: 'Encaminhado para revisão financeira.',
+      })
+    }
     setDeliveryBudget(null)
   }
 
