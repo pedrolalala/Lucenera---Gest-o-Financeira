@@ -54,6 +54,8 @@ import {
 } from '@/lib/budget-status'
 import { cn } from '@/lib/utils'
 import { semPrefixo } from '@/lib/numeros'
+import { orcamentosComAnexo } from '@/services/orcamentoAnexosService'
+import { Paperclip } from 'lucide-react'
 
 const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -136,6 +138,19 @@ export function FinancialApprovalTab() {
       ),
     [pendingBudgets, searchTerm],
   )
+
+  // SPEC-254 B: clipe na fila para quem tem comprovante anexado
+  const [comAnexo, setComAnexo] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const ids = pendingBudgets.map((b) => b.id).filter(Boolean) as string[]
+    if (ids.length === 0) {
+      setComAnexo(new Set())
+      return
+    }
+    orcamentosComAnexo(ids)
+      .then(setComAnexo)
+      .catch(() => setComAnexo(new Set()))
+  }, [pendingBudgets])
 
   const handleOpenBudget = (budget: Budget) => {
     navigate(`/budgets/${budget.id}`)
@@ -325,6 +340,14 @@ export function FinancialApprovalTab() {
                       <TableCell>
                         <div className="font-mono text-sm font-bold text-gray-900">
                           {semPrefixo(budget.numero) || budget.id.slice(0, 8)}
+                          {comAnexo.has(budget.id) && (
+                            <Paperclip
+                              className="ml-1.5 inline h-3.5 w-3.5 text-sky-600"
+                              aria-label="Tem comprovante anexado"
+                            >
+                              <title>Tem comprovante anexado</title>
+                            </Paperclip>
+                          )}
                         </div>
                         <Badge
                           variant="outline"

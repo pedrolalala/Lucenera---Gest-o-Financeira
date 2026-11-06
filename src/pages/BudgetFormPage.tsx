@@ -1526,6 +1526,13 @@ export default function BudgetFormPage() {
           shouldValidate: true,
           shouldDirty: true,
         })
+        // SPEC-254 D: veio do cadastro do projeto, não do XML: nem toda venda tem RT
+        if (splits.length > 0) {
+          toast.info('Arquiteto preenchido pelo cadastro do projeto', {
+            description: `${splits.map((x) => x.nome).join(', ')}. Confirme se esta venda tem RT; se não tiver, retire.`,
+            duration: 10000,
+          })
+        }
         // Achado 2026-08-24: o quadro-resumo "Arquiteto" lia só o texto
         // legado `projeto['Nome Arquiteto']` (quase sempre vazio em
         // projetos criados pelo CRM depois da SPEC-077) — o campo real do
@@ -2785,6 +2792,26 @@ export default function BudgetFormPage() {
         ? `Itens trocados pelos do XML: ${resolved.itensCasados} casado(s), ${resolved.itensAvulsos} avulso(s). Revise e salve para gravar.`
         : `XML importado: ${resolved.itensCasados} item(ns) casado(s), ${resolved.itensAvulsos} avulso(s). Revise os dados antes de salvar.`,
     )
+
+    // SPEC-254 C: o XML da Connect não traz desconto geral, frete, sinal nem arquiteto do orçamento -- na reimportação
+    // esses campos ficam como estavam. Avisa o que precisa ser conferido à mão (ex.: desconto mudou na Connect).
+    if (substituirItens) {
+      const conferir: string[] = []
+      const dg = Number(currentValues.desconto_global) || 0
+      if (dg > 0) {
+        conferir.push(
+          `desconto geral (${currentValues.desconto_tipo === 'valor' ? `R$ ${dg}` : `${dg}%`})`,
+        )
+      }
+      if ((Number(currentValues.valor_sinal) || 0) > 0) conferir.push('sinal')
+      if ((Number(currentValues.frete_valor) || 0) > 0) conferir.push('frete')
+      if (conferir.length > 0) {
+        toast.warning('Confira em Condições de pagamento', {
+          description: `O XML da Connect não traz ${conferir.join(', ')}: ficou como estava. Se mudou na Connect, ajuste à mão.`,
+          duration: 12000,
+        })
+      }
+    }
   }
 
   const handleXmlImportApply = (

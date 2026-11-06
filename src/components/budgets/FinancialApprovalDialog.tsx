@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { AlertTriangle, ShieldAlert, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Budget } from '@/stores/useBudgetStore'
+import { OrcamentoAnexosLista } from '@/components/budgets/OrcamentoAnexosLista'
 import {
   calcularResumoFinanceiro,
   FORMA_PAGAMENTO_LABELS,
@@ -124,6 +125,11 @@ export function FinancialApprovalDialog({
         </DialogHeader>
 
         <div className="space-y-3">
+          {/* SPEC-254 B: comprovante anexado pela equipe na aprovação */}
+          <OrcamentoAnexosLista
+            orcamentoId={open ? budget.id : undefined}
+            vazioTexto="Sem comprovante anexado pela equipe."
+          />
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
             <p className="text-sm font-semibold text-amber-900 mb-2">
               Resumo do Impacto Financeiro

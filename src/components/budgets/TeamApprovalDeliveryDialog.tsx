@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CalendarIcon, Loader2, Truck } from 'lucide-react'
+import { CalendarIcon, Loader2, Paperclip, Truck, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { semPrefixo } from '@/lib/numeros'
+import { validarAnexo } from '@/services/orcamentoAnexosService'
 
 interface TeamApprovalDeliveryDialogProps {
   open: boolean
@@ -27,7 +28,8 @@ interface TeamApprovalDeliveryDialogProps {
   /** SPEC-167: valor atual de orcamentos.previsao_entrega, para pré-carregar o campo. */
   initialDate: Date | null
   budgetNumero?: string | null
-  onConfirm: (date: Date) => Promise<void>
+  /** SPEC-254: os arquivos escolhidos (comprovante de Pix/depósito) seguem junto com a data. */
+  onConfirm: (date: Date, anexos: File[]) => Promise<void>
 }
 
 // SPEC-174 N2a: pop-up obrigatório na "Aprovação da Equipe" -- a vendedora
@@ -46,11 +48,13 @@ export function TeamApprovalDeliveryDialog({
 }: TeamApprovalDeliveryDialogProps) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [anexos, setAnexos] = useState<File[]>([])
 
   useEffect(() => {
     if (open) {
       setSelectedDate(initialDate)
       setSubmitting(false)
+      setAnexos([])
     }
   }, [open, initialDate])
 
@@ -70,7 +74,7 @@ export function TeamApprovalDeliveryDialog({
     if (!canConfirm || !selectedDate) return
     setSubmitting(true)
     try {
-      await onConfirm(selectedDate)
+      await onConfirm(selectedDate, anexos)
       onOpenChange(false)
     } catch (error: any) {
       toast.error('Erro ao confirmar previsão de entrega', {
@@ -139,6 +143,56 @@ export function TeamApprovalDeliveryDialog({
               A previsão de entrega não pode ser anterior a hoje.
             </p>
           )}
+        </div>
+
+        {/* SPEC-254 A: comprovante (Pix, depósito) segue para a revisão financeira; opcional */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
+            <Paperclip className="h-4 w-4" />
+            Comprovante de pagamento (opcional)
+          </label>
+          <input
+            type="file"
+            multiple
+            accept="application/pdf,image/png,image/jpeg,image/webp"
+            disabled={submitting}
+            onChange={(e) => {
+              const escolhidos = Array.from(e.target.files ?? [])
+              e.target.value = ''
+              const validos: File[] = []
+              for (const f of escolhidos) {
+                const erro = validarAnexo(f)
+                if (erro) toast.error(erro)
+                else validos.push(f)
+              }
+              setAnexos((atual) => [...atual, ...validos])
+            }}
+            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border file:border-gray-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-gray-50"
+          />
+          {anexos.length > 0 && (
+            <ul className="space-y-1">
+              {anexos.map((f, i) => (
+                <li
+                  key={`${f.name}-${i}`}
+                  className="flex items-center justify-between rounded border bg-gray-50 px-2 py-1 text-xs text-gray-700"
+                >
+                  <span className="truncate">{f.name}</span>
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => setAnexos((atual) => atual.filter((_, j) => j !== i))}
+                    className="ml-2 text-gray-400 hover:text-red-600"
+                    title="Tirar este arquivo"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-gray-500">
+            PDF ou imagem, até 10 MB cada. O financeiro vê o anexo na revisão.
+          </p>
         </div>
 
         <DialogFooter>

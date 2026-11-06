@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils'
 // SPEC-174 N2a: pop-up obrigatório de Previsão de Entrega antes de avançar
 // para o financeiro.
 import { TeamApprovalDeliveryDialog } from '@/components/budgets/TeamApprovalDeliveryDialog'
+import { anexarArquivos } from '@/services/orcamentoAnexosService'
 // SPEC-174 N3: aviso de orçamento vencido antes de aprovar (decisão do
 // usuário, 01/10).
 import { BudgetExpiredRedirectDialog } from '@/components/budgets/BudgetExpiredRedirectDialog'
@@ -199,9 +200,14 @@ export function TeamApprovalTab() {
     setExpiredPriceBudget(null)
   }
 
-  const handleConfirmDelivery = async (date: Date) => {
+  const handleConfirmDelivery = async (date: Date, anexos: File[]) => {
     if (!deliveryBudget) return
     const dataFormatada = format(date, 'yyyy-MM-dd')
+
+    // SPEC-254 A: comprovante primeiro; se o envio falhar, nada é aprovado e a pessoa tenta de novo.
+    if (anexos.length > 0) {
+      await anexarArquivos(deliveryBudget.id, anexos, 'comprovante')
+    }
 
     // Grava no mesmo campo da SPEC-167 (sem coluna nova). Não é uma
     // transição de status, então vai direto na tabela como o resto do
@@ -228,7 +234,7 @@ export function TeamApprovalTab() {
     // confirmada nesta etapa.
     await equipeAprovarOrcamento(
       deliveryBudget,
-      `Previsão de entrega confirmada pela equipe: ${format(date, 'dd/MM/yyyy', { locale: ptBR })}.`,
+      `Previsão de entrega confirmada pela equipe: ${format(date, 'dd/MM/yyyy', { locale: ptBR })}.${anexos.length > 0 ? ` ${anexos.length} anexo(s) enviado(s) para a revisão financeira.` : ''}`,
     )
     toast.success('Orçamento aprovado pela equipe', {
       description: 'Encaminhado para revisão financeira.',
