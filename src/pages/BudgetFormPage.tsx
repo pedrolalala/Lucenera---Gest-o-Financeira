@@ -1890,7 +1890,14 @@ export default function BudgetFormPage() {
         setIsSubmitting(false)
         return
       }
-      if (!pularPagamento && values.data_inicio_pagamento) {
+      // SPEC-274: quem revisa no financeiro pode lançar início de pagamento
+      // retroativo (negócio fechado antes de entrar no sistema). Os demais
+      // continuam só com hoje ou futuro.
+      if (
+        !pularPagamento &&
+        !podeRevisaoFinanceira &&
+        values.data_inicio_pagamento
+      ) {
         const checarData = new Date(values.data_inicio_pagamento)
         checarData.setHours(0, 0, 0, 0)
         const hoje = new Date()
@@ -4650,8 +4657,9 @@ export default function BudgetFormPage() {
                                 value={field.value}
                                 onChange={field.onChange}
                                 desabilitarDia={(date) =>
+                                  !podeRevisaoFinanceira &&
                                   date <
-                                  new Date(new Date().setHours(0, 0, 0, 0))
+                                    new Date(new Date().setHours(0, 0, 0, 0))
                                 }
                               />
                             </FormControl>
@@ -4659,6 +4667,8 @@ export default function BudgetFormPage() {
                               Vencimento da 1ª parcela. Confirme com o
                               e-mail/negociação do cliente, como no fluxo do
                               Connect.
+                              {podeRevisaoFinanceira &&
+                                ' No financeiro é permitida data retroativa.'}
                             </p>
                             <FormMessage />
                           </FormItem>
