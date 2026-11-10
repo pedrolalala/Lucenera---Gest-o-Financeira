@@ -62,12 +62,13 @@ async function buscar(modo: ModoBuscaPessoa, termo: string): Promise<Linha[]> {
     if (porCliente.error) throw porCliente.error
     const linhas = new Map<string, Linha>()
     const add = (p: any, c: any) => {
-      if (!p?.codigo || p.arquivado) return
+      // Projeto arquivado também pode ser vinculado (garantia/SAC de obra antiga).
+      if (!p?.codigo) return
       linhas.set(p.id, {
         chave: p.id,
         valor: p.codigo,
         nome: p.codigo,
-        colunas: [p.codigo, p.nome || '-', c?.razao_social || c?.nome || '-', doc(c) || '-'],
+        colunas: [p.codigo, `${p.nome || '-'}${p.arquivado ? ' (arquivado)' : ''}`, c?.razao_social || c?.nome || '-', doc(c) || '-'],
       })
     }
     for (const p of (porProjeto.data as any[]) || []) add(p, um(p.cliente))

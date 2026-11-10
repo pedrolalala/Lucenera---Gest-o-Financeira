@@ -1867,16 +1867,7 @@ export default function BudgetFormPage() {
         return
       }
 
-      if (
-        projeto.arquivado &&
-        (!isEditing || budgetToEdit?.projeto_id !== projeto.id)
-      ) {
-        form.setError('projeto_codigo', {
-          message: 'Código de projeto não encontrado na base de dados',
-        })
-        setIsSubmitting(false)
-        return
-      }
+      // Projeto arquivado pode receber orçamento (garantia/SAC de obra antiga).
 
       // Achado 2026-08-14: orçamento já aprovado tem parcelas/boletos
       // gerados de verdade na aprovação (tabelas projeto_parcelas/boletos)
@@ -3949,15 +3940,9 @@ export default function BudgetFormPage() {
                               >
                                 <SearchableSelect
                                   options={projetos
-                                    .filter(
-                                      (p) =>
-                                        !p.arquivado ||
-                                        (isEditing &&
-                                          budgetToEdit?.projeto_id === p.id),
-                                    )
                                     .map((p) => ({
                                       value: p.codigo,
-                                      label: `${p.codigo} - ${p.nome || 'Sem nome'}`,
+                                      label: `${p.codigo} - ${p.nome || 'Sem nome'}${p.arquivado ? ' (arquivado)' : ''}`,
                                       searchTerms: [p.codigo, p.nome].filter(
                                         Boolean,
                                       ) as string[],
