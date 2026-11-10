@@ -21,6 +21,7 @@ import { EmprestimosTab } from '@/components/emprestimo/EmprestimosTab'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useAuth } from '@/hooks/use-auth'
 import AccessDenied from '@/pages/AccessDenied'
+import { FINANCIAL_APPROVAL_STATUS } from '@/lib/budget-status'
 
 // SPEC-201 D: o que significa cada etapa e quem age (pedido do Filippo na
 // apresentação de 14/10 — "o status é o mais importante do orçamento").
@@ -74,6 +75,13 @@ export default function Budgets() {
     return budgets.filter((b) => b.status === statusFilter)
   }, [budgets, statusFilter])
 
+  // SPEC-269 (pedido do Murillo): quem não aprova (admin/gerente) também precisa ver o que está
+  // parado no financeiro. Aba só de consulta, com os orçamentos em "Aprovação Financeira".
+  const noFinanceiro = useMemo(
+    () => budgets.filter((b) => b.status === FINANCIAL_APPROVAL_STATUS),
+    [budgets],
+  )
+
   const handleCreate = () => {
     navigate('/budgets/new')
   }
@@ -119,6 +127,11 @@ export default function Budgets() {
           {(role === 'admin' || role === 'gerente') && (
             <TabsTrigger value="aprovacao-financeira">
               Revisão Financeira Pendente
+            </TabsTrigger>
+          )}
+          {role !== 'admin' && role !== 'gerente' && (
+            <TabsTrigger value="no-financeiro">
+              No financeiro ({noFinanceiro.length})
             </TabsTrigger>
           )}
           <TabsTrigger value="aprovados">Aprovados</TabsTrigger>
@@ -189,6 +202,21 @@ export default function Budgets() {
         {(role === 'admin' || role === 'gerente') && (
           <TabsContent value="aprovacao-financeira" className="mt-0">
             <FinancialApprovalTab />
+          </TabsContent>
+        )}
+        {role !== 'admin' && role !== 'gerente' && (
+          <TabsContent value="no-financeiro" className="mt-0">
+            <p className="mb-3 text-sm text-gray-500">
+              Orçamentos aprovados pela equipe que estão com a Administração, aguardando a revisão
+              financeira. Só consulta.
+            </p>
+            {showLoading ? (
+              <div className="flex justify-center py-10">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : (
+              <BudgetsTable data={noFinanceiro} onEdit={handleEdit} />
+            )}
           </TabsContent>
         )}
         <TabsContent value="aprovados" className="mt-0">
