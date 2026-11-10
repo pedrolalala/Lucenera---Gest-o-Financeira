@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { usePodeRevisaoFinanceira } from '@/hooks/use-revisao-financeira'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -58,6 +59,7 @@ const STATUS_OPTIONS = [
 export default function Budgets() {
   const { budgets, fetchBudgets, loading, initialized } = useBudgetStore()
   const { role, canApproveQuotes } = useAuth()
+  const podeRevisaoFinanceira = usePodeRevisaoFinanceira()
   const navigate = useNavigate()
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -75,7 +77,7 @@ export default function Budgets() {
     return budgets.filter((b) => b.status === statusFilter)
   }, [budgets, statusFilter])
 
-  // SPEC-269 (pedido do Murillo): quem não aprova (admin/gerente) também precisa ver o que está
+  // SPEC-272 (pedido do Murillo): quem não aprova (admin/gerente) também precisa ver o que está
   // parado no financeiro. Aba só de consulta, com os orçamentos em "Aprovação Financeira".
   const noFinanceiro = useMemo(
     () => budgets.filter((b) => b.status === FINANCIAL_APPROVAL_STATUS),
@@ -124,12 +126,12 @@ export default function Budgets() {
           <TabsTrigger value="aprovacao-equipe">
             Aprovação da Equipe
           </TabsTrigger>
-          {(role === 'admin' || role === 'gerente') && (
+          {podeRevisaoFinanceira && (
             <TabsTrigger value="aprovacao-financeira">
               Revisão Financeira Pendente
             </TabsTrigger>
           )}
-          {role !== 'admin' && role !== 'gerente' && (
+          {!podeRevisaoFinanceira && (
             <TabsTrigger value="no-financeiro">
               No financeiro ({noFinanceiro.length})
             </TabsTrigger>
@@ -199,12 +201,12 @@ export default function Budgets() {
           <TeamApprovalTab />
         </TabsContent>
 
-        {(role === 'admin' || role === 'gerente') && (
+        {podeRevisaoFinanceira && (
           <TabsContent value="aprovacao-financeira" className="mt-0">
             <FinancialApprovalTab />
           </TabsContent>
         )}
-        {role !== 'admin' && role !== 'gerente' && (
+        {!podeRevisaoFinanceira && (
           <TabsContent value="no-financeiro" className="mt-0">
             <p className="mb-3 text-sm text-gray-500">
               Orçamentos aprovados pela equipe que estão com a Administração, aguardando a revisão

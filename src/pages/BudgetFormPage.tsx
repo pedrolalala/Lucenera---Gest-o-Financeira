@@ -82,6 +82,7 @@ import { toast } from 'sonner'
 import useBudgetStore, { Budget } from '@/stores/useBudgetStore'
 import { useOptions } from '@/hooks/use-options'
 import { useAuth } from '@/hooks/use-auth'
+import { usePodeRevisaoFinanceira } from '@/hooks/use-revisao-financeira'
 import {
   approveBudgetFinancial,
   type ApprovalResult,
@@ -704,6 +705,7 @@ export default function BudgetFormPage() {
     Map<string, string | null>
   >(new Map())
   const { role, user: authUser } = useAuth()
+  const podeRevisaoFinanceira = usePodeRevisaoFinanceira()
   // SPEC-108: só admin edita valor de peça ou adiciona produto NUM
   // ORÇAMENTO JÁ EXISTENTE. Na criação (isEditing = false), continua
   // liberado pra todo mundo — é assim que vendedora monta um orçamento novo.
@@ -3314,7 +3316,7 @@ export default function BudgetFormPage() {
         <div className="flex items-center gap-3">
           {isEditing &&
             budgetToEdit?.status === 'Aprovação Financeira' &&
-            (role === 'admin' || role === 'gerente') && (
+            podeRevisaoFinanceira && (
               <Button
                 variant="default"
                 className="bg-red-600 hover:bg-red-700 text-white"

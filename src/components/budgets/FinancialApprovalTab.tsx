@@ -56,6 +56,7 @@ import { cn } from '@/lib/utils'
 import { semPrefixo } from '@/lib/numeros'
 import { orcamentosComAnexo } from '@/services/orcamentoAnexosService'
 import { Paperclip } from 'lucide-react'
+import { usePodeRevisaoFinanceira } from '@/hooks/use-revisao-financeira'
 
 const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -90,7 +91,7 @@ function matchesBudgetSearch(budget: Budget, query: string) {
 
 export function FinancialApprovalTab() {
   const navigate = useNavigate()
-  const { role, canApproveQuotes } = useAuth()
+  const { canApproveQuotes } = useAuth()
   const { budgets, fetchBudgets, financeiroDevolverOrcamentoEquipe } =
     useBudgetStore()
   const [loading, setLoading] = useState(true)
@@ -105,7 +106,8 @@ export function FinancialApprovalTab() {
   const [motivoDevolucao, setMotivoDevolucao] = useState('')
   const [devolvendo, setDevolvendo] = useState(false)
 
-  const canManage = role === 'admin' || role === 'gerente'
+  // SPEC-271: o financeiro (acesso 'financeiro') também gerencia a revisão, não só admin/gerente.
+  const canManage = usePodeRevisaoFinanceira()
   const canApproveFinancial = canManage || canApproveQuotes
 
   const loadBudgets = useCallback(async () => {
