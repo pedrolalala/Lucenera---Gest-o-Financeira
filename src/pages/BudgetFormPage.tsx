@@ -1107,6 +1107,22 @@ export default function BudgetFormPage() {
         budgetToEdit.status,
       ))
 
+  // SPEC-278 (reunião 49, Carol, 11/11): o Tipo de Operação só muda na revisão
+  // financeira (orçamento em "Aprovação Financeira", por quem tem a permissão),
+  // ex.: venda enviada por engano que na verdade é bonificação. Só entre
+  // Venda / Outros / SAC: devolução (vinculada a uma venda), empréstimo
+  // (status e termo próprios) e vínculo Connect continuam travados.
+  const podeTrocarOperacao =
+    isEditing &&
+    podeRevisaoFinanceira &&
+    !!budgetToEdit &&
+    budgetToEdit.status === 'Aprovação Financeira' &&
+    ['venda', 'outros', 'sac'].includes(
+      budgetToEdit.natureza_operacao || 'venda',
+    ) &&
+    (budgetToEdit as any).subgrupo !== 'EMPRESTIMO' &&
+    !budgetToEdit.vinculo_connect
+
   // Fix (achado 2026-08-13, teste ao vivo): quando SUBGRUPOS_POR_TIPO tem
   // só 1 opção pro tipo atual, o campo "Tipo" renderiza um Input
   // desabilitado mostrando essa opção (ex.: "VENDAS"), mas nunca chama
@@ -3521,6 +3537,7 @@ export default function BudgetFormPage() {
                           }
                           disabled={
                             isEditing &&
+                            !podeTrocarOperacao &&
                             !(modoVinculoConnect && podeEscolherVinculoConnect)
                           }
                           className="rounded-sm"
@@ -3576,7 +3593,7 @@ export default function BudgetFormPage() {
                           variant={
                             naturezaOperacao === 'outros' ? 'default' : 'ghost'
                           }
-                          disabled={isEditing}
+                          disabled={isEditing && !podeTrocarOperacao}
                           className="rounded-sm"
                           onClick={() => {
                             setModoVinculoConnect(false)
@@ -3599,7 +3616,7 @@ export default function BudgetFormPage() {
                           variant={
                             naturezaOperacao === 'sac' ? 'default' : 'ghost'
                           }
-                          disabled={isEditing}
+                          disabled={isEditing && !podeTrocarOperacao}
                           className="rounded-sm"
                           onClick={() => {
                             setModoVinculoConnect(false)
@@ -3702,7 +3719,7 @@ export default function BudgetFormPage() {
                               <Select
                                 onValueChange={field.onChange}
                                 value={field.value || undefined}
-                                disabled={isEditing}
+                                disabled={isEditing && !podeTrocarOperacao}
                               >
                                 <FormControl>
                                   <SelectTrigger>
@@ -3714,7 +3731,10 @@ export default function BudgetFormPage() {
                                   {(field.value && !opcoes.includes(field.value)
                                     ? [...opcoes, field.value]
                                     : opcoes
-                                  ).map((o) => (
+                                  )
+                                    // SPEC-278: empréstimo tem fluxo próprio, não se troca na edição
+                                    .filter((o) => !(isEditing && o === 'EMPRESTIMO'))
+                                    .map((o) => (
                                     <SelectItem key={o} value={o}>
                                       {o}
                                     </SelectItem>
