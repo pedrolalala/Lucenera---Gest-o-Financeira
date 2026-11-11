@@ -188,6 +188,19 @@ export function FinancialApprovalTab() {
   const handleConfirmApproval = async () => {
     if (!selectedBudget) return
     const result = await approveBudgetFinancial(selectedBudget.id)
+    // SPEC-279: Outros/SAC aprovam sem financeiro — sem tela de boletos/nota, só confirmação.
+    if (
+      ['outros', 'sac'].includes(
+        (selectedBudget as any).natureza_operacao || '',
+      )
+    ) {
+      toast.success('Orçamento aprovado (sem financeiro)', {
+        description:
+          'Operação sem cobrança: não gera parcelas nem boletos. Estoque conforme o tipo da operação.',
+      })
+      await fetchBudgets()
+      return
+    }
     setResultBudget(selectedBudget)
     setApprovalResult(result)
     toast.success('Orçamento aprovado financeiramente', {

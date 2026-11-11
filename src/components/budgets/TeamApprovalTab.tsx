@@ -236,7 +236,8 @@ export function TeamApprovalTab() {
       deliveryBudget,
       `Previsão de entrega confirmada pela equipe: ${format(date, 'dd/MM/yyyy', { locale: ptBR })}.${anexos.length > 0 ? ` ${anexos.length} anexo(s) enviado(s) para a revisão financeira.` : ''}`,
     )
-    // SPEC-255 A: garantia e demais saídas sem cobrança concluem na aprovação da equipe (não vão para a revisão financeira)
+    // SPEC-279: desde 11/11 garantia e demais saídas sem cobrança também vão para a revisão financeira
+    // (a RPC não devolve mais sem_revisao_financeira; o ramo abaixo só vale para versões antigas da função).
     if (resultadoEquipe?.sem_revisao_financeira) {
       toast.success('Orçamento aprovado', {
         description:
