@@ -214,7 +214,7 @@ export async function getVendasOrigemParaDevolucao(
     supabase
       .from('orcamentos')
       .select(
-        'id, empresa_id, vendedor_id, desconto_global, desconto_tipo, valor_sinal, empresa:empresas(nome), arquitetos:orcamento_arquitetos(percentual, arquiteto:arquiteto_id(id, nome))',
+        'id, origem, empresa_id, vendedor_id, desconto_global, desconto_tipo, valor_sinal, empresa:empresas(nome), arquitetos:orcamento_arquitetos(percentual, arquiteto:arquiteto_id(id, nome))',
       )
       .in('id', orcamentoIds),
     supabase
@@ -237,6 +237,32 @@ export async function getVendasOrigemParaDevolucao(
     ),
   )
   const orcMap = new Map((orcRes.data || []).map((o: any) => [o.id, o]))
+
+  // SPEC-259: venda herdada da Connect — a quantidade em projeto_itens (reserva +
+  // entrega futura) pode diferir da do orçamento; o desconto global (R$) foi
+  // dado sobre os itens do ORÇAMENTO, então a base do % vem de orcamento_itens.
+  const idsConnect = (orcRes.data || [])
+    .filter((o: any) => o.origem === 'connect')
+    .map((o: any) => o.id)
+  if (idsConnect.length > 0) {
+    const { data: oiRows, error: oiError } = await (
+      supabase.from('orcamento_itens') as any
+    )
+      .select('orcamento_id, quantidade, preco_unitario, desconto')
+      .in('orcamento_id', idsConnect)
+    if (oiError) throw oiError
+    const base = new Map<string, number>()
+    ;(oiRows || []).forEach((r: any) =>
+      base.set(
+        r.orcamento_id,
+        (base.get(r.orcamento_id) || 0) +
+          (Number(r.quantidade) || 0) *
+            (Number(r.preco_unitario) || 0) *
+            (1 - (Number(r.desconto) || 0) / 100),
+      ),
+    )
+    base.forEach((v, k) => subtotalPorOrc.set(k, v))
+  }
   const refMap = new Map(
     (prodRes.data || []).map((p: any) => [p.id, p.referencia]),
   )

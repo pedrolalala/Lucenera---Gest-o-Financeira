@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, Navigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -143,11 +143,9 @@ export default function Login() {
                 'Entrar'
               )}
             </Button>
+            {/* SPEC-242 C: conta nova só pela Central (Acesso a Sistemas) — sem cadastro aberto */}
             <div className="text-sm text-center text-gray-500">
-              Não tem uma conta?{' '}
-              <Link to="/signup" className="text-primary hover:underline">
-                Cadastrar
-              </Link>
+              Não tem uma conta? Peça ao administrador.
             </div>
           </CardFooter>
         </form>

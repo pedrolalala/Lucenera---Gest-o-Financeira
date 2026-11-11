@@ -12,7 +12,6 @@ import { ProtectedRoute } from '@/components/ProtectedRoute'
 // dashboard-rh-lucenera-5fe9c/src/App.tsx).
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Login = lazy(() => import('./pages/Login'))
-const SignUp = lazy(() => import('./pages/SignUp'))
 const Budgets = lazy(() => import('./pages/Budgets'))
 const BudgetFormPage = lazy(() => import('./pages/BudgetFormPage'))
 const ApprovalSettings = lazy(() => import('./pages/ApprovalSettings'))
@@ -36,7 +35,7 @@ const App = () => (
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<SignUp />} />
+              <Route path="/signup" element={<Navigate to="/login" replace />} />
               <Route path="/aprovacao" element={<ClientApproval />} />
 
               <Route element={<ProtectedRoute />}>
