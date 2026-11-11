@@ -238,7 +238,7 @@ export async function getVendasOrigemParaDevolucao(
   )
   const orcMap = new Map((orcRes.data || []).map((o: any) => [o.id, o]))
 
-  // SPEC-259: venda herdada da Connect — a quantidade em projeto_itens (reserva +
+  // SPEC-275: venda herdada da Connect — a quantidade em projeto_itens (reserva +
   // entrega futura) pode diferir da do orçamento; o desconto global (R$) foi
   // dado sobre os itens do ORÇAMENTO, então a base do % vem de orcamento_itens.
   const idsConnect = (orcRes.data || [])
