@@ -1349,8 +1349,11 @@ export default function BudgetFormPage() {
         : 0
     let acumulado = 0
     const next = Array.from({ length: totalParcelasAtual }, (_, i) => {
-      const formaAtual =
-        atual[i]?.forma_pagamento || formaPagamentoWatch || 'boleto'
+      // Pix/Dinheiro não têm escolha por parcela: segue a forma de cima
+      // (senão sobrava "Boleto" de um padrão antigo na linha).
+      const formaAtual = !FORMAS_PAGAMENTO_PARCELAVEIS(formaPagamentoWatch)
+        ? formaPagamentoWatch || 'boleto'
+        : atual[i]?.forma_pagamento || formaPagamentoWatch || 'boleto'
       const permutaAtual = atual[i]?.permuta_fornecedor_id || null
       if (i === overrideIdx) {
         return {
@@ -1388,7 +1391,11 @@ export default function BudgetFormPage() {
   useEffect(() => {
     const atual = form.getValues('parcelas_config') || []
     const travadas = parcelasValorTravadasRef.current
-    if (travadas.size === 0 && atual.length === totalParcelasAtual) {
+    const formaTravada = !FORMAS_PAGAMENTO_PARCELAVEIS(formaPagamentoWatch)
+    const formasOk =
+      !formaTravada ||
+      atual.every((p: any) => p?.forma_pagamento === formaPagamentoWatch)
+    if (formasOk && travadas.size === 0 && atual.length === totalParcelasAtual) {
       const somaAtual =
         Math.round(
           atual.reduce(
@@ -2013,8 +2020,11 @@ export default function BudgetFormPage() {
         }
 
         planoParcelas = valoresParcelas.map((valor, i) => {
-          const formaLinha =
-            config[i]?.forma_pagamento || values.forma_pagamento || 'boleto'
+          const formaLinha = !FORMAS_PAGAMENTO_PARCELAVEIS(
+            values.forma_pagamento,
+          )
+            ? values.forma_pagamento || 'boleto'
+            : config[i]?.forma_pagamento || values.forma_pagamento || 'boleto'
           if (formaLinha === 'permuta' && !config[i]?.permuta_fornecedor_id) {
             throw Object.assign(
               new Error(
@@ -4845,10 +4855,14 @@ export default function BudgetFormPage() {
                             <div className="space-y-2">
                               {datas.map((data, idx) => {
                                 const linha = parcelasConfigWatch[idx] || {}
-                                const formaLinha =
-                                  linha.forma_pagamento ||
-                                  form.watch('forma_pagamento') ||
-                                  'boleto'
+                                const formaFixa = !FORMAS_PAGAMENTO_PARCELAVEIS(
+                                  form.watch('forma_pagamento'),
+                                )
+                                const formaLinha = formaFixa
+                                  ? form.watch('forma_pagamento') || 'boleto'
+                                  : linha.forma_pagamento ||
+                                    form.watch('forma_pagamento') ||
+                                    'boleto'
                                 return (
                                   <div
                                     key={idx}
@@ -4876,6 +4890,12 @@ export default function BudgetFormPage() {
                                         )
                                       }
                                     />
+                                    {formaFixa ? (
+                                      <div className="text-sm font-medium px-3">
+                                        {FORMA_PAGAMENTO_LABELS[formaLinha] ||
+                                          formaLinha}
+                                      </div>
+                                    ) : (
                                     <Select
                                       value={formaLinha}
                                       onValueChange={(v) => {
@@ -4906,6 +4926,7 @@ export default function BudgetFormPage() {
                                         ))}
                                       </SelectContent>
                                     </Select>
+                                    )}
                                     {formaLinha === 'permuta' ? (
                                       <div className="space-y-1">
                                         {/* SPEC-155 (Bug 2): a validação de
