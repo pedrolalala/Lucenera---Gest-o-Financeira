@@ -1,5 +1,6 @@
 import { addDays } from 'date-fns'
 import { isApprovedStatus } from './budget-status'
+import { getRegras } from './budget-regras'
 
 // SPEC-174 N3 (decisão do usuário, 01/10): orçamento vencido = hoje depois
 // da validade; quando validade estiver vazia (orçamento antigo, anterior à
@@ -10,8 +11,50 @@ export function getBudgetVencimento(budget: {
   data_emissao?: string | null
 }): Date | null {
   if (budget.validade) return new Date(`${budget.validade}T00:00:00`)
-  if (budget.data_emissao) return addDays(new Date(budget.data_emissao), 10)
+  if (budget.data_emissao) {
+    // SPEC-282: dias de validade vêm das regras do orçamento. Orçamento antigo sem validade gravada,
+    // emitido antes da última mudança da regra, continua com o valor de antes (mudança vale só p/ novos).
+    const r = getRegras()
+    const emissao = new Date(budget.data_emissao)
+    const dias =
+      r.validadeDiasAnterior !== null &&
+      r.validadeVigenteDesde &&
+      emissao.getTime() < r.validadeVigenteDesde.getTime()
+        ? r.validadeDiasAnterior
+        : r.validadeDias
+    return addDays(emissao, dias)
+  }
   return null
+}
+
+// SPEC-282: idade do orçamento em dias desde a emissão (para a regra "mais de N dias").
+export function getBudgetIdadeDias(budget: { data_emissao?: string | null }): number | null {
+  if (!budget.data_emissao) return null
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const emi = new Date(budget.data_emissao)
+  emi.setHours(0, 0, 0, 0)
+  return Math.floor((hoje.getTime() - emi.getTime()) / 86_400_000)
+}
+
+// SPEC-282: o aviso de preço deve abrir? Status na lista das regras, não aprovado/devolução, e
+// (validade vencida OU mais de `avisoPrecoDias` dias desde a emissão).
+export function deveAvisarPrecoPorTempo(budget: {
+  status?: string | null
+  natureza_operacao?: string | null
+  validade?: string | null
+  data_emissao?: string | null
+}): { avisar: boolean; vencido: boolean } {
+  const r = getRegras()
+  if (isApprovedStatus(budget.status) || budget.natureza_operacao === 'devolucao') {
+    return { avisar: false, vencido: false }
+  }
+  if (budget.status && !r.statusQueAvisam.includes(budget.status)) {
+    return { avisar: false, vencido: false }
+  }
+  const vencido = isBudgetVencido(budget)
+  const idade = getBudgetIdadeDias(budget)
+  return { avisar: vencido || (idade !== null && idade > r.avisoPrecoDias), vencido }
 }
 
 // SPEC-174 N3: não se aplica a orçamento já aprovado/virado venda

@@ -31,6 +31,10 @@ interface BudgetPriceUpdateDialogProps {
   onOpenChange: (open: boolean) => void
   /** Data em que o orçamento venceu (validade, ou emissão + 10 dias). */
   vencimento: Date | null
+  /** SPEC-282: orçamento com mais de N dias (regra "aviso_preco_dias"), sem estar vencido. */
+  diasAviso?: number | null
+  /** SPEC-282: dias da validade padrão (regra "validade_dias"), para o texto de renovar. */
+  validadeDias?: number
   itens: BudgetPriceUpdateItemInput[]
   budgetNumero?: string | null
   /** Chamado só quando o usuário confirma "Sim" -- nunca salva nada por
@@ -60,6 +64,8 @@ export function BudgetPriceUpdateDialog({
   open,
   onOpenChange,
   vencimento,
+  diasAviso,
+  validadeDias = 10,
   itens,
   budgetNumero,
   onApply,
@@ -173,7 +179,11 @@ export function BudgetPriceUpdateDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-amber-700">
             <AlertTriangle className="h-5 w-5" />
-            {vencimento ? 'Orçamento vencido' : 'Preço de peças mudou'}
+            {vencimento
+              ? 'Orçamento vencido'
+              : diasAviso
+                ? `Orçamento com mais de ${diasAviso} dias`
+                : 'Preço de peças mudou'}
           </DialogTitle>
           <DialogDescription>
             {budgetNumero ? `Orçamento ${semPrefixo(budgetNumero)}. ` : ''}
@@ -181,6 +191,12 @@ export function BudgetPriceUpdateDialog({
               <>
                 Orçamento vencido em{' '}
                 {format(vencimento, 'dd/MM/yyyy', { locale: ptBR })} — deseja
+                atualizar os preços? Custo, margem e impostos podem ter mudado
+                desde a emissão.
+              </>
+            ) : diasAviso ? (
+              <>
+                Este orçamento foi emitido há mais de {diasAviso} dias — deseja
                 atualizar os preços? Custo, margem e impostos podem ter mudado
                 desde a emissão.
               </>
@@ -224,7 +240,7 @@ export function BudgetPriceUpdateDialog({
                 checked={renovarValidade}
                 onCheckedChange={(v) => setRenovarValidade(Boolean(v))}
               />
-              Renovar a validade (+10 dias a partir de hoje)
+              Renovar a validade (+{validadeDias} dias a partir de hoje)
             </label>
           </div>
         )}

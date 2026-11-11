@@ -18,6 +18,8 @@ interface BudgetExpiredRedirectDialogProps {
   onOpenChange: (open: boolean) => void
   budgetId: string
   vencimento: Date | null
+  /** SPEC-282: aviso por idade (mais de N dias), sem estar vencido. */
+  diasAviso?: number | null
   budgetNumero?: string | null
   /** "Não" -- segue com os preços antigos, sem perguntar de novo nesta
    * sessão para este orçamento (quem chama já marca o dismiss). */
@@ -36,6 +38,7 @@ export function BudgetExpiredRedirectDialog({
   onOpenChange,
   budgetId,
   vencimento,
+  diasAviso,
   budgetNumero,
   onKeepPrices,
 }: BudgetExpiredRedirectDialogProps) {
@@ -47,14 +50,13 @@ export function BudgetExpiredRedirectDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-amber-700">
             <AlertTriangle className="h-5 w-5" />
-            Orçamento vencido
+            {vencimento ? 'Orçamento vencido' : `Orçamento com mais de ${diasAviso ?? ''} dias`}
           </DialogTitle>
           <DialogDescription>
             {budgetNumero ? `Orçamento ${semPrefixo(budgetNumero)}. ` : ''}
-            Orçamento vencido em{' '}
             {vencimento
-              ? format(vencimento, 'dd/MM/yyyy', { locale: ptBR })
-              : '-'}{' '}
+              ? `Orçamento vencido em ${format(vencimento, 'dd/MM/yyyy', { locale: ptBR })}`
+              : `Orçamento emitido há mais de ${diasAviso ?? ''} dias`}{' '}
             — deseja atualizar os preços antes de aprovar? Custo, margem e
             impostos podem ter mudado desde a emissão.
           </DialogDescription>

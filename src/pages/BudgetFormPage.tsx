@@ -101,10 +101,11 @@ import {
 } from '@/components/budgets/BudgetPriceUpdateDialog'
 import {
   getBudgetVencimento,
-  isBudgetVencido,
+  deveAvisarPrecoPorTempo,
   markPriceUpdatePromptAsked,
   wasPriceUpdatePromptAsked,
 } from '@/lib/budget-expiration'
+import { carregarRegras, getRegras } from '@/lib/budget-regras'
 import { FinanceResultModal } from '@/components/budgets/FinanceResultModal'
 import { supabase } from '@/lib/supabase/client'
 import {
@@ -689,6 +690,7 @@ export default function BudgetFormPage() {
   const [priceUpdateContext, setPriceUpdateContext] = useState<{
     budgetId: string
     vencimento: Date | null
+    diasAviso?: number | null
     budgetNumero: string | null
     itens: BudgetPriceUpdateItemInput[]
     then?: () => void
@@ -815,7 +817,15 @@ export default function BudgetFormPage() {
   useEffect(() => {
     if (validadeEditadaManualmenteRef.current) return
     if (!dataEmissaoWatch) return
-    form.setValue('validade', addDays(dataEmissaoWatch, 10))
+    // SPEC-282: espera as regras do orçamento (dias de validade) antes de calcular a validade padrão
+    let cancelado = false
+    carregarRegras().then(() => {
+      if (cancelado || validadeEditadaManualmenteRef.current) return
+      form.setValue('validade', addDays(dataEmissaoWatch, getRegras().validadeDias))
+    })
+    return () => {
+      cancelado = true
+    }
   }, [dataEmissaoWatch, form])
 
   // Pedido do usuário (2026-09-14): campo Vendedor do Orçamento deve listar
@@ -1067,6 +1077,7 @@ export default function BudgetFormPage() {
           // SPEC-095) ao ser aberto para editar -- oferece atualizar os
           // preços. Não se repete na mesma sessão para este orçamento
           // (decisão do usuário, 01/10).
+          await carregarRegras()
           if (!maybeShowExpiredPriceDialog(budget)) {
             // SPEC-282: dentro do prazo, mas o preço da peça foi reajustado no cadastro
             void maybeShowPriceChangedDialog(budget)
@@ -2950,13 +2961,16 @@ export default function BudgetFormPage() {
     budget: Budget,
     then?: () => void,
   ): boolean {
-    if (!isBudgetVencido(budget) || wasPriceUpdatePromptAsked(budget.id)) {
+    // SPEC-282: vencido OU mais de N dias (regras do orçamento), só nos status configurados.
+    const { avisar, vencido } = deveAvisarPrecoPorTempo(budget)
+    if (!avisar || wasPriceUpdatePromptAsked(budget.id)) {
       return false
     }
     const itensAtuais = form.getValues('itens')
     setPriceUpdateContext({
       budgetId: budget.id,
-      vencimento: getBudgetVencimento(budget),
+      vencimento: vencido ? getBudgetVencimento(budget) : null,
+      diasAviso: vencido ? null : getRegras().avisoPrecoDias,
       budgetNumero: budget.numero,
       itens: itensAtuais.map((item, index) => ({
         key: String(index),
@@ -2975,9 +2989,12 @@ export default function BudgetFormPage() {
   // preço abre sempre que alguma peça do orçamento (ainda não aprovado) tem preço de
   // venda diferente do cadastro. Compara com produtos.preco_venda; nunca salva sozinho.
   async function maybeShowPriceChangedDialog(budget: Budget) {
+    const regras = getRegras()
     if (
+      !regras.avisoPrecoQuandoMudou ||
       isApprovedStatus(budget.status) ||
       budget.natureza_operacao === 'devolucao' ||
+      (budget.status && !regras.statusQueAvisam.includes(budget.status)) ||
       wasPriceUpdatePromptAsked(budget.id)
     ) {
       return
@@ -3033,7 +3050,7 @@ export default function BudgetFormPage() {
     })
     if (renovarValidade) {
       validadeEditadaManualmenteRef.current = true
-      form.setValue('validade', addDays(new Date(), 10), {
+      form.setValue('validade', addDays(new Date(), getRegras().validadeDias), {
         shouldDirty: true,
       })
     }
@@ -4400,10 +4417,10 @@ export default function BudgetFormPage() {
                                 validadeEditadaManualmenteRef.current = false
                                 const emissao = form.getValues('data_emissao')
                                 if (emissao)
-                                  field.onChange(addDays(emissao, 10))
+                                  field.onChange(addDays(emissao, getRegras().validadeDias))
                               }}
                             >
-                              Usar padrão (10 dias)
+                              Usar padrão ({getRegras().validadeDias} dias)
                             </button>
                           </FormLabel>
                           <FormControl>
@@ -5471,6 +5488,8 @@ export default function BudgetFormPage() {
           setPriceUpdateContext(null)
         }}
         vencimento={priceUpdateContext?.vencimento ?? null}
+        diasAviso={priceUpdateContext?.diasAviso ?? null}
+        validadeDias={getRegras().validadeDias}
         itens={priceUpdateContext?.itens ?? []}
         budgetNumero={priceUpdateContext?.budgetNumero}
         onApply={handleApplyPriceUpdate}

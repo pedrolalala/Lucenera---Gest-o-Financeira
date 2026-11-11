@@ -51,10 +51,11 @@ import { anexarArquivos } from '@/services/orcamentoAnexosService'
 import { BudgetExpiredRedirectDialog } from '@/components/budgets/BudgetExpiredRedirectDialog'
 import {
   getBudgetVencimento,
-  isBudgetVencido,
+  deveAvisarPrecoPorTempo,
   markPriceUpdatePromptAsked,
   wasPriceUpdatePromptAsked,
 } from '@/lib/budget-expiration'
+import { carregarRegras, getRegras } from '@/lib/budget-regras'
 import { semPrefixo } from '@/lib/numeros'
 
 const BRL = new Intl.NumberFormat('pt-BR', {
@@ -127,6 +128,11 @@ export function TeamApprovalTab() {
     }
   }, [fetchBudgets])
 
+  // SPEC-282: regras do orçamento (dias do aviso de preço) carregadas ao abrir a aba
+  useEffect(() => {
+    void carregarRegras()
+  }, [])
+
   useEffect(() => {
     loadBudgets()
   }, [loadBudgets])
@@ -184,7 +190,10 @@ export function TeamApprovalTab() {
   // tiver sido perguntado nesta sessão, mostra o aviso de atualização de
   // preço (decisão do usuário, 01/10).
   const handleApprove = (budget: Budget) => {
-    if (isBudgetVencido(budget) && !wasPriceUpdatePromptAsked(budget.id)) {
+    if (
+      deveAvisarPrecoPorTempo(budget).avisar &&
+      !wasPriceUpdatePromptAsked(budget.id)
+    ) {
       setExpiredPriceBudget(budget)
       return
     }
@@ -527,8 +536,11 @@ export function TeamApprovalTab() {
         }}
         budgetId={expiredPriceBudget?.id || ''}
         vencimento={
-          expiredPriceBudget ? getBudgetVencimento(expiredPriceBudget) : null
+          expiredPriceBudget && deveAvisarPrecoPorTempo(expiredPriceBudget).vencido
+            ? getBudgetVencimento(expiredPriceBudget)
+            : null
         }
+        diasAviso={getRegras().avisoPrecoDias}
         budgetNumero={expiredPriceBudget?.numero}
         onKeepPrices={handleKeepPricesAndApprove}
       />

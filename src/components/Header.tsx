@@ -1,4 +1,4 @@
-import { Building2, Search, Settings } from 'lucide-react'
+import { Building2, Search, Settings, SlidersHorizontal } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
@@ -37,6 +37,14 @@ export function Header() {
           <Building2 className="w-5 h-5 text-gray-600" />
         </a>
       </Button>
+
+      {role === 'admin' && (
+        <Button variant="ghost" size="icon" asChild className="rounded-full">
+          <Link to="/regras-orcamento" title="Regras do orçamento (validade e aviso de preço)">
+            <SlidersHorizontal className="w-5 h-5 text-gray-600" />
+          </Link>
+        </Button>
+      )}
 
       {role === 'admin' && (
         <Button variant="ghost" size="icon" asChild className="rounded-full">

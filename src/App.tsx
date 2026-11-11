@@ -15,6 +15,7 @@ const Login = lazy(() => import('./pages/Login'))
 const Budgets = lazy(() => import('./pages/Budgets'))
 const BudgetFormPage = lazy(() => import('./pages/BudgetFormPage'))
 const ApprovalSettings = lazy(() => import('./pages/ApprovalSettings'))
+const RegrasOrcamento = lazy(() => import('./pages/RegrasOrcamento'))
 const ClientApproval = lazy(() => import('./pages/ClientApproval'))
 
 const LoadingFallback = () => (
@@ -62,6 +63,10 @@ const App = () => (
                   <Route
                     path="/approval-settings"
                     element={<ApprovalSettings />}
+                  />
+                  <Route
+                    path="/regras-orcamento"
+                    element={<RegrasOrcamento />}
                   />
                 </Route>
               </Route>
