@@ -173,16 +173,24 @@ export function BudgetPriceUpdateDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-amber-700">
             <AlertTriangle className="h-5 w-5" />
-            Orçamento vencido
+            {vencimento ? 'Orçamento vencido' : 'Preço de peças mudou'}
           </DialogTitle>
           <DialogDescription>
             {budgetNumero ? `Orçamento ${semPrefixo(budgetNumero)}. ` : ''}
-            Orçamento vencido em{' '}
-            {vencimento
-              ? format(vencimento, 'dd/MM/yyyy', { locale: ptBR })
-              : '-'}{' '}
-            — deseja atualizar os preços? Custo, margem e impostos podem ter
-            mudado desde a emissão.
+            {vencimento ? (
+              <>
+                Orçamento vencido em{' '}
+                {format(vencimento, 'dd/MM/yyyy', { locale: ptBR })} — deseja
+                atualizar os preços? Custo, margem e impostos podem ter mudado
+                desde a emissão.
+              </>
+            ) : (
+              <>
+                O preço de venda de peças deste orçamento foi reajustado no
+                cadastro depois que elas entraram aqui — deseja atualizar os
+                preços?
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 

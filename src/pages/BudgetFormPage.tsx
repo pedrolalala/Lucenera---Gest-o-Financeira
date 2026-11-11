@@ -38,6 +38,7 @@ import {
   getStatusBadgeClass,
   getDisplayValorTotal,
   TEAM_APPROVAL_STATUS,
+  isApprovedStatus,
 } from '@/lib/budget-status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1066,7 +1067,10 @@ export default function BudgetFormPage() {
           // SPEC-095) ao ser aberto para editar -- oferece atualizar os
           // preços. Não se repete na mesma sessão para este orçamento
           // (decisão do usuário, 01/10).
-          maybeShowExpiredPriceDialog(budget)
+          if (!maybeShowExpiredPriceDialog(budget)) {
+            // SPEC-282: dentro do prazo, mas o preço da peça foi reajustado no cadastro
+            void maybeShowPriceChangedDialog(budget)
+          }
         }
       } catch {
         toast.error('Erro ao carregar orçamento')
@@ -2965,6 +2969,53 @@ export default function BudgetFormPage() {
     })
     setShowPriceUpdateDialog(true)
     return true
+  }
+
+  // SPEC-282 (decisão do usuário, 11/11): além do vencimento de 10 dias, o aviso de
+  // preço abre sempre que alguma peça do orçamento (ainda não aprovado) tem preço de
+  // venda diferente do cadastro. Compara com produtos.preco_venda; nunca salva sozinho.
+  async function maybeShowPriceChangedDialog(budget: Budget) {
+    if (
+      isApprovedStatus(budget.status) ||
+      budget.natureza_operacao === 'devolucao' ||
+      wasPriceUpdatePromptAsked(budget.id)
+    ) {
+      return
+    }
+    const itensAtuais = form.getValues('itens')
+    const ids = Array.from(
+      new Set(itensAtuais.map((i) => i.produto_id).filter((x): x is string => !!x)),
+    )
+    if (ids.length === 0) return
+    const { data, error } = await supabase
+      .from('produtos')
+      .select('id, preco_venda, valor_venda')
+      .in('id', ids)
+    if (error || !data) return
+    const atual = new Map<string, number>()
+    data.forEach((p: any) =>
+      atual.set(p.id, Number(p.preco_venda) || Number(p.valor_venda) || 0),
+    )
+    const mudou = itensAtuais.some(
+      (i) =>
+        i.produto_id &&
+        atual.has(i.produto_id) &&
+        Math.abs((Number(i.preco_unitario) || 0) - atual.get(i.produto_id)!) > 0.005,
+    )
+    if (!mudou) return
+    setPriceUpdateContext({
+      budgetId: budget.id,
+      vencimento: null,
+      budgetNumero: budget.numero,
+      itens: itensAtuais.map((item, index) => ({
+        key: String(index),
+        produto_id: item.produto_id || null,
+        preco_unitario: Number(item.preco_unitario) || 0,
+        desconto: Number(item.desconto) || 0,
+        quantidade: Number(item.quantidade) || 0,
+      })),
+    })
+    setShowPriceUpdateDialog(true)
   }
 
   // SPEC-174 N3: "Sim, atualizar preços" -- só preenche o form (não salva
