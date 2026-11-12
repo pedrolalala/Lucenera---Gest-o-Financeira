@@ -2379,6 +2379,9 @@ export default function BudgetFormPage() {
   const applyProductSelection = (
     products: ProductSearchItem[],
     targetIndex: number | null = productSearchRowIndex,
+    // SPEC-285: quantidade digitada no modal para cada produto (mesma ordem de
+    // `products`). Sem ela, a linha trocada mantém a quantidade que já tinha.
+    quantidades: Array<number | undefined> = [],
   ) => {
     if (products.length === 0) {
       setIsProductSearchOpen(false)
@@ -2394,12 +2397,16 @@ export default function BudgetFormPage() {
       return Math.max(max, match ? parseInt(match[1], 10) : 0)
     }, 0)
 
-    const buildNewItem = (p: ProductSearchItem, seq: number) => ({
+    const buildNewItem = (
+      p: ProductSearchItem,
+      seq: number,
+      quantidade: number = 1,
+    ) => ({
       uid: crypto.randomUUID(),
       custom_id: formatCircuitId(`L${seq}`),
       produto_id: p.source === 'produtos' && isValidUUID(p.id) ? p.id : '',
       descricao: p.source === 'produtos' && isValidUUID(p.id) ? '' : p.nome,
-      quantidade: 1,
+      quantidade,
       preco_unitario: p.preco_venda || p.valor_venda || 0,
       desconto: 0,
     })
@@ -2412,16 +2419,28 @@ export default function BudgetFormPage() {
       const updatedItems = [...currentItems]
       const existingCustomId = updatedItems[targetIndex].custom_id || ''
 
+      // SPEC-285: trocar o produto não pode zerar a quantidade da linha
+      // (antes voltava sempre 1, ex.: troca de item especial na revisão).
+      const quantidadeExistente = Number(updatedItems[targetIndex].quantidade)
+      const quantidadeLinha =
+        quantidades[0] && quantidades[0] > 0
+          ? quantidades[0]
+          : quantidadeExistente > 0
+            ? quantidadeExistente
+            : 1
+
       updatedItems[targetIndex] = {
         ...updatedItems[targetIndex],
-        ...buildNewItem(products[0], targetIndex + 1),
+        ...buildNewItem(products[0], targetIndex + 1, quantidadeLinha),
         custom_id: existingCustomId || formatCircuitId(`L${targetIndex + 1}`),
       }
 
       if (products.length > 1) {
         const remaining = products
           .slice(1)
-          .map((p, idx) => buildNewItem(p, maxL + idx + 1))
+          .map((p, idx) =>
+            buildNewItem(p, maxL + idx + 1, quantidades[idx + 1] || 1),
+          )
         updatedItems.push(...remaining)
       }
 
@@ -2510,9 +2529,14 @@ export default function BudgetFormPage() {
     }))
     // Trocar o produto de UMA linha existente (ícone de busca na linha)
     // continua sendo 1:1 direto — mantém o L/quantidade que já estavam
-    // naquela linha, só troca o produto.
+    // naquela linha, só troca o produto. SPEC-285: a quantidade digitada no
+    // modal (primeiro L de cada peça) vale; sem ela, mantém a da linha.
     if (productSearchRowIndex !== null) {
-      applyProductSelection(selections.map((s) => s.product))
+      applyProductSelection(
+        selections.map((s) => s.product),
+        productSearchRowIndex,
+        selections.map((s) => Number(s.entries[0]?.quantidade) || undefined),
+      )
       return
     }
 
