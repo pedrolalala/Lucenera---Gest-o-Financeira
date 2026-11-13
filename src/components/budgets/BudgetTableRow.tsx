@@ -59,7 +59,7 @@ import {
   getDisplayValorTotal,
 } from '@/lib/budget-status'
 import { sendInitialBudgetPdfAndEmail } from '@/lib/envio-inicial-cliente'
-import { semPrefixo } from '@/lib/numeros'
+import { semPrefixo, rotuloNumeroVenda } from '@/lib/numeros'
 
 interface BudgetTableRowProps {
   budgetId: string
@@ -428,7 +428,7 @@ export function BudgetTableRow({
               número da venda, distinto do orçamento/projeto acima. */}
           {budget.numero_venda && (
             <div className="text-xs text-gray-400 mt-0.5">
-              {isVinculoConnect ? 'Nº Connect' : 'Venda'}: {semPrefixo(budget.numero_venda)}
+              {isVinculoConnect ? 'Nº Connect' : rotuloNumeroVenda(budget.numero_venda)}: {semPrefixo(budget.numero_venda)}
             </div>
           )}
         </TableCell>

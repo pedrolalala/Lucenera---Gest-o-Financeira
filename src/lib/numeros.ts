@@ -4,6 +4,13 @@
 export const semPrefixo = (numero: string | null | undefined) =>
   (numero || '').replace(/^(VENDA|ORC)-/i, '')
 
+// SPEC-298: devolução, casa cor, uso e consumo e bonificação têm número de venda próprio (DEV-0001, CSCE-, CSCS-, USC-, BR-).
+// O rótulo acompanha o tipo; número VENDA-/da Connect segue como "Venda". O número aparece inteiro (semPrefixo só tira VENDA-/ORC-).
+export const rotuloNumeroVenda = (numero: string | null | undefined) => {
+  const p = (numero || '').split('-')[0].toUpperCase()
+  return ({ DEV: 'Devolução', CSCE: 'Casa Cor Entrada', CSCS: 'Casa Cor Saída', USC: 'Uso e Consumo', BR: 'Bonificação' } as Record<string, string>)[p] || 'Venda'
+}
+
 // SPEC-199: quantidade de item aceita fração (peça por metro: fita, perfil, cabo — "4,5" m).
 // orcamento_itens.quantidade é numeric(10,3): sempre 3 casas no máximo.
 export const arredondarQtd = (n: number) => Math.round(n * 1000) / 1000

@@ -145,7 +145,7 @@ import type { ResolvedXmlBudget } from '@/lib/xml-budget-import'
 import { buildConnectXmlExport, downloadXmlFile } from '@/lib/xml-budget-export'
 import { FORMA_PAGAMENTO_LABELS } from '@/lib/budget-financial-summary'
 import logoImg from '@/assets/lucenera-vertical-527dd.png'
-import { arredondarQtd, semPrefixo } from '@/lib/numeros'
+import { arredondarQtd, semPrefixo, rotuloNumeroVenda } from '@/lib/numeros'
 
 // SPEC-152: formas de pagamento que tipicamente não fazem sentido em mais
 // de 1 parcela (pagamento à vista, instantâneo). Todas as outras (boleto,
@@ -3432,7 +3432,7 @@ export default function BudgetFormPage() {
               {isEditing && budgetToEdit?.numero_venda && (
                 <span className="text-gray-400">
                   {' '}
-                  — Venda: {semPrefixo(budgetToEdit.numero_venda)}
+                  — {rotuloNumeroVenda(budgetToEdit.numero_venda)}: {semPrefixo(budgetToEdit.numero_venda)}
                 </span>
               )}
             </p>
