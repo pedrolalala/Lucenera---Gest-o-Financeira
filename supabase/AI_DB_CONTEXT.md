@@ -198,3 +198,10 @@ RPCs/funções relevantes:
 - Como origem, chamar `redirectWithCode(destino, redirectTo, sistemaDestino)`.
 - Como destino, `AuthProvider` deve chamar `consumeCodeFromUrl('orcamentos')` antes de decidir que precisa mostrar login.
 - Não passar tokens Supabase crus em URL. O fluxo usa apenas `sso_code`, trocado pela Edge Function `exchange-cross-system-code`.
+
+## SPEC-300 (13/11/2026) — devolução de peça entregue antes da virada (migration 357 APLICADA em SP em 13/11)
+
+- `orcamento_itens.origem_connect_venda` (text) e `origem_connect_motivo` (text): só em linha de devolução SEM `projeto_item_origem_id`. CHECK `orcamento_itens_origem_connect_chk`: se há venda, exige motivo, `produto_id` e origem nula.
+- `aprovar_orcamento_financeiro`: linha marcada exige uma venda `origem='connect'`, `natureza_operacao='venda'` do mesmo projeto e empresa com `numero_venda` igual; não chama `registrar_devolucao_projeto_item*` (sem movimento de estoque). Linha sem origem e sem marca continua barrada.
+- `replace_orcamento_itens` grava/compara as duas colunas. `financeiro_ponte_devolucao` não acha venda de origem e cria o título de crédito sem `titulo_compensado_id`.
+

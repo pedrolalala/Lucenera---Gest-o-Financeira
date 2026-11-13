@@ -81,6 +81,11 @@ export function BudgetItemCard({
     control,
     name: `itens.${index}.setor_origem`,
   }) as SetorDevolucao | null | undefined
+  // SPEC-300: peça entregue antes da virada — venda Connect de origem (sem item de origem).
+  const origemConnectVenda = useWatch({
+    control,
+    name: `itens.${index}.origem_connect_venda`,
+  }) as string | null | undefined
   const prevCustomId =
     useWatch({
       control,
@@ -190,6 +195,14 @@ export function BudgetItemCard({
                 title="Setor da venda de origem de onde sai esta devolução"
               >
                 Devolução · {SETOR_DEVOLUCAO_LABEL[setorOrigem] || setorOrigem}
+              </span>
+            )}
+            {naturezaOperacao === 'devolucao' && origemConnectVenda && (
+              <span
+                className="mb-1 ml-1 inline-block rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800"
+                title="Peça entregue antes da virada: a venda da Connect não tem o item no sistema; estoque não movimentado automaticamente"
+              >
+                Origem Connect · {origemConnectVenda}
               </span>
             )}
             {hasProduct ? (

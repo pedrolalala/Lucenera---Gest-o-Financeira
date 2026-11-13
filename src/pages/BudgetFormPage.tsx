@@ -169,7 +169,9 @@ function normalizarQtdParcelas(v: unknown): number {
 // selecionado (natureza_operacao). Lista fixa, não normalizada em tabela.
 const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
   venda: ['VENDAS'],
-  devolucao: ['TROCA DEV', 'CASA COR ENTRADA'],
+  // SPEC-302: peça entregue antes da virada da Connect (sem item de venda no sistema): não exige
+  // venda de origem; ao efetivar, gera o crédito negativo e a peça volta ao Estoque Geral.
+  devolucao: ['TROCA DEV', 'CASA COR ENTRADA', 'TROCA DEV SEM VINCULO CONNECT'],
   // SPEC-223: EMPRESTIMO = orçamento de empréstimo (sem financeiro; confirma
   // dentro do orçamento, devolve ou vira venda).
   // SPEC-234 A1 (reunião 27/10): saíram RETORNO, TRANSFERENCIA, OUTRAS ENTRADAS (orçamento é saída),
@@ -188,6 +190,8 @@ const SUBGRUPOS_POR_TIPO: Record<string, string[]> = {
   // SPEC-234 A2: SAC = o que vai para o fornecedor (remessa para conserto, devolução em garantia, devolução de compra).
   sac: ['REMESSA CONSERTO', 'DEV EM GARANTIA', 'DEV COMPRA'],
 }
+
+const SUBGRUPO_DEV_SEM_VINCULO = 'TROCA DEV SEM VINCULO CONNECT'
 
 // SPEC-234 A: o que cada Tipo de Outros/SAC faz na aprovação (espelha public.tipo_operacao_regra no banco).
 const REGRA_TIPO_OPERACAO: Record<string, string> = {
@@ -464,6 +468,10 @@ const formSchema = z
           projeto_item_origem_id: z.string().optional().nullable(),
           // SPEC-178: setor da venda de origem (uma linha por setor).
           setor_origem: z.string().optional().nullable(),
+          // SPEC-300: peça entregue antes da virada — venda herdada da Connect
+          // de onde saiu (a linha fica sem projeto_item_origem_id) + motivo.
+          origem_connect_venda: z.string().optional().nullable(),
+          origem_connect_motivo: z.string().optional().nullable(),
           // SPEC-223: venda que veio de empréstimo — a peça já está com o
           // cliente e vai direto para Entregue na aprovação.
           ja_com_cliente: z.boolean().optional(),
@@ -544,9 +552,30 @@ const formSchema = z
       }
       // SPEC-071: todo item de um orçamento de devolução precisa vir da
       // busca de venda de origem (garante projeto_item_origem_id).
+      // SPEC-302: no tipo "TROCA DEV SEM VINCULO CONNECT" a linha NÃO tem origem
+      // e precisa de produto do cadastro.
       if (
         data.natureza_operacao === 'devolucao' &&
-        !item.projeto_item_origem_id
+        data.subgrupo === SUBGRUPO_DEV_SEM_VINCULO
+      ) {
+        if (item.projeto_item_origem_id) {
+          ctx.addIssue({
+            path: ['itens', index, 'produto_id'],
+            code: z.ZodIssueCode.custom,
+            message:
+              'Devolução sem vínculo Connect não mistura peça com venda de origem — faça duas devoluções',
+          })
+        } else if (!item.produto_id) {
+          ctx.addIssue({
+            path: ['itens', index, 'produto_id'],
+            code: z.ZodIssueCode.custom,
+            message: 'Escolha o produto do cadastro (precisa ter código)',
+          })
+        }
+      } else if (
+        data.natureza_operacao === 'devolucao' &&
+        !item.projeto_item_origem_id &&
+        !item.origem_connect_venda
       ) {
         ctx.addIssue({
           path: ['itens', index, 'produto_id'],
@@ -906,7 +935,7 @@ export default function BudgetFormPage() {
               arquitetos:orcamento_arquitetos(percentual, arquiteto:arquiteto_id(id, nome)),
               itens:orcamento_itens(
                 id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem,
-                descricao, projeto_item_origem_id, setor_origem, ja_com_cliente,
+                descricao, projeto_item_origem_id, setor_origem, origem_connect_venda, origem_connect_motivo, ja_com_cliente,
                 produto:produtos(codigo_produto, referencia, nome)
               )
             `,
@@ -1061,6 +1090,8 @@ export default function BudgetFormPage() {
                 projeto_item_origem_id:
                   (i as any).projeto_item_origem_id ?? null,
                 setor_origem: (i as any).setor_origem ?? null,
+                origem_connect_venda: (i as any).origem_connect_venda ?? null,
+                origem_connect_motivo: (i as any).origem_connect_motivo ?? null,
                 ja_com_cliente: !!(i as any).ja_com_cliente,
               })) || [],
             ),
@@ -1098,6 +1129,10 @@ export default function BudgetFormPage() {
   // SPEC-223: orçamento de empréstimo (Outros → EMPRESTIMO). Depois de
   // confirmado, peças e cliente não mudam; tudo passa pelo quadro do empréstimo.
   const subgrupoAtual = form.watch('subgrupo')
+  // SPEC-302: devolução sem vínculo Connect lança itens do catálogo/XML, sem busca de venda.
+  const devolucaoComVinculo =
+    form.watch('natureza_operacao') === 'devolucao' &&
+    subgrupoAtual !== SUBGRUPO_DEV_SEM_VINCULO
   const modoEmprestimo =
     naturezaOperacao === 'outros' && subgrupoAtual === 'EMPRESTIMO'
   const emprestimoConfirmado =
@@ -3113,7 +3148,7 @@ export default function BudgetFormPage() {
       const { data, error } = await supabase
         .from('orcamento_itens')
         .select(
-          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, setor_origem, ja_com_cliente, produto:produtos(codigo_produto, referencia, nome)',
+          'id, produto_id, quantidade, preco_unitario, desconto, custom_id, sub_ordem, descricao, projeto_item_origem_id, setor_origem, origem_connect_venda, origem_connect_motivo, ja_com_cliente, produto:produtos(codigo_produto, referencia, nome)',
         )
         .eq('orcamento_id', budgetToEdit.id)
       if (!error && data) {
@@ -3282,7 +3317,9 @@ export default function BudgetFormPage() {
   // referência do aviso no modal).
   const temItemDevolucao =
     naturezaOperacao === 'devolucao' &&
-    (form.watch('itens') || []).some((i: any) => i.projeto_item_origem_id)
+    (form.watch('itens') || []).some(
+      (i: any) => i.projeto_item_origem_id || i.origem_connect_venda,
+    )
   // SPEC-182: com itens de devolução lançados, projeto e empresa travam
   // (os itens são daquele projeto e daquela empresa).
   const travadoPelaVenda = temItemDevolucao
@@ -3770,7 +3807,16 @@ export default function BudgetFormPage() {
                         <span className="text-xs text-muted-foreground">
                           Só é possível trocar para "XML importado da Connect".
                         </span>
-                      ) : naturezaOperacao === 'devolucao' ? (
+                      ) : naturezaOperacao === 'devolucao' &&
+                        subgrupoAtual === SUBGRUPO_DEV_SEM_VINCULO ? (
+                        <span className="text-xs text-muted-foreground">
+                          Para peça entregue antes da virada da Connect: lance os
+                          itens do catálogo ou pelo XML, sem venda de origem. Ao
+                          efetivar, gera o valor negativo e a peça volta ao Estoque
+                          Geral. Peça que ainda está em reserva vai em outra
+                          devolução (Tipo TROCA DEV).
+                        </span>
+                      ) : devolucaoComVinculo ? (
                         <span className="text-xs text-muted-foreground">
                           Itens desta devolução precisam ser lançados a partir
                           da busca de venda de origem, não do catálogo de
@@ -4509,7 +4555,7 @@ export default function BudgetFormPage() {
                     </CardDescription>
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    {naturezaOperacao === 'devolucao' ? (
+                    {devolucaoComVinculo ? (
                       <Button
                         type="button"
                         variant="default"
@@ -4577,7 +4623,7 @@ export default function BudgetFormPage() {
                         Adicione produtos para compor este orçamento.
                       </p>
                       <div className="flex gap-2 flex-wrap">
-                        {naturezaOperacao === 'devolucao' ? (
+                        {devolucaoComVinculo ? (
                           podeBuscarDevolucao ? (
                             <Button
                               type="button"

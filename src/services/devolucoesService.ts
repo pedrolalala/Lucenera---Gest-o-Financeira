@@ -139,6 +139,33 @@ export async function empresasComVendaNoProjeto(
   return [...mapa.values()]
 }
 
+// SPEC-300: vendas herdadas da Connect do projeto na empresa da devolução — origem
+// possível para peça entregue antes da virada (o item não existe no sistema).
+export interface VendaConnectProjeto {
+  orcamento_id: string
+  numero_venda: string
+}
+
+export async function vendasConnectDoProjeto(
+  projetoId: string | null | undefined,
+  empresaId: string | null | undefined,
+): Promise<VendaConnectProjeto[]> {
+  if (!projetoId || !empresaId) return []
+  const { data, error } = await (supabase.from('orcamentos') as any)
+    .select('id, numero_venda')
+    .eq('projeto_id', projetoId)
+    .eq('empresa_id', empresaId)
+    .eq('origem', 'connect')
+    .eq('natureza_operacao', 'venda')
+    .not('numero_venda', 'is', null)
+    .order('numero_venda', { ascending: true })
+  if (error) throw error
+  return (data || []).map((o: any) => ({
+    orcamento_id: o.id,
+    numero_venda: String(o.numero_venda),
+  }))
+}
+
 // SPEC-182 (D1/D2/D3): a devolução se liga ao CÓDIGO DO PROJETO — a busca
 // olha todas as vendas efetivadas do projeto feitas pela empresa escolhida, e
 // o filtro aceita o código da peça (ou o nome).
@@ -335,6 +362,9 @@ export async function validarItensDevolucao(
   itens: {
     projeto_item_origem_id?: string | null
     setor_origem?: string | null
+    origem_connect_venda?: string | null
+    origem_connect_motivo?: string | null
+    produto_id?: string | null
     quantidade: number
     descricao?: string
   }[],
@@ -349,8 +379,43 @@ export async function validarItensDevolucao(
       erro: 'Selecione a empresa da devolução antes de salvar.',
       aviso: null,
     }
+  // SPEC-300: peça entregue antes da virada — sem item de origem, mas com a venda
+  // Connect do projeto/empresa, o produto e o motivo.
+  const deConnect = itens.filter(
+    (i) => !i.projeto_item_origem_id && i.origem_connect_venda,
+  )
+  if (deConnect.length > 0) {
+    const vendas = await vendasConnectDoProjeto(projetoId, empresaId)
+    const validas = new Set(vendas.map((v) => v.numero_venda))
+    for (const i of deConnect) {
+      const nome = i.descricao || 'item'
+      if (!validas.has(String(i.origem_connect_venda))) {
+        return {
+          erro: `"${nome}": a venda ${i.origem_connect_venda} não é uma venda herdada da Connect deste projeto nesta empresa.`,
+          aviso: null,
+        }
+      }
+      if (!(i.origem_connect_motivo || '').trim()) {
+        return {
+          erro: `"${nome}": informe o motivo da devolução de peça entregue antes da virada.`,
+          aviso: null,
+        }
+      }
+      if (!i.produto_id) {
+        return {
+          erro: `"${nome}": escolha o produto do cadastro (peça de origem Connect precisa ter código).`,
+          aviso: null,
+        }
+      }
+    }
+  }
+
+  const avisoConnect =
+    deConnect.length > 0
+      ? `${deConnect.length} linha(s) com origem Connect: a peça volta pelo crédito, mas o estoque não é movimentado automaticamente — ajuste em Movimentação de Peças.`
+      : null
   const linhas = itens.filter((i) => i.projeto_item_origem_id)
-  if (linhas.length === 0) return { erro: null, aviso: null }
+  if (linhas.length === 0) return { erro: null, aviso: avisoConnect }
 
   const origemIds = [
     ...new Set(linhas.map((i) => i.projeto_item_origem_id as string)),
@@ -429,5 +494,5 @@ export async function validarItensDevolucao(
       }
     }
   }
-  return { erro: null, aviso: null }
+  return { erro: null, aviso: avisoConnect }
 }

@@ -41,6 +41,10 @@ export interface BudgetItem {
   projeto_item_origem_id?: string | null
   /** SPEC-178: setor da venda de origem de onde sai a devolução. */
   setor_origem?: string | null
+  /** SPEC-300: devolução de peça entregue antes da virada — nº da venda herdada da Connect (ex.: CNX-2451); a linha fica sem projeto_item_origem_id. */
+  origem_connect_venda?: string | null
+  /** SPEC-300: motivo obrigatório quando origem_connect_venda está preenchida. */
+  origem_connect_motivo?: string | null
   /** SPEC-223: peça de venda que veio de empréstimo e já está com o cliente (vai direto para Entregue). */
   ja_com_cliente?: boolean
   produto?: {
@@ -235,6 +239,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         item_pai_id,
         projeto_item_origem_id,
         setor_origem,
+        origem_connect_venda,
+        origem_connect_motivo,
         ja_com_cliente,
         produto:produtos(nome, codigo_produto, referencia, unidade, tem_st)
       )
@@ -345,6 +351,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         item_pai_id: i.item_pai_id || null,
         projeto_item_origem_id: i.projeto_item_origem_id || null,
         setor_origem: i.projeto_item_origem_id ? i.setor_origem || null : null,
+        origem_connect_venda: i.projeto_item_origem_id ? null : i.origem_connect_venda || null,
+        origem_connect_motivo: i.projeto_item_origem_id ? null : i.origem_connect_motivo || null,
         ja_com_cliente: !!i.ja_com_cliente,
       }))
 
@@ -402,6 +410,8 @@ const useBudgetStore = create<BudgetState>((set, get) => ({
         item_pai_id: i.item_pai_id || null,
         projeto_item_origem_id: i.projeto_item_origem_id || null,
         setor_origem: i.projeto_item_origem_id ? i.setor_origem || null : null,
+        origem_connect_venda: i.projeto_item_origem_id ? null : i.origem_connect_venda || null,
+        origem_connect_motivo: i.projeto_item_origem_id ? null : i.origem_connect_motivo || null,
         ja_com_cliente: !!i.ja_com_cliente,
       }))
       const { error: rpcError } = await (supabase as any).rpc(
