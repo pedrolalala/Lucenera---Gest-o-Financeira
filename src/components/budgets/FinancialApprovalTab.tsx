@@ -56,7 +56,7 @@ import { cn } from '@/lib/utils'
 import { semPrefixo } from '@/lib/numeros'
 import { orcamentosComAnexo } from '@/services/orcamentoAnexosService'
 import { Paperclip } from 'lucide-react'
-import { usePodeRevisaoFinanceira } from '@/hooks/use-revisao-financeira'
+import { usePodeRevisaoFinanceira, usePodeEfetivarSemCobranca, ehSemCobranca } from '@/hooks/use-revisao-financeira'
 
 const BRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -108,7 +108,10 @@ export function FinancialApprovalTab() {
 
   // SPEC-271: o financeiro (acesso 'financeiro') também gerencia a revisão, não só admin/gerente.
   const canManage = usePodeRevisaoFinanceira()
-  const canApproveFinancial = canManage || canApproveQuotes
+  // SPEC-295: quem só efetiva sem cobrança vê e aprova apenas Garantia/Uso e Consumo/Descarte/demais Outros/SAC
+  const podeSemCobranca = usePodeEfetivarSemCobranca()
+  const soSemCobranca = !canManage && !canApproveQuotes && podeSemCobranca
+  const canApproveFinancial = canManage || canApproveQuotes || podeSemCobranca
 
   const loadBudgets = useCallback(async () => {
     setLoading(true)
@@ -129,8 +132,11 @@ export function FinancialApprovalTab() {
 
   const pendingBudgets = useMemo(
     () =>
-      budgets.filter((budget) => budget.status === FINANCIAL_APPROVAL_STATUS),
-    [budgets],
+      budgets.filter(
+        (budget) =>
+          budget.status === FINANCIAL_APPROVAL_STATUS && (!soSemCobranca || ehSemCobranca(budget as any)),
+      ),
+    [budgets, soSemCobranca],
   )
 
   const filteredBudgets = useMemo(
@@ -431,7 +437,7 @@ export function FinancialApprovalTab() {
                           >
                             <Eye className="h-4 w-4 mr-1" /> Ver/Editar
                           </Button>
-                          {canApproveFinancial && (
+                          {canApproveFinancial && !soSemCobranca && (
                             <Button
                               variant="outline"
                               size="sm"

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { usePodeRevisaoFinanceira } from '@/hooks/use-revisao-financeira'
+import { usePodeRevisaoFinanceira, usePodeEfetivarSemCobranca } from '@/hooks/use-revisao-financeira'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -60,6 +60,9 @@ export default function Budgets() {
   const { budgets, fetchBudgets, loading, initialized } = useBudgetStore()
   const { role, canApproveQuotes } = useAuth()
   const podeRevisaoFinanceira = usePodeRevisaoFinanceira()
+  // SPEC-295: efetivar Garantia/Uso e Consumo/Descarte também abre a aba (só com esses tipos)
+  const podeSemCobranca = usePodeEfetivarSemCobranca()
+  const podeAbaRevisao = podeRevisaoFinanceira || podeSemCobranca
   const navigate = useNavigate()
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -126,12 +129,12 @@ export default function Budgets() {
           <TabsTrigger value="aprovacao-equipe">
             Aprovação da Equipe
           </TabsTrigger>
-          {podeRevisaoFinanceira && (
+          {podeAbaRevisao && (
             <TabsTrigger value="aprovacao-financeira">
               Revisão Financeira Pendente
             </TabsTrigger>
           )}
-          {!podeRevisaoFinanceira && (
+          {!podeAbaRevisao && (
             <TabsTrigger value="no-financeiro">
               No financeiro ({noFinanceiro.length})
             </TabsTrigger>
@@ -201,12 +204,12 @@ export default function Budgets() {
           <TeamApprovalTab />
         </TabsContent>
 
-        {podeRevisaoFinanceira && (
+        {podeAbaRevisao && (
           <TabsContent value="aprovacao-financeira" className="mt-0">
             <FinancialApprovalTab />
           </TabsContent>
         )}
-        {!podeRevisaoFinanceira && (
+        {!podeAbaRevisao && (
           <TabsContent value="no-financeiro" className="mt-0">
             <p className="mb-3 text-sm text-gray-500">
               Orçamentos aprovados pela equipe que estão com a Administração, aguardando a revisão
