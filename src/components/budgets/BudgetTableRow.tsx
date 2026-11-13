@@ -408,7 +408,8 @@ export function BudgetTableRow({
             <div className="text-xs font-normal text-gray-500 mt-0.5">
               {budget.equipe?.equipes && `Equipe ${budget.equipe.equipes}`}
               {budget.equipe?.equipes && budget.digitador?.nome && ' · '}
-              {budget.digitador?.nome && `Digitado por ${budget.digitador.nome}`}
+              {budget.digitador?.nome &&
+                `Digitado por ${budget.digitador.nome}`}
             </div>
           )}
         </TableCell>
@@ -428,7 +429,10 @@ export function BudgetTableRow({
               número da venda, distinto do orçamento/projeto acima. */}
           {budget.numero_venda && (
             <div className="text-xs text-gray-400 mt-0.5">
-              {isVinculoConnect ? 'Nº Connect' : rotuloNumeroVenda(budget.numero_venda)}: {semPrefixo(budget.numero_venda)}
+              {isVinculoConnect
+                ? 'Nº Connect'
+                : rotuloNumeroVenda(budget.numero_venda)}
+              : {semPrefixo(budget.numero_venda)}
             </div>
           )}
         </TableCell>
@@ -493,22 +497,40 @@ export function BudgetTableRow({
           <div className="flex items-center justify-end gap-1">
             <FiscalSummaryDialog budget={budget} />
 
-            {normalizedStatus === 'rascunho' && (
-              <Button
-                size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                title="Enviar para o Cliente"
-                onClick={handleEnviarCliente}
-                disabled={isSending}
-              >
-                {isSending ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4 mr-1" />
-                )}
-                Enviar para o Cliente
-              </Button>
-            )}
+            {/* SPEC-223/303: empréstimo não vai para o cliente — confirma dentro do orçamento. */}
+            {normalizedStatus === 'rascunho' &&
+              budget.natureza_operacao === 'outros' &&
+              budget.subgrupo === 'EMPRESTIMO' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  title="Abrir o empréstimo para confirmar"
+                  onClick={() => onEdit(budget)}
+                >
+                  Confirmar empréstimo
+                </Button>
+              )}
+
+            {normalizedStatus === 'rascunho' &&
+              !(
+                budget.natureza_operacao === 'outros' &&
+                budget.subgrupo === 'EMPRESTIMO'
+              ) && (
+                <Button
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  title="Enviar para o Cliente"
+                  onClick={handleEnviarCliente}
+                  disabled={isSending}
+                >
+                  {isSending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-1" />
+                  )}
+                  Enviar para o Cliente
+                </Button>
+              )}
 
             {normalizedStatus === 'enviado_cliente' && (
               <>
@@ -677,7 +699,9 @@ export function BudgetTableRow({
                 <DropdownMenuItem onClick={() => handleDownloadPdf('cliente')}>
                   PDF para o cliente
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleDownloadPdf('cliente_ncm')}>
+                <DropdownMenuItem
+                  onClick={() => handleDownloadPdf('cliente_ncm')}
+                >
                   PDF para o cliente com NCM
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleDownloadPdf('interno')}>
