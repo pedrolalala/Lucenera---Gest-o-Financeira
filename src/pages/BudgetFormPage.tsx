@@ -748,7 +748,10 @@ export default function BudgetFormPage() {
   const canTrocarProduto =
     canEditValorProduto ||
     budgetToEdit?.status === 'rascunho' ||
-    budgetToEdit?.status === 'Aprovação da Equipe'
+    budgetToEdit?.status === 'Aprovação da Equipe' ||
+    // Revisão Financeira: quem tem acesso 'financeiro' (Carol) vincula o item sem cadastro ao produto
+    // cadastrado. O banco (replace_orcamento_itens, SPEC-285) já libera nesse status.
+    (podeRevisaoFinanceira && budgetToEdit?.status === 'Aprovação Financeira')
 
   // SPEC-152/156: contraparte da permuta, usado só quando alguma parcela do
   // plano de pagamento tem forma_pagamento = 'permuta'. SPEC-156 (2026-09-21,
