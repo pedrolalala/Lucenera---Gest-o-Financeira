@@ -47,6 +47,8 @@ interface BudgetItemCardProps {
   // montando a lista de produtos do zero), continua liberado pra todo
   // mundo. Calculado no BudgetFormPage.tsx (que sabe role + isEditing).
   canEditValorProduto: boolean
+  // SPEC-315: trocar/vincular peça (preço de tabela) liberado à equipe em rascunho e Aprovação da Equipe.
+  canTrocarProduto: boolean
 }
 
 const BRL = new Intl.NumberFormat('pt-BR', {
@@ -62,6 +64,7 @@ export function BudgetItemCard({
   onCreateProduct,
   getProductInfo,
   canEditValorProduto,
+  canTrocarProduto,
 }: BudgetItemCardProps) {
   const { control } = useFormContext()
 
@@ -217,9 +220,9 @@ export function BudgetItemCard({
                         value={f.value}
                         onClick={() => onSearchProduct(index)}
                         placeholder="Buscar produto..."
-                        disabled={!canEditValorProduto}
+                        disabled={!canTrocarProduto}
                         title={
-                          canEditValorProduto
+                          canTrocarProduto
                             ? undefined
                             : 'Só administrador pode trocar o produto do item'
                         }
@@ -252,9 +255,9 @@ export function BudgetItemCard({
                         variant="outline"
                         size="icon"
                         onClick={() => onSearchProduct(index)}
-                        disabled={!canEditValorProduto}
+                        disabled={!canTrocarProduto}
                         title={
-                          canEditValorProduto
+                          canTrocarProduto
                             ? 'Buscar produto cadastrado'
                             : 'Só administrador pode vincular um produto ao item'
                         }

@@ -742,6 +742,13 @@ export default function BudgetFormPage() {
   // ORÇAMENTO JÁ EXISTENTE. Na criação (isEditing = false), continua
   // liberado pra todo mundo — é assim que vendedora monta um orçamento novo.
   const canEditValorProduto = role === 'admin' || !isEditing
+  // SPEC-315 (16/11/2026): a equipe pode INCLUIR/TROCAR peça (preço sempre o de tabela) em
+  // rascunho e em 'Aprovação da Equipe' (orçamento devolvido pela Carol). Preço digitado à mão
+  // e item sem cadastro continuam só admin (canEditValorProduto). O banco confere o mesmo.
+  const canTrocarProduto =
+    canEditValorProduto ||
+    budgetToEdit?.status === 'rascunho' ||
+    budgetToEdit?.status === 'Aprovação da Equipe'
 
   // SPEC-152/156: contraparte da permuta, usado só quando alguma parcela do
   // plano de pagamento tem forma_pagamento = 'permuta'. SPEC-156 (2026-09-21,
@@ -4577,11 +4584,11 @@ export default function BudgetFormPage() {
                           type="button"
                           variant="default"
                           size="sm"
-                          disabled={!canEditValorProduto}
+                          disabled={!canTrocarProduto}
                           title={
-                            canEditValorProduto
+                            canTrocarProduto
                               ? undefined
-                              : 'Só administrador pode adicionar produto a um orçamento já existente'
+                              : 'Sem permissão para adicionar produto neste status do orçamento'
                           }
                           onClick={() => {
                             setProductSearchRowIndex(null)
@@ -4648,11 +4655,11 @@ export default function BudgetFormPage() {
                             <Button
                               type="button"
                               variant="default"
-                              disabled={!canEditValorProduto}
+                              disabled={!canTrocarProduto}
                               title={
-                                canEditValorProduto
+                                canTrocarProduto
                                   ? undefined
-                                  : 'Só administrador pode adicionar produto a um orçamento já existente'
+                                  : 'Sem permissão para adicionar produto neste status do orçamento'
                               }
                               onClick={() => {
                                 setProductSearchRowIndex(null)
@@ -4705,6 +4712,7 @@ export default function BudgetFormPage() {
                           }}
                           getProductInfo={getProductInfo}
                           canEditValorProduto={canEditValorProduto}
+                          canTrocarProduto={canTrocarProduto}
                         />
                       )
                     })}
