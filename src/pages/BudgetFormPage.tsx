@@ -745,6 +745,9 @@ export default function BudgetFormPage() {
   // SPEC-315 (16/11/2026): a equipe pode INCLUIR/TROCAR peça (preço sempre o de tabela) em
   // rascunho e em 'Aprovação da Equipe' (orçamento devolvido pela Carol). Preço digitado à mão
   // e item sem cadastro continuam só admin (canEditValorProduto). O banco confere o mesmo.
+  const canEditPreco =
+    canEditValorProduto ||
+    (podeRevisaoFinanceira && budgetToEdit?.status === 'Aprovação Financeira')
   const canTrocarProduto =
     canEditValorProduto ||
     budgetToEdit?.status === 'rascunho' ||
@@ -4715,6 +4718,7 @@ export default function BudgetFormPage() {
                           }}
                           getProductInfo={getProductInfo}
                           canEditValorProduto={canEditValorProduto}
+                          canEditPreco={canEditPreco}
                           canTrocarProduto={canTrocarProduto}
                         />
                       )

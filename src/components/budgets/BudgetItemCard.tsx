@@ -47,6 +47,8 @@ interface BudgetItemCardProps {
   // montando a lista de produtos do zero), continua liberado pra todo
   // mundo. Calculado no BudgetFormPage.tsx (que sabe role + isEditing).
   canEditValorProduto: boolean
+  // Revisão Financeira: financeiro (Carol) edita o preço do item; criar produto segue só admin.
+  canEditPreco: boolean
   // SPEC-315: trocar/vincular peça (preço de tabela) liberado à equipe em rascunho e Aprovação da Equipe.
   canTrocarProduto: boolean
 }
@@ -64,6 +66,7 @@ export function BudgetItemCard({
   onCreateProduct,
   getProductInfo,
   canEditValorProduto,
+  canEditPreco,
   canTrocarProduto,
 }: BudgetItemCardProps) {
   const { control } = useFormContext()
@@ -324,14 +327,14 @@ export function BudgetItemCard({
                       step="0.01"
                       min="0"
                       {...f}
-                      readOnly={!canEditValorProduto}
+                      readOnly={!canEditPreco}
                       title={
-                        canEditValorProduto
+                        canEditPreco
                           ? undefined
                           : 'Só administrador pode editar o valor do item'
                       }
                       className={
-                        canEditValorProduto
+                        canEditPreco
                           ? 'text-sm h-9 text-right'
                           : 'text-sm h-9 text-right bg-muted/40 cursor-default'
                       }
