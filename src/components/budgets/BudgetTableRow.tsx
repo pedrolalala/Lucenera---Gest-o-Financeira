@@ -103,6 +103,7 @@ export function BudgetTableRow({
   const [motivoDesfazerAprovacao, setMotivoDesfazerAprovacao] = useState('')
   const [isDesfazendoAprovacao, setIsDesfazendoAprovacao] = useState(false)
   const [showCancelarVenda, setShowCancelarVenda] = useState(false)
+  const [showDesfazerNovo, setShowDesfazerNovo] = useState(false)
   const [showVincularConnect, setShowVincularConnect] = useState(false)
   const [isVinculando, setIsVinculando] = useState(false)
 
@@ -112,7 +113,9 @@ export function BudgetTableRow({
     (role !== null && ['admin', 'gerente', 'operador'].includes(role))
   const canApproveFinancial =
     canApproveQuotes || role === 'admin' || role === 'gerente'
-  const canDesfazerAprovacao = role === 'admin' || role === 'gerente'
+  // SPEC-321: o financeiro (acesso 'financeiro', ex.: Caroline) também desfaz a aprovação; o banco confere.
+  const canDesfazerAprovacao =
+    role === 'admin' || role === 'gerente' || podeRevisaoFinanceira
   // SPEC-195: venda já aprovada na Connect (veio do XML) — vincula sem estoque/financeiro.
   const isVinculoConnect = !!budget.vinculo_connect
   // SPEC-197 / SPEC-244: com a Connect em paralelo, "XML importado da Connect" (antes "Vínculo Connect") é só de administradores
@@ -678,7 +681,11 @@ export function BudgetTableRow({
                       ? 'Desfazer vínculo do XML da Connect'
                       : 'Desfazer Aprovação Financeira'
                   }
-                  onClick={() => setShowDesfazerAprovacao(true)}
+                  onClick={() =>
+                    isVinculoConnect
+                      ? setShowDesfazerAprovacao(true)
+                      : setShowDesfazerNovo(true)
+                  }
                 >
                   <Undo2 className="h-4 w-4" />
                 </Button>
@@ -921,6 +928,12 @@ export function BudgetTableRow({
         budgetId={budgetId}
         open={showCancelarVenda}
         onOpenChange={setShowCancelarVenda}
+      />
+      <CancelarVendaDialog
+        modo="desfazer"
+        budgetId={budgetId}
+        open={showDesfazerNovo}
+        onOpenChange={setShowDesfazerNovo}
       />
 
       {/* SPEC-195: confirmação do vínculo de venda já aprovada na Connect. */}

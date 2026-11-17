@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
-import { AlertTriangle, Ban, Loader2, PackageCheck } from 'lucide-react'
+import { AlertTriangle, Ban, Loader2, PackageCheck, Undo2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -56,6 +56,8 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCancelled?: () => void
+  /** 'cancelar' (padrão) cancela a venda; 'desfazer' desfaz a aprovação financeira (volta para Aprovação Financeira). */
+  modo?: 'cancelar' | 'desfazer'
 }
 
 export function CancelarVendaDialog({
@@ -63,7 +65,9 @@ export function CancelarVendaDialog({
   open,
   onOpenChange,
   onCancelled,
+  modo = 'cancelar',
 }: Props) {
+  const desfazer = modo === 'desfazer'
   const [previa, setPrevia] = useState<Previa | null>(null)
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -91,29 +95,32 @@ export function CancelarVendaDialog({
   }, [open, budgetId])
 
   const temPedidos = (previa?.pedidos?.length ?? 0) > 0
-  const bloqueado = !!previa && !previa.pode_cancelar
-  const exigeMotivo = !!previa?.venda_efetivada
+  // No modo 'desfazer' os impedimentos são conferidos pelo banco ao confirmar (regras próprias).
+  const bloqueado = !desfazer && !!previa && !previa.pode_cancelar
+  const exigeMotivo = desfazer || !!previa?.venda_efetivada
 
   const confirmar = async () => {
     if (!previa) return
     if (exigeMotivo && !motivo.trim()) return
     try {
       setCancelando(true)
-      const { data, error } = await (supabase as any).rpc('cancelar_orcamento', {
-        p_orcamento_id: budgetId,
-        p_motivo: motivo.trim() || null,
-      })
+      const { data, error } = await (supabase as any).rpc(
+        desfazer ? 'desfazer_aprovacao_financeira' : 'cancelar_orcamento',
+        { p_orcamento_id: budgetId, p_motivo: motivo.trim() || null },
+      )
       if (error) throw new Error(error.message)
       await useBudgetStore.getState().fetchBudgets()
-      toast.success('Venda cancelada', {
+      toast.success(desfazer ? 'Aprovação financeira desfeita' : 'Venda cancelada', {
         description: data?.pedidos_avisados
           ? `${data.pedidos_avisados} pedido(s) de compra em andamento foram liberados e a Compras foi avisada.`
-          : 'Reservas, parcelas, boletos e financeiro da venda foram cancelados.',
+          : desfazer
+            ? 'Itens de projeto, parcelas e boletos gerados foram removidos.'
+            : 'Reservas, parcelas, boletos e financeiro da venda foram cancelados.',
       })
       onOpenChange(false)
       onCancelled?.()
     } catch (e: any) {
-      toast.error('Falha ao cancelar a venda', { description: e?.message })
+      toast.error(desfazer ? 'Falha ao desfazer a aprovação' : 'Falha ao cancelar a venda', { description: e?.message })
     } finally {
       setCancelando(false)
     }
@@ -123,9 +130,11 @@ export function CancelarVendaDialog({
     <Dialog open={open} onOpenChange={(o) => !cancelando && onOpenChange(o)}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-red-700">
-            <Ban className="h-5 w-5" />
-            Cancelar venda
+          <DialogTitle
+            className={`flex items-center gap-2 ${desfazer ? 'text-orange-700' : 'text-red-700'}`}
+          >
+            {desfazer ? <Undo2 className="h-5 w-5" /> : <Ban className="h-5 w-5" />}
+            {desfazer ? 'Desfazer aprovação financeira' : 'Cancelar venda'}
           </DialogTitle>
           <DialogDescription>
             {previa ? (
@@ -155,8 +164,8 @@ export function CancelarVendaDialog({
         {previa && (
           <div className="space-y-4">
             <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-              <strong>{previa.cancelando.nome}</strong> está cancelando esta
-              venda em{' '}
+              <strong>{previa.cancelando.nome}</strong> está{' '}
+              {desfazer ? 'desfazendo a aprovação desta venda' : 'cancelando esta venda'} em{' '}
               {format(new Date(previa.cancelando.em), "dd/MM/yyyy 'às' HH:mm")}.
               Esse registro fica no histórico do orçamento e é enviado à
               Compras.
@@ -219,7 +228,16 @@ export function CancelarVendaDialog({
               </div>
             )}
 
-            {previa.venda_efetivada && !bloqueado && (
+            {desfazer && (
+              <p className="text-sm text-gray-700">
+                O orçamento volta para "Aprovação Financeira"; os itens de projeto, parcelas e
+                boletos gerados pela aprovação são apagados e a reserva de estoque é estornada.
+                Só é possível se nada disso já foi usado (boleto registrado/pago, nota fiscal,
+                separação, transferência ou devolução).
+              </p>
+            )}
+
+            {!desfazer && previa.venda_efetivada && !bloqueado && (
               <p className="text-sm text-gray-700">
                 Também serão cancelados: reservas e entrega futura das peças
                 {previa.parcelas_abertas > 0
@@ -261,12 +279,14 @@ export function CancelarVendaDialog({
               cancelando ||
               (exigeMotivo && !motivo.trim())
             }
-            className="bg-red-600 hover:bg-red-700 text-white"
+            className={desfazer ? 'bg-orange-600 hover:bg-orange-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}
           >
             {cancelando ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cancelando…
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando…
               </>
+            ) : desfazer ? (
+              'Desfazer aprovação'
             ) : (
               'Cancelar venda'
             )}
