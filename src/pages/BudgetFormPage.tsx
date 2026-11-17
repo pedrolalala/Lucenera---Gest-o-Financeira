@@ -133,6 +133,7 @@ import {
 } from '@/components/budgets/BudgetItemCard'
 import { BudgetItemsHeader } from '@/components/budgets/BudgetItemsHeader'
 import { GerenciamentoDialog } from '@/components/budgets/GerenciamentoDialog'
+import { CancelarVendaDialog } from '@/components/budgets/CancelarVendaDialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -738,6 +739,7 @@ export default function BudgetFormPage() {
   >(new Map())
   const { role, user: authUser } = useAuth()
   const podeRevisaoFinanceira = usePodeRevisaoFinanceira()
+  const [cancelarVendaOpen, setCancelarVendaOpen] = useState(false)
   // SPEC-108: só admin edita valor de peça ou adiciona produto NUM
   // ORÇAMENTO JÁ EXISTENTE. Na criação (isEditing = false), continua
   // liberado pra todo mundo — é assim que vendedora monta um orçamento novo.
@@ -3501,6 +3503,20 @@ export default function BudgetFormPage() {
                 Aprovar Financeiro
               </Button>
             )}
+          {/* SPEC-321: cancelar venda aprovada (pop-up avisa quem cancela e os pedidos em andamento) */}
+          {isEditing &&
+            budgetToEdit?.status === 'Orçamento Aprovado' &&
+            !budgetToEdit.vinculo_connect &&
+            (role === 'admin' || role === 'gerente' || podeRevisaoFinanceira) && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-red-300 text-red-700 hover:bg-red-50"
+                onClick={() => setCancelarVendaOpen(true)}
+              >
+                Cancelar venda
+              </Button>
+            )}
           {isEditing && budgetToEdit && (
             <Button type="button" variant="outline" onClick={handleExportXml}>
               <Download className="w-4 h-4 mr-2" />
@@ -5614,6 +5630,15 @@ export default function BudgetFormPage() {
         budgetNumero={budgetToEdit?.numero}
         onConfirm={handleConfirmTeamDelivery}
       />
+
+      {isEditing && budgetToEdit && (
+        <CancelarVendaDialog
+          budgetId={budgetToEdit.id}
+          open={cancelarVendaOpen}
+          onOpenChange={setCancelarVendaOpen}
+          onCancelled={() => navigate('/budgets')}
+        />
+      )}
 
       <GerenciamentoDialog
         open={gerenciamentoOpen}

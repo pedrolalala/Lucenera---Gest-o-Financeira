@@ -43,6 +43,7 @@ import {
   Undo2,
   MessageSquare,
   Link2,
+  Ban,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import useBudgetStore, { ApprovalResult, Budget } from '@/stores/useBudgetStore'
@@ -52,6 +53,7 @@ import { supabase } from '@/lib/supabase/client'
 import { getLogoBase64 } from '@/lib/pdf-logo'
 import { FiscalSummaryDialog } from './FiscalSummaryDialog'
 import { FinanceResultModal } from './FinanceResultModal'
+import { CancelarVendaDialog } from './CancelarVendaDialog'
 import {
   buildClientApprovalLink,
   getStatusLabel,
@@ -98,6 +100,7 @@ export function BudgetTableRow({
   const [showDesfazerAprovacao, setShowDesfazerAprovacao] = useState(false)
   const [motivoDesfazerAprovacao, setMotivoDesfazerAprovacao] = useState('')
   const [isDesfazendoAprovacao, setIsDesfazendoAprovacao] = useState(false)
+  const [showCancelarVenda, setShowCancelarVenda] = useState(false)
   const [showVincularConnect, setShowVincularConnect] = useState(false)
   const [isVinculando, setIsVinculando] = useState(false)
 
@@ -679,6 +682,21 @@ export function BudgetTableRow({
                 </Button>
               )}
 
+            {/* SPEC-321: cancelar venda aprovada (avisa pedidos de compra em andamento) */}
+            {normalizedStatus === 'orcamento_aprovado' &&
+              !isVinculoConnect &&
+              canApproveFinancial && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                  title="Cancelar venda"
+                  onClick={() => setShowCancelarVenda(true)}
+                >
+                  <Ban className="h-4 w-4" />
+                </Button>
+              )}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -896,6 +914,12 @@ export function BudgetTableRow({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CancelarVendaDialog
+        budgetId={budgetId}
+        open={showCancelarVenda}
+        onOpenChange={setShowCancelarVenda}
+      />
 
       {/* SPEC-195: confirmação do vínculo de venda já aprovada na Connect. */}
       <Dialog open={showVincularConnect} onOpenChange={setShowVincularConnect}>
