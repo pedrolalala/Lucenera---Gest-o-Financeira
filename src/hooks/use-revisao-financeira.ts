@@ -6,6 +6,23 @@ import { useAuth } from '@/hooks/use-auth'
 // assistente administrativa) revisa, edita e aprova na aba "Revisão Financeira Pendente", mesmo sem
 // ser admin/gerente no cadastro legado (usuarios.role). O banco já libera por papel; isto só mostra a aba.
 // Não usa can_approve_quotes: esse flag também libera aprovar nas etapas de cliente e equipe.
+// Cache por usuário: a listagem usa o hook em várias linhas e não deve disparar uma consulta por linha.
+const cacheTemFinanceiro = new Map<string, Promise<boolean>>()
+function consultarTemFinanceiro(userId: string): Promise<boolean> {
+  let p = cacheTemFinanceiro.get(userId)
+  if (!p) {
+    p = Promise.resolve(
+      (supabase as any).rpc('pode_acessar_sistema', { p_slug: 'financeiro' }),
+    )
+      .then(({ data, error }: { data: unknown; error: unknown }) =>
+        error ? false : Boolean(data),
+      )
+      .catch(() => false)
+    cacheTemFinanceiro.set(userId, p)
+  }
+  return p
+}
+
 export function usePodeRevisaoFinanceira(): boolean {
   const { user, role } = useAuth()
   const [temFinanceiro, setTemFinanceiro] = useState(false)
@@ -16,11 +33,9 @@ export function usePodeRevisaoFinanceira(): boolean {
       return
     }
     let ativo = true
-    ;(supabase as any)
-      .rpc('pode_acessar_sistema', { p_slug: 'financeiro' })
-      .then(({ data, error }: { data: unknown; error: unknown }) => {
-        if (ativo) setTemFinanceiro(error ? false : Boolean(data))
-      })
+    consultarTemFinanceiro(user.id).then((v) => {
+      if (ativo) setTemFinanceiro(v)
+    })
     return () => {
       ativo = false
     }

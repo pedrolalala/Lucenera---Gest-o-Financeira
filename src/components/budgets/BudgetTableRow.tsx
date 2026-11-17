@@ -54,6 +54,7 @@ import { getLogoBase64 } from '@/lib/pdf-logo'
 import { FiscalSummaryDialog } from './FiscalSummaryDialog'
 import { FinanceResultModal } from './FinanceResultModal'
 import { CancelarVendaDialog } from './CancelarVendaDialog'
+import { usePodeRevisaoFinanceira } from '@/hooks/use-revisao-financeira'
 import {
   buildClientApprovalLink,
   getStatusLabel,
@@ -87,6 +88,7 @@ export function BudgetTableRow({
     desvincularVendaConnect,
   } = useBudgetStore()
   const { canApproveQuotes, canApproveClient, role } = useAuth()
+  const podeRevisaoFinanceira = usePodeRevisaoFinanceira()
   const [isApproving, setIsApproving] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
   const [showFinanceModal, setShowFinanceModal] = useState(false)
@@ -685,7 +687,7 @@ export function BudgetTableRow({
             {/* SPEC-321: cancelar venda aprovada (avisa pedidos de compra em andamento) */}
             {normalizedStatus === 'orcamento_aprovado' &&
               !isVinculoConnect &&
-              canApproveFinancial && (
+              (canApproveFinancial || podeRevisaoFinanceira) && (
                 <Button
                   variant="ghost"
                   size="icon"
