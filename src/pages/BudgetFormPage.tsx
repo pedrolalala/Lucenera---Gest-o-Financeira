@@ -4570,9 +4570,9 @@ export default function BudgetFormPage() {
                 </CardContent>
               </Card>
               {/* SPEC-326: outra empresa paga (Contas a Receber); equipe define, financeiro confirma */}
-              {budgetToEdit?.id && !modoEmprestimo && (
+              {!modoEmprestimo && (
                 <PagadorOrcamentoCard
-                  orcamentoId={budgetToEdit.id}
+                  orcamentoId={budgetToEdit?.id ?? null}
                   podeConfirmar={podeRevisaoFinanceira}
                   onChanged={(c) =>
                     setBudgetToEdit((prev) => (prev ? { ...prev, ...c } : prev))

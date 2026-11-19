@@ -26,7 +26,8 @@ import {
 } from '@/services/pagadorOrcamentoService'
 
 interface Props {
-  orcamentoId: string
+  /** nulo = orçamento ainda não salvo (o pagador depende do id gravado no banco) */
+  orcamentoId: string | null
   /** quem faz a revisão financeira (admin, gerente ou acesso `financeiro`) pode confirmar */
   podeConfirmar: boolean
   /** avisa o formulário/lista para atualizar os campos pagador_* do orçamento em memória */
@@ -50,6 +51,11 @@ export function PagadorOrcamentoCard({ orcamentoId, podeConfirmar, onChanged }: 
   const [salvando, setSalvando] = useState(false)
 
   const recarregar = useCallback(async () => {
+    if (!orcamentoId) {
+      setInfo(null)
+      setCarregando(false)
+      return null
+    }
     try {
       setErro('')
       const novo = await carregarPagador(orcamentoId)
@@ -75,6 +81,26 @@ export function PagadorOrcamentoCard({ orcamentoId, podeConfirmar, onChanged }: 
       pagador_confirmado_em: novo?.confirmadoEm ?? null,
     })
 
+  const cabecalho = (
+    <CardHeader className="pb-3">
+      <CardTitle className="flex items-center gap-2 text-base">
+        <UserRoundCheck className="h-4 w-4" /> Pagador (Contas a Receber)
+      </CardTitle>
+    </CardHeader>
+  )
+  // o bloco sempre aparece; quando não dá para usar, explica por quê
+  if (!orcamentoId) {
+    return (
+      <Card className="mt-4">
+        {cabecalho}
+        <CardContent className="text-sm text-muted-foreground">
+          Para indicar outra empresa ou pessoa como pagadora, <strong>salve o orçamento primeiro</strong>; depois este
+          bloco passa a permitir escolher o pagador.
+        </CardContent>
+      </Card>
+    )
+  }
+
   if (carregando) {
     return (
       <Card className="mt-4">
@@ -84,8 +110,27 @@ export function PagadorOrcamentoCard({ orcamentoId, podeConfirmar, onChanged }: 
       </Card>
     )
   }
+  if (!info) {
+    return (
+      <Card className="mt-4">
+        {cabecalho}
+        <CardContent className="text-sm text-destructive">
+          {erro || 'Não foi possível carregar o pagador deste orçamento.'}
+        </CardContent>
+      </Card>
+    )
+  }
   // só venda tem cobrança ao cliente; devolução, outros e SAC não usam pagador
-  if (!info || info.natureza !== 'venda') return null
+  if (info.natureza !== 'venda') {
+    return (
+      <Card className="mt-4">
+        {cabecalho}
+        <CardContent className="text-sm text-muted-foreground">
+          O pagador só vale para orçamento de <strong>venda</strong> (devolução, outros e SAC não geram cobrança ao cliente).
+        </CardContent>
+      </Card>
+    )
+  }
 
   const aprovado = info.status === 'Orçamento Aprovado'
   const temPagador = !!info.pagadorId
