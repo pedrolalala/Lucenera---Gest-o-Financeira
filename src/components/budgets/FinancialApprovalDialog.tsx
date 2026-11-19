@@ -241,6 +241,19 @@ export function FinancialApprovalDialog({
             </div>
           )}
 
+          {/* SPEC-326: conferência — mesmo sem pagador diferente, mostra para quem o financeiro vai sair */}
+          {!semCobranca && pagador && !pagadorDiferente && pagador.natureza === 'venda' && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-sm font-semibold text-gray-900">
+                Faturar em nome de: {pagador.clienteNome}
+              </p>
+              <p className="text-xs text-gray-600">
+                É o próprio cliente do orçamento. Se outra empresa vai pagar, feche este aviso e informe no bloco Pagador
+                (aba Dados do Cliente) antes de aprovar.
+              </p>
+            </div>
+          )}
+
           {!semCobranca && (
             <div className="rounded-lg border border-gray-200 p-3">
               <p className="text-sm font-semibold text-gray-800 mb-2">
