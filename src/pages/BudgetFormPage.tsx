@@ -89,6 +89,7 @@ import {
   type ApprovalResult,
 } from '@/services/budgetApprovalService'
 import { FinancialApprovalDialog } from '@/components/budgets/FinancialApprovalDialog'
+import { PagadorOrcamentoCard } from '@/components/budgets/PagadorOrcamentoCard'
 // SPEC-174 N2a: toda gravação feita enquanto o orçamento está em
 // "Aprovação da Equipe" exige confirmar a Previsão de Entrega antes de salvar.
 import { TeamApprovalDeliveryDialog } from '@/components/budgets/TeamApprovalDeliveryDialog'
@@ -4568,6 +4569,16 @@ export default function BudgetFormPage() {
                   </div>
                 </CardContent>
               </Card>
+              {/* SPEC-326: outra empresa paga (Contas a Receber); equipe define, financeiro confirma */}
+              {budgetToEdit?.id && !modoEmprestimo && (
+                <PagadorOrcamentoCard
+                  orcamentoId={budgetToEdit.id}
+                  podeConfirmar={podeRevisaoFinanceira}
+                  onChanged={(c) =>
+                    setBudgetToEdit((prev) => (prev ? { ...prev, ...c } : prev))
+                  }
+                />
+              )}
             </TabsContent>
 
             <TabsContent

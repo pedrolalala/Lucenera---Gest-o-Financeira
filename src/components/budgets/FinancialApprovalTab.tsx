@@ -300,6 +300,25 @@ export function FinancialApprovalTab() {
         )}
       </div>
 
+      {/* SPEC-326: aviso ao financeiro — a equipe definiu outro pagador e falta confirmar antes de faturar */}
+      {filteredBudgets.some((b) => !!b.pagador_id && !b.pagador_confirmado_em) && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">
+              {filteredBudgets.filter((b) => !!b.pagador_id && !b.pagador_confirmado_em).length}{' '}
+              {filteredBudgets.filter((b) => !!b.pagador_id && !b.pagador_confirmado_em).length === 1
+                ? 'orçamento com pagador diferente do cliente aguardando sua confirmação'
+                : 'orçamentos com pagador diferente do cliente aguardando sua confirmação'}
+            </p>
+            <p className="text-xs">
+              A equipe pediu para faturar em nome de outra empresa. Abra o orçamento (duplo clique), confira o motivo no
+              bloco Pagador e use Confirmar pagador. Sem isso a aprovação fica bloqueada.
+            </p>
+          </div>
+        </div>
+      )}
+
       {filteredBudgets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <ShieldCheck className="h-12 w-12 text-green-500 mb-3" />
@@ -376,6 +395,21 @@ export function FinancialApprovalTab() {
                         >
                           {getStatusLabel(budget.status)}
                         </Badge>
+                        {budget.pagador_id && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'ml-1',
+                              budget.pagador_confirmado_em
+                                ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                                : 'border-amber-300 bg-amber-50 text-amber-800',
+                            )}
+                          >
+                            {budget.pagador_confirmado_em
+                              ? 'Pagador confirmado'
+                              : 'Pagador a confirmar'}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-gray-700">
                         <div className="font-mono text-sm">

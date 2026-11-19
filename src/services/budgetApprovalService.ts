@@ -22,6 +22,9 @@ export function validateBudget(budget: any): ValidationResult {
   if (budget.status !== 'Aprovação Financeira')
     issues.push('Orçamento não está na fila de aprovação financeira')
   if (!budget.cliente_id) issues.push('Cliente não vinculado')
+  // SPEC-326: pagador diferente definido pela equipe precisa ser confirmado pelo financeiro antes de faturar
+  if (budget.pagador_id && !budget.pagador_confirmado_em)
+    issues.push('Pagador diferente do cliente aguardando confirmação do financeiro')
   if (!budget.empresa_id) issues.push('Empresa não vinculada')
   if (!budget.frete_tipo) issues.push('Frete não estruturado')
   if (

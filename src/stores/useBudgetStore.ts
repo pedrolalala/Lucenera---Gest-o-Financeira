@@ -113,6 +113,11 @@ export interface Budget {
   perfil?: string | null
   valor_total: number
   requer_revisao_financeira: boolean | null
+  /** SPEC-326: outra empresa/pessoa paga (Contas a Receber). Nulo = o cliente. Só muda pelas funções do banco. */
+  pagador_id?: string | null
+  pagador_motivo?: string | null
+  /** SPEC-326: confirmação do financeiro; sem ela a aprovação financeira é barrada. */
+  pagador_confirmado_em?: string | null
   enviado_cliente_em: string | null
   enviado_cliente_por: string | null
   aprovado_cliente_em: string | null

@@ -13,6 +13,7 @@ import { AlertTriangle, ShieldAlert, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Budget } from '@/stores/useBudgetStore'
 import { OrcamentoAnexosLista } from '@/components/budgets/OrcamentoAnexosLista'
+import { carregarPagador, type PagadorOrcamento } from '@/services/pagadorOrcamentoService'
 import {
   calcularResumoFinanceiro,
   FORMA_PAGAMENTO_LABELS,
@@ -61,6 +62,8 @@ export function FinancialApprovalDialog({
   // fácil de perder. Agora fica fixo aqui dentro do diálogo até a pessoa
   // fechar ou tentar de novo.
   const [approvalError, setApprovalError] = useState<string | null>(null)
+  // SPEC-326: para quem o financeiro será gerado (pagador diferente do cliente, confirmado ou não)
+  const [pagador, setPagador] = useState<PagadorOrcamento | null>(null)
 
   const resumo = useMemo(
     () => (budget ? calcularResumoFinanceiro(budget) : null),
@@ -76,6 +79,20 @@ export function FinancialApprovalDialog({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open || !budget?.id) {
+      setPagador(null)
+      return
+    }
+    let ativo = true
+    carregarPagador(budget.id)
+      .then((p) => ativo && setPagador(p))
+      .catch(() => ativo && setPagador(null))
+    return () => {
+      ativo = false
+    }
+  }, [open, budget?.id])
+
   if (!budget || !resumo) return null
 
   const itemCount = budget.itens?.length || 0
@@ -89,10 +106,15 @@ export function FinancialApprovalDialog({
     (budget as any).natureza_operacao || '',
   )
 
+  // SPEC-326: pagador diferente do cliente só fatura depois da confirmação do financeiro (o banco também barra)
+  const pagadorDiferente = !!pagador?.pagadorId
+  const pagadorPendente = pagadorDiferente && !pagador?.confirmadoEm
+
   const canConfirm =
     verifyText.trim().toUpperCase() === 'APROVAR' &&
     itemsReviewed &&
-    itensSemCadastro.length === 0
+    itensSemCadastro.length === 0 &&
+    !pagadorPendente
 
   const handleConfirm = async () => {
     if (!canConfirm) return
@@ -190,6 +212,34 @@ export function FinancialApprovalDialog({
               </div>
             </div>
           </div>
+
+          {!semCobranca && pagadorDiferente && (
+            <div
+              className={
+                pagadorPendente
+                  ? 'rounded-lg border border-red-300 bg-red-50 p-3'
+                  : 'rounded-lg border border-emerald-300 bg-emerald-50 p-3'
+              }
+            >
+              <p className="text-sm font-semibold text-gray-900">
+                Faturar em nome de: {pagador?.pagadorNome || '—'}
+              </p>
+              <p className="text-xs text-gray-700">
+                Cliente do projeto: {pagador?.clienteNome}
+                {pagador?.motivo ? ` · Motivo: ${pagador.motivo}` : ''}
+              </p>
+              {pagadorPendente ? (
+                <p className="mt-1 text-xs font-medium text-red-700">
+                  Pagador ainda não confirmado. Feche este aviso e use "Confirmar pagador" no bloco Pagador da aba
+                  Dados do Cliente antes de aprovar.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-emerald-700">
+                  Pagador confirmado: título, parcelas e boletos serão gerados no nome dele.
+                </p>
+              )}
+            </div>
+          )}
 
           {!semCobranca && (
             <div className="rounded-lg border border-gray-200 p-3">
